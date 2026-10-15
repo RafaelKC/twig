@@ -2,7 +2,7 @@
 name = "twig"
 version = "0.1.1"
 edition = "2021"
-description = "Per-card environment: git worktrees across multiple repos, plus VS Code and herdr workspaces"
+description = "One isolated workspace per task card: git worktrees across repos, an AI agent per repo in herdr, and a VS Code workspace"
 license = "MIT"
 publish = false
 

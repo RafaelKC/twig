@@ -1,5 +1,7 @@
 <div align="center">
 
+🇺🇸 English | [🇧🇷 Português](README.pt-BR.md)
+
 # 🌿 twig
 
 **One isolated workspace per card.**
@@ -93,7 +95,7 @@ Details in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 Linux (x86_64, arm64, WSL) and macOS (Intel, Apple Silicon):
 
 ```bash
-curl -fsSL https://github.com/RafaelKC/twig/releases/latest/download/install.sh | sh
+curl -fsSL https://rndm.chicovis.dev/twig/unix-install | sh
 ```
 
 The installer checks and installs the dependencies (git, herdr, az/gh, Claude Code,
@@ -112,7 +114,7 @@ twig doctor
 | | |
 |---|---|
 | Update | `twig update` |
-| Specific version | `curl -fsSL https://github.com/RafaelKC/twig/releases/latest/download/install.sh \| sh -s -- --version v0.2.0` |
+| Specific version | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0` |
 | Uninstall | `twig uninstall` |
 
 <details>
