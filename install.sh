@@ -1,7 +1,7 @@
 #!/bin/sh
 # twig installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/RafaelKC/twig/main/install.sh | sh
+#   curl -fsSL https://github.com/RafaelKC/twig/releases/latest/download/install.sh | sh
 #
 # Checks/installs the dependencies (docs/DEPENDENCIES.md), downloads the twig release
 # for this OS/arch, verifies its checksum (and Sigstore signature when cosign is

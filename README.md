@@ -93,7 +93,7 @@ Details in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 Linux (x86_64, arm64, WSL) and macOS (Intel, Apple Silicon):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RafaelKC/twig/main/install.sh | sh
+curl -fsSL https://github.com/RafaelKC/twig/releases/latest/download/install.sh | sh
 ```
 
 The installer checks and installs the dependencies (git, herdr, az/gh, Claude Code,
@@ -112,7 +112,7 @@ twig doctor
 | | |
 |---|---|
 | Update | `twig update` |
-| Specific version | `curl -fsSL …/install.sh \| sh -s -- --version v0.2.0` |
+| Specific version | `curl -fsSL https://github.com/RafaelKC/twig/releases/latest/download/install.sh \| sh -s -- --version v0.2.0` |
 | Uninstall | `twig uninstall` |
 
 <details>
