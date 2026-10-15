@@ -1,0 +1,191 @@
+# Config
+
+Format of the `twig` config file. Still a proposal: none of this is
+implemented.
+
+## Location
+
+| OS | Path |
+|---|---|
+| Linux / WSL / macOS | `~/.config/twig/config.toml` |
+| Windows | `%APPDATA%\twig\config.toml` |
+
+**TOML** format: it's what herdr and Cargo use, and it avoids YAML's indentation
+and type-coercion pitfalls in a hand-edited file.
+
+## Full example
+
+```toml
+version = 1                       # schema version, so `twig update` can migrate
+
+[ai]
+provider = "claude"               # only "claude" for now
+command  = "claude"               # what `twig herdr` runs in the agent tab
+
+[provider]
+default = "az"                    # "az" | "gh"
+
+[provider.az]
+organization = "https://dev.azure.com/my-org"   # empty = use the az default
+project      = "MyProject"
+item_url     = ""                 # manual fallback, {id} becomes the number
+
+[provider.gh]
+owner = ""                        # to resolve "#123" without owner/repo
+
+[vscode]
+enabled     = true
+open_on_new = true                # open VS Code when creating a card
+
+[herdr]
+open_on_new = false               # create/open the herdr workspace when creating a card
+
+[paths]
+worktrees = "~/.wt"
+repos     = "~"                   # root of the main clones
+search    = ["~/dev", "~/src"]    # fallbacks if the repo isn't under `repos`
+
+[git]
+base_branch   = "main"
+branch_prefix = { Bug = "fix", "User Story" = "feat", default = "feat" }
+
+[repos.api]
+path        = ""                  # empty = <paths.repos>/api
+label       = "⚙️ API"            # name in VS Code
+short       = "api"               # tab/pane name in herdr
+default     = true                # included when --repos isn't passed
+run         = "dotnet watch run --project src/Api"
+debug       = ["Debug: Api"]
+local_files = ["src/*/appsettings.Development.json"]
+
+[repos.web]
+label   = "🌐 Web"
+short   = "web"
+default = true
+run     = "pnpm start"
+```
+
+## Fields
+
+### Root
+
+| Field | Required | Default | Description |
+|---|---|---|---|
+| `version` | yes | `1` | schema version; `twig update` uses it to migrate |
+
+### `[ai]`
+
+| Field | Default | Description |
+|---|---|---|
+| `provider` | `"claude"` | AI chosen at install. Only `claude` for now |
+| `command` | `"claude"` | command that starts the agent in herdr's `agent` tab |
+
+### `[provider]`
+
+| Field | Default | Description |
+|---|---|---|
+| `default` | chosen at install | provider used when the card doesn't make it clear (`az` or `gh`) |
+| `az.organization` | `""` | ADO org; empty = `az devops configure` default |
+| `az.project` | `""` | ADO project; empty = `az` default |
+| `az.item_url` | `""` | manual work item URL (`{id}` becomes the number), used only if `az` doesn't return one |
+| `gh.owner` | `""` | default owner to resolve `#123` without `owner/repo` |
+
+### `[vscode]`
+
+| Field | Default | Description |
+|---|---|---|
+| `enabled` | chosen at install | `false` disables `twig code` and `.code-workspace` generation |
+| `open_on_new` | `true` | opens VS Code at the end of `twig new` / `twig add-repo`; ignored if `enabled = false` |
+
+### `[herdr]`
+
+| Field | Default | Description |
+|---|---|---|
+| `open_on_new` | `false` | focuses the card's herdr workspace at the end of `twig new` / `twig add-repo` |
+
+The herdr workspace is **always created** by `twig new`; `open_on_new` only decides
+whether it gets opened. The `.code-workspace` is only generated with `vscode.enabled = true`.
+
+The two `open_on_new` settings are independent: you can open both, just one, or neither.
+With `open_on_new = false`, the user opens it for that run with `--herdr` or `--code`.
+`--code` errors if `vscode.enabled = false` or if `code` isn't installed.
+See [COMMANDS.md](COMMANDS.md).
+
+### `[paths]`
+
+| Field | Default | Description |
+|---|---|---|
+| `worktrees` | `~/.wt` (Windows: `%USERPROFILE%\.wt`) | where card folders live |
+| `repos` | chosen at install | root of the main clones |
+| `search` | `[]` | other folders to search for a repo that isn't under `repos` |
+
+`~` expands to the user's home on every OS.
+
+### `[git]`
+
+| Field | Default | Description |
+|---|---|---|
+| `base_branch` | `"main"` | branch new branches are created from |
+| `branch_prefix` | `{ default = "feat" }` | new branch prefix per work item type; `default` for the rest |
+
+### `[worktree]`
+
+| Field | Default | Description |
+|---|---|---|
+| `local_files` | `[]` | gitignored files copied into **every** repo of the card (added to each repo's `local_files`) |
+
+### `[repos.<name>]`
+
+`<name>` is what the repo is called in `--repos`.
+
+| Field | Default | Description |
+|---|---|---|
+| `path` | `<paths.repos>/<name>` | path to the main clone, for repos outside the root |
+| `label` | `<name>` | display name in the VS Code workspace |
+| `short` | `<name>` | short tab/pane name in herdr |
+| `default` | `false` | included in the card when the user doesn't pass `--repos` |
+| `run` | — | command to start the project: becomes a VS Code task and a pane in herdr's `run` tab |
+| `autorun` | `true` | `false` = don't start it in herdr's `run` tab (still a VS Code task); only applies with `run` |
+| `install` | — | dependency install command (e.g. `pnpm install`), used by `--install`; without it, the repo is skipped |
+| `debug` | `[]` | exact names of `.vscode/launch.json` configs included in the card's compound |
+| `local_files` | `[]` | gitignored files (globs allowed, including `**`) copied from the main clone into the worktree |
+
+## Repos
+
+The installer does **not** register repos. It only sets `paths.repos`.
+
+### Repo not in the config
+
+When the user passes `--repos x` and `x` isn't registered, `twig` registers it:
+
+1. Looks for the `x` folder in `paths.repos`, then in `paths.search`.
+2. Found → adds `[repos.x]` to the config with defaults (only `path`, if it's
+   outside `paths.repos`) and reports what was registered.
+3. Not found → asks for the clone path. If the user doesn't provide one, it aborts.
+
+### Configuring repos
+
+1. Open the config:
+   ```bash
+   twig config edit        # opens in $EDITOR
+   ```
+2. Add one section per repo:
+   ```toml
+   [repos.my-backend]
+   label   = "⚙️ Back"
+   short   = "back"
+   default = true
+   run     = "dotnet watch run"
+   ```
+3. If the clone is outside `paths.repos`, set its path:
+   ```toml
+   path = "~/other-folder/my-backend"
+   ```
+4. Set `default = true` on the repos that should be in every `twig new` without `--repos`.
+5. Check with `twig doctor`: it validates that each `path` exists and is a git repo.
+
+## Open questions
+
+- Per-repo override (versioned file such as `.twig.toml`) and via environment variable,
+  and the precedence order between them.
+- Per-project-type strategies (run and ports), once the `type` field comes back.

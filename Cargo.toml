@@ -1,0 +1,38 @@
+[package]
+name = "twig"
+version = "0.1.0"
+edition = "2021"
+description = "Per-card environment: git worktrees across multiple repos, plus VS Code and herdr workspaces"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "twig"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+dirs = "5"
+glob = "0.3"
+indexmap = { version = "2", features = ["serde"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+toml = "0.8"
+toml_edit = "0.22"
+unicode-normalization = "0.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[dev-dependencies]
+tempfile = "3"

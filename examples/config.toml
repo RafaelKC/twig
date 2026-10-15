@@ -1,0 +1,73 @@
+# twig config example: a .NET back end + an Angular front end + a shared UI library.
+# Format documented in docs/CONFIG.md.
+#
+# Copy it and adjust:
+#   mkdir -p ~/.config/twig && cp examples/config.toml ~/.config/twig/config.toml
+#   twig config edit && twig doctor
+
+version = 1
+
+[ai]
+provider = "claude"
+command  = "claude"
+
+[provider]
+default = "az"                    # "az" (Azure DevOps) | "gh" (GitHub)
+
+[provider.az]
+organization = "https://dev.azure.com/my-org"   # empty = az's default
+project      = ""
+item_url     = ""
+
+[vscode]
+enabled     = true
+open_on_new = false
+
+[herdr]
+open_on_new = false
+
+[paths]
+worktrees = "~/.wt"
+repos     = "~/dev"                 # where the main clones live
+search    = ["~/src"]               # other places to look for a repo
+
+[git]
+base_branch   = "main"
+branch_prefix = { Bug = "fix", default = "feat" }
+
+[worktree]
+# copied into every repo of the card
+local_files = [
+  ".claude/settings.local.json",   # Claude Code permissions, not versioned
+]
+
+[repos.api]
+label   = "⚙️ API"
+short   = "api"
+default = true
+run     = "dotnet watch run --project src/Api"
+install = "dotnet restore"
+debug   = [
+  "Debug: Api",
+  # "Debug: Worker",
+]
+local_files = [
+  "src/*/appsettings.Development.json",
+  "src/*/Properties/launchSettings.json",
+]
+
+[repos.web]
+label       = "🌐 Web"
+short       = "web"
+default     = true
+run         = "pnpm start"
+install     = "pnpm install"
+debug       = ["Debug: web (starts the server)"]
+local_files = ["src/environments/environment*.ts", ".env.local"]
+
+[repos.ui-kit]
+label   = "🎨 UI kit"
+short   = "ui"
+run     = "pnpm storybook"
+autorun = false                   # VS Code task only, not started in herdr's run tab
+install = "pnpm install"

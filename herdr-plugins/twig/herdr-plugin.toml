@@ -1,0 +1,12 @@
+id = "twig"
+name = "twig"
+version = "0.2.0"
+min_herdr_version = "0.9.0"
+description = "Shortcuts for twig card workspaces (~/.wt/<id>)"
+platforms = ["linux"]
+
+[[actions]]
+id = "open-code"
+title = "Open card in VS Code"
+contexts = ["workspace"]
+command = ["sh", "open-code.sh"]

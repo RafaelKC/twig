@@ -1,0 +1,198 @@
+<div align="center">
+
+# 🌿 twig
+
+**One isolated workspace per card.**
+Git worktrees across all the repos a task touches, an AI agent per repo in
+[herdr](https://herdr.dev), and a color-coded VS Code workspace, all from one command.
+
+![Rust](https://img.shields.io/badge/rust-2021-orange?logo=rust)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
+![Status](https://img.shields.io/badge/status-early-yellow)
+
+</div>
+
+---
+
+```console
+$ twig new 52644
+→ card: Vehicle category per route
+→ [api] fetch...
+✔ [api] feat/52644-vehicle-category-per-route
+→ [web] fetch...
+✔ [web] feat/52644-vehicle-category-per-route
+✔ workspace do VS Code gerado (cor #af601a, compound com 2 processos)
+✔ CLAUDE.md gerado em ~/.wt/52644
+✔ workspace herdr #52644 criado
+```
+
+## Why
+
+A real task rarely lives in one repo. The back end, the front end and a shared
+library all change together, and switching branches in the main clones to juggle
+two tasks breaks everything that's running. `twig` gives every card (an Azure
+DevOps work item or a GitHub issue) its own sandbox:
+
+```
+~/.wt/52644/
+├── api/                    git worktree on the card's branch
+├── web/                    git worktree on the card's branch
+├── CLAUDE.md               the card's title, description, acceptance criteria, repos and rules
+├── 52644.code-workspace    VS Code workspace, colored per card, with run tasks and a debug compound
+└── .ado.json               cached work item
+```
+
+Your main clones stay on `main`. Two cards never step on each other.
+
+## Features
+
+- **Worktrees across repos.** One `twig new <id>` creates a worktree per repo. The branch is
+  picked for you: an existing `origin` branch with the id in its name, or a new
+  `feat/<id>-<slug>` (or `fix/` for bugs), with the slug taken from the card's title.
+- **Card context for the agent.** Title, state, description and acceptance criteria are pulled
+  from Azure DevOps (`az`) or GitHub (`gh`) into the card's `CLAUDE.md`, along with a
+  "card context" section that survives regeneration.
+- **herdr workspace.** An `agent` tab with one AI agent per repo, and a `run` tab that starts
+  each project. Closed a pane by accident? `twig add-repo` brings it back.
+- **VS Code workspace.** Friendly folder names, a per-card title bar color, `run:` tasks and a
+  compound that debugs every repo at once.
+- **Local files.** Gitignored files (`appsettings.Development.json`, `.env.local`, …) are copied
+  from the main clone into each worktree.
+- **One config.** Everything team-specific lives in `~/.config/twig/config.toml`.
+- **Self-check.** `twig doctor` checks tools, logins, config and repos, and finds orphaned worktrees.
+
+## herdr layout
+
+```
+┌─ workspace "52644" ─────────────────────────────────────────┐
+│ [agent]  run                                                │
+│ ┌─────────────────────────┬─────────────────────────┐       │
+│ │ api                     │ web                     │       │
+│ │ $ claude                │ $ claude                │       │
+│ │                         │                         │       │
+│ └─────────────────────────┴─────────────────────────┘       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Requirements
+
+| Tool | |
+|---|---|
+| `git` | required |
+| [`herdr`](https://herdr.dev) | required |
+| `az` (+ `azure-devops` extension) **or** `gh` | at least one, to read cards |
+| `claude` ([Claude Code](https://claude.com/claude-code)) | the AI agent started per repo |
+| `code` (VS Code) | optional |
+
+Details in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+
+## Install
+
+Prebuilt binaries are on the roadmap. For now, build from source (Rust is only
+needed to build; the binary is self-contained):
+
+```bash
+git clone <this repo> twig && cd twig
+cargo build --release
+ln -s "$PWD/target/release/twig" ~/.local/bin/twig
+
+# config
+mkdir -p ~/.config/twig && cp examples/config.toml ~/.config/twig/config.toml
+twig config edit        # set your repos
+twig doctor             # check everything
+
+# shell completions (bash, zsh, fish, powershell, elvish)
+twig completions bash > ~/.local/share/bash-completion/completions/twig
+```
+
+## Usage
+
+```bash
+twig new 52644                      # create the card with the default repos
+twig new 52644 --repos api,ui-kit   # pick the repos
+twig add-repo 52644 web             # add a repo later (or restore closed panes)
+twig herdr 52644                    # open the card in herdr
+twig code                           # open the current card in VS Code
+twig ls                             # cards, branches, uncommitted changes (*)
+twig refresh 52644 --refetch        # regenerate CLAUDE.md / workspace, refetch the card
+twig rm 52644 --branches            # done: remove worktrees (and local branches)
+```
+
+| Command | What it does |
+|---|---|
+| `new <id> [slug]` | worktrees, `CLAUDE.md`, herdr workspace and, if enabled, the VS Code workspace |
+| `add-repo <id> <repo,...>` | add repos to a card; recreates missing herdr panes |
+| `herdr <id>` | open/focus the card in herdr |
+| `code [id]` | open the card in VS Code; without an id, the current card |
+| `ls` | active cards and each repo's branch |
+| `refresh <id>` | regenerate `CLAUDE.md` and the `.code-workspace` |
+| `rm <id>` | remove the card (refuses with uncommitted changes) |
+| `prune` | clean orphaned worktree records |
+| `doctor` | check dependencies, logins, config and repos |
+| `config edit` | edit the config and validate it on save |
+| `completions <shell>` | shell completion script |
+
+All options: [docs/COMMANDS.md](docs/COMMANDS.md).
+
+## Configuration
+
+```toml
+version = 1
+
+[provider]
+default = "az"                      # or "gh"
+
+[paths]
+worktrees = "~/.wt"
+repos     = "~/dev"
+
+[repos.api]
+label   = "⚙️ API"                  # VS Code folder name
+short   = "api"                     # herdr pane name
+default = true                      # part of every new card
+run     = "dotnet watch run --project src/Api"
+install = "dotnet restore"
+local_files = ["src/*/appsettings.Development.json"]
+
+[repos.web]
+label   = "🌐 Web"
+default = true
+run     = "pnpm start"
+```
+
+Full example: [examples/config.toml](examples/config.toml). Every field:
+[docs/CONFIG.md](docs/CONFIG.md).
+
+## Extras
+
+| | |
+|---|---|
+| [herdr-plugins/twig](herdr-plugins/README.md) | herdr plugin: `prefix+shift+o` opens the focused card in VS Code |
+| [skills/twig](skills/twig/SKILL.md) | AI agent skill: how to use twig, plus building custom herdr tabs, panes and workspaces |
+
+## Project layout
+
+```
+src/              the twig CLI (Rust)
+tests/            integration tests (fake tools on a controlled PATH)
+examples/         example config
+herdr-plugins/    herdr plugin
+skills/           AI agent skill
+docs/             commands, config, dependencies, roadmap
+refs/             evaluated but unused references
+```
+
+```bash
+cargo test        # unit + integration tests
+```
+
+## Status
+
+Early and opinionated: built for a daily Azure DevOps + .NET + Angular workflow on
+Linux/WSL, now generalized through the config. Runtime messages and the generated
+`CLAUDE.md` are still in Portuguese. See the [roadmap](docs/ROADMAP.md) for what's next
+(prebuilt binaries, installer, per-card ports, more herdr actions).
+
+## License
+
+[MIT](LICENSE)

@@ -1,0 +1,313 @@
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Context, Result};
+use indexmap::IndexMap;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    pub version: u32,
+    #[serde(default)]
+    pub ai: Ai,
+    #[serde(default)]
+    pub provider: Provider,
+    #[serde(default)]
+    pub vscode: Vscode,
+    #[serde(default)]
+    pub herdr: Herdr,
+    #[serde(default)]
+    pub paths: Paths,
+    #[serde(default)]
+    pub git: Git,
+    #[serde(default)]
+    pub worktree: Worktree,
+    #[serde(default)]
+    pub repos: IndexMap<String, Repo>,
+
+    #[serde(skip)]
+    pub file: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Ai {
+    pub provider: String,
+    pub command: String,
+}
+
+impl Default for Ai {
+    fn default() -> Self {
+        Self { provider: "claude".into(), command: "claude".into() }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ProviderKind {
+    #[default]
+    Az,
+    Gh,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Provider {
+    pub default: ProviderKind,
+    pub az: Az,
+    pub gh: Gh,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Az {
+    pub organization: String,
+    pub project: String,
+    pub item_url: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Gh {
+    pub owner: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Vscode {
+    pub enabled: bool,
+    pub open_on_new: bool,
+}
+
+impl Default for Vscode {
+    fn default() -> Self {
+        Self { enabled: true, open_on_new: true }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Herdr {
+    pub open_on_new: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Paths {
+    pub worktrees: String,
+    pub repos: String,
+    pub search: Vec<String>,
+}
+
+impl Default for Paths {
+    fn default() -> Self {
+        Self { worktrees: "~/.wt".into(), repos: "~".into(), search: vec![] }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Git {
+    pub base_branch: String,
+    pub branch_prefix: HashMap<String, String>,
+}
+
+impl Default for Git {
+    fn default() -> Self {
+        Self { base_branch: "main".into(), branch_prefix: HashMap::new() }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Worktree {
+    pub local_files: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Repo {
+    pub path: String,
+    pub label: String,
+    pub short: String,
+    pub default: bool,
+    pub run: String,
+    pub autorun: bool,
+    pub install: String,
+    pub debug: Vec<String>,
+    pub local_files: Vec<String>,
+}
+
+impl Default for Repo {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            label: String::new(),
+            short: String::new(),
+            default: false,
+            run: String::new(),
+            autorun: true,
+            install: String::new(),
+            debug: vec![],
+            local_files: vec![],
+        }
+    }
+}
+
+pub fn config_path() -> Result<PathBuf> {
+    if let Ok(p) = std::env::var("TWIG_CONFIG") {
+        return Ok(PathBuf::from(p));
+    }
+    let base = if cfg!(windows) {
+        dirs::config_dir().context("pasta de config do usuário não encontrada")?
+    } else {
+        home()?.join(".config")
+    };
+    Ok(base.join("twig").join("config.toml"))
+}
+
+pub fn home() -> Result<PathBuf> {
+    dirs::home_dir().context("home do usuário não encontrado")
+}
+
+/// Expand a leading `~` in the path.
+pub fn expand(p: &str) -> PathBuf {
+    if p == "~" {
+        return home().unwrap_or_default();
+    }
+    if let Some(rest) = p.strip_prefix("~/").or_else(|| p.strip_prefix("~\\")) {
+        return home().unwrap_or_default().join(rest);
+    }
+    PathBuf::from(p)
+}
+
+fn is_git_repo(p: &Path) -> bool {
+    p.join(".git").exists()
+}
+
+impl Config {
+    pub fn load() -> Result<Self> {
+        Self::load_from(&config_path()?)
+    }
+
+    pub fn load_from(file: &Path) -> Result<Self> {
+        let file = file.to_path_buf();
+        let text = fs::read_to_string(&file).with_context(|| {
+            format!(
+                "config não encontrado em {} (veja docs/CONFIG.md; dá para apontar outro com TWIG_CONFIG)",
+                file.display()
+            )
+        })?;
+        let mut cfg: Config =
+            toml::from_str(&text).with_context(|| format!("config inválido: {}", file.display()))?;
+        if cfg.version != 1 {
+            bail!("versão de config não suportada: {} (esperado 1)", cfg.version);
+        }
+        if cfg.ai.provider != "claude" {
+            bail!("ai.provider não suportado: {} (por enquanto só \"claude\")", cfg.ai.provider);
+        }
+        cfg.file = file;
+        Ok(cfg)
+    }
+
+    pub fn worktrees(&self) -> PathBuf {
+        expand(&self.paths.worktrees)
+    }
+
+    pub fn card_dir(&self, id: &str) -> PathBuf {
+        self.worktrees().join(id)
+    }
+
+    pub fn workspace_file(&self, id: &str) -> PathBuf {
+        self.card_dir(id).join(format!("{id}.code-workspace"))
+    }
+
+    pub fn repo(&self, name: &str) -> Option<&Repo> {
+        self.repos.get(name)
+    }
+
+    pub fn label(&self, name: &str) -> String {
+        match self.repo(name) {
+            Some(r) if !r.label.is_empty() => r.label.clone(),
+            _ => name.to_string(),
+        }
+    }
+
+    pub fn short(&self, name: &str) -> String {
+        match self.repo(name) {
+            Some(r) if !r.short.is_empty() => r.short.clone(),
+            _ => name.to_string(),
+        }
+    }
+
+    pub fn default_repos(&self) -> Vec<String> {
+        self.repos.iter().filter(|(_, r)| r.default).map(|(n, _)| n.clone()).collect()
+    }
+
+    /// Folders searched, in order, for a repo without `path`.
+    pub fn search_roots(&self) -> Vec<PathBuf> {
+        let mut roots = vec![expand(&self.paths.repos)];
+        roots.extend(self.paths.search.iter().map(|s| expand(s)));
+        roots
+    }
+
+    /// Repos to inspect during maintenance: those in the config plus those found in existing cards.
+    pub fn known_repos(&self) -> Vec<String> {
+        let mut repos: Vec<String> = self.repos.keys().cloned().collect();
+        for id in crate::card::list_cards(self) {
+            for r in crate::card::repos_in(&self.card_dir(&id)) {
+                if !repos.contains(&r) {
+                    repos.push(r);
+                }
+            }
+        }
+        repos
+    }
+
+    /// A repo's main clone: `path` from the config, or the first search folder that has the repo.
+    pub fn repo_path(&self, name: &str) -> Option<PathBuf> {
+        if let Some(r) = self.repo(name) {
+            if !r.path.is_empty() {
+                let p = expand(&r.path);
+                return is_git_repo(&p).then_some(p);
+            }
+        }
+        self.search_roots().into_iter().map(|b| b.join(name)).find(|p| is_git_repo(p))
+    }
+
+    pub fn branch_prefix(&self, work_item_type: &str) -> String {
+        self.git
+            .branch_prefix
+            .get(work_item_type)
+            .or_else(|| self.git.branch_prefix.get("default"))
+            .cloned()
+            .unwrap_or_else(|| "feat".into())
+    }
+
+    /// Register a new repo in the config file, preserving comments and formatting.
+    /// `path` is only written when the clone lives outside `paths.repos`.
+    pub fn register_repo(&mut self, name: &str, clone: &Path) -> Result<()> {
+        let text = fs::read_to_string(&self.file)?;
+        let mut doc: toml_edit::DocumentMut = text.parse()?;
+
+        let in_root = clone == expand(&self.paths.repos).join(name);
+        let mut table = toml_edit::Table::new();
+        if !in_root {
+            table["path"] = toml_edit::value(clone.display().to_string());
+        }
+        if doc.get("repos").is_none() {
+            let mut repos = toml_edit::Table::new();
+            repos.set_implicit(true);
+            doc["repos"] = toml_edit::Item::Table(repos);
+        }
+        doc["repos"][name] = toml_edit::Item::Table(table);
+        fs::write(&self.file, doc.to_string())
+            .with_context(|| format!("não consegui gravar {}", self.file.display()))?;
+
+        let repo = Repo { path: if in_root { String::new() } else { clone.display().to_string() }, ..Default::default() };
+        self.repos.insert(name.to_string(), repo);
+        Ok(())
+    }
+}
