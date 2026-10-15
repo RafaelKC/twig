@@ -1,6 +1,6 @@
 [package]
 name = "twig"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Per-card environment: git worktrees across multiple repos, plus VS Code and herdr workspaces"
 license = "MIT"
