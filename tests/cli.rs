@@ -346,3 +346,102 @@ fn plugin_do_herdr_abre_o_card_focado() {
     assert_exit(&o, 0);
     assert_eq!(opened(&log), s.path("wt/123/123.code-workspace").display().to_string());
 }
+
+// ───────────────────────── update / uninstall ─────────────────────────
+
+/// `curl` stub: answers the GitHub "latest release" API with `tag` and serves an
+/// install.sh that records how it was called.
+fn fake_github(s: &Sandbox, tag: &str) -> PathBuf {
+    let calls = s.path("install-calls.log");
+    let installer = s.script("fake-install.sh", &format!("echo \"$@\" >> {}", calls.display()));
+    s.stub(
+        "curl",
+        &format!(
+            r#"out=""; url=""
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -H) shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
+case "$url" in
+  *releases/latest) echo '{{"tag_name": "{tag}"}}' ;;
+  */install.sh) {cat} {installer} > "$out" ;;
+  *) exit 22 ;;
+esac"#,
+            cat = real("cat").display(),
+            installer = installer.display(),
+        ),
+    );
+    calls
+}
+
+#[test]
+fn update_check_avisa_versao_nova() {
+    let s = Sandbox::new();
+    fake_github(&s, "v99.0.0");
+    let o = s.run(&["update", "--check"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "nova versão disponível: v99.0.0");
+}
+
+#[test]
+fn update_na_ultima_versao_nao_faz_nada() {
+    let s = Sandbox::new();
+    let calls = fake_github(&s, &format!("v{}", env!("CARGO_PKG_VERSION")));
+    let o = s.run(&["update"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "já está na última versão");
+    assert!(!calls.exists());
+}
+
+#[test]
+fn update_roda_o_instalador_da_tag() {
+    let s = Sandbox::new();
+    let calls = fake_github(&s, "v99.0.0");
+    let o = s.run(&["update"]);
+    assert_exit(&o, 0);
+    assert_eq!(fs::read_to_string(&calls).unwrap().trim(), "--update --version v99.0.0");
+}
+
+#[test]
+fn uninstall_remove_as_pecas_do_twig() {
+    let s = Sandbox::new();
+    let herdr_log = s.path("herdr.log");
+    s.stub("herdr", &format!("echo \"$@\" >> {}", herdr_log.display()));
+    s.valid_config("");
+
+    // what install.sh leaves behind
+    let bin = s.bin.join("twig");
+    fs::copy(env!("CARGO_BIN_EXE_twig"), &bin).unwrap();
+    let skill = s.path(".claude/skills/twig");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"), "---\nname: twig\n---\n").unwrap();
+    let other_skill = s.path(".claude/skills/other");
+    fs::create_dir_all(&other_skill).unwrap();
+    let plugin = s.path(".local/share/twig/herdr-plugins/twig");
+    fs::create_dir_all(&plugin).unwrap();
+    let completion = s.path(".local/share/bash-completion/completions/twig");
+    fs::create_dir_all(completion.parent().unwrap()).unwrap();
+    fs::write(&completion, "complete").unwrap();
+    let herdr_cfg = s.path(".config/herdr/config.toml");
+    fs::create_dir_all(herdr_cfg.parent().unwrap()).unwrap();
+    fs::write(
+        &herdr_cfg,
+        "[ui]\nx = 1\n\n# twig:begin (managed)\n[[keys.command]]\nkey = \"prefix+shift+o\"\n# twig:end\n",
+    )
+    .unwrap();
+
+    let mut c = Command::new(&bin);
+    c.args(["uninstall", "--yes"])
+        .env_clear()
+        .env("PATH", &s.bin)
+        .env("HOME", &s.home)
+        .env("TWIG_CONFIG", &s.config);
+    let o = s.run_with(c, "");
+    assert_exit(&o, 0);
+
+    assert!(!bin.exists(), "binário continua lá");
+    assert!(!skill.exists() && other_skill.exists());
+    assert!(!s.path(".local/share/twig").exists());
+    assert!(!completion.exists());
+    assert_eq!(fs::read_to_string(&herdr_cfg).unwrap(), "[ui]\nx = 1\n");
+    assert!(s.config.exists(), "--yes mantém o config");
+    let herdr_calls = fs::read_to_string(&herdr_log).unwrap();
+    assert!(herdr_calls.contains("plugin unlink twig"), "{herdr_calls}");
+}

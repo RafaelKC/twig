@@ -46,6 +46,8 @@ a card.
 | `twig rm <id> [--branches]` | close the card (refuses if there are uncommitted changes) |
 | `twig prune [-n]` | clean up orphaned worktree records (folder deleted by hand) |
 | `twig doctor` | diagnose dependencies, login, config, and repos |
+| `twig update` | update twig, its herdr plugin and this skill to the latest release |
+| `twig uninstall` | remove twig (asks before touching config and dependencies; don't run it unless the user asks) |
 | `twig config edit` | edit the config (interactive, see below) |
 
 `twig new` options:

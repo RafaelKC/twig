@@ -26,8 +26,15 @@ Requirements: `twig` on the herdr server's PATH, or at `~/.local/bin/twig` /
 
 ### Install
 
+[`install.sh`](../install.sh) installs it for you: it copies the plugin to
+`~/.local/share/twig/herdr-plugins/twig`, links it, and adds the shortcut below between
+`# twig:begin` / `# twig:end` (skipped if `prefix+shift+o` is already bound).
+`twig uninstall` removes both.
+
+By hand, from a clone:
+
 ```bash
-herdr plugin link ~/card-cli/herdr-plugins/twig
+herdr plugin link "$PWD/herdr-plugins/twig"
 ```
 
 Shortcut in `~/.config/herdr/config.toml`:

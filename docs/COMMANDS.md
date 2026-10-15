@@ -16,6 +16,8 @@
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor` | checks dependencies, login and config without changing anything |
 | `twig config edit` | opens the config in an editor and validates it on save |
+| `twig update [--check] [--version vX.Y.Z]` | updates twig, its herdr plugin and skill to the latest release |
+| `twig uninstall [--yes]` | removes twig, its herdr plugin, skill and completions |
 | `twig completions <shell>` | generates the completion script (bash, zsh, fish, powershell, elvish) |
 | `twig help [command]` | general help or help for one command |
 
@@ -177,6 +179,39 @@ real file.
 - When the editor closes, it validates. Invalid → shows the error and asks `reabrir para corrigir? [Y/n]`
   ("reopen to fix?"). Without a terminal, an empty answer counts as "no", to avoid looping.
 - Exits with 1 if the file is left invalid.
+
+## `twig update [--check] [--version vX.Y.Z]`
+
+Asks the GitHub API for the latest release (`TWIG_REPO`, default `RafaelKC/twig`; uses
+`GITHUB_TOKEN` if set). If it's newer than the running version, downloads that tag's
+`install.sh` and runs it with `--update`: twig, the AI skill, the herdr plugin and
+completions are replaced; dependencies and config are not touched. Needs `curl`.
+
+| Option | Description |
+|---|---|
+| `--check` | only reports whether a new version exists |
+| `--version vX.Y.Z` | installs that version, even if it's older or the same |
+
+## `twig uninstall [--yes]`
+
+Removes what the installer put in place:
+
+- the herdr plugin (`herdr plugin unlink twig`, `~/.local/share/twig`) and the shortcut
+  block between `# twig:begin` / `# twig:end` in herdr's `config.toml`;
+- the AI skill `~/.claude/skills/twig` (only if it's twig's);
+- shell completions and the `PATH` line the installer added to `~/.bashrc` / `~/.zshrc`;
+- the `twig` binary on the `PATH`.
+
+Then asks (default no) whether to also remove the config and `az`, `gh` and `herdr`.
+Tools are removed the way they were installed: Homebrew, apt, dnf or pacman when one of
+them owns the package; otherwise the binary file, if it's under the home directory.
+Card folders (`paths.worktrees`) are never touched; run `twig rm` first if you want.
+
+| Option | Description |
+|---|---|
+| `-y`, `--yes` | don't ask: removes twig's pieces, keeps the config and the dependencies |
+
+Without a terminal and without `--yes`, it cancels.
 
 ## `twig help [command]`
 

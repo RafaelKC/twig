@@ -14,20 +14,24 @@ What's done and what's left for `twig` to be a tool any team can install.
   - [x] Single provider interface: title, type, state, assignee, tags, description, acceptance criteria and link, cached per card
   - [ ] The branch's PR (status, link) through the provider
   - [ ] GitHub `owner/repo#123` ids (today the issue is looked up in the first repo of the card)
-- [ ] At install, ask which CLI to use (az, gh, or none = offline mode)
-- [ ] If the chosen CLI isn't installed, install it (apt/brew/winget depending on OS)
-- [ ] If not logged in, run the login (`az login` / `gh auth login`) and validate the default org/project
+- [x] At install, ask which CLI to use (az and/or gh)
+- [x] If the chosen CLI isn't installed, install it (brew/apt/dnf/pacman)
+- [x] If not logged in, run the login (`az login` / `gh auth login`) and set the default ADO organization
+- [ ] Offline mode (no provider) chosen at install
 
 ## Install and update
 
-- [ ] Prebuilt binaries for Linux, macOS and Windows on GitHub Releases (e.g. `cargo-dist`)
-- [ ] Installer (`curl ... | sh` / PowerShell) that:
-  - [ ] Puts `twig` on the PATH and installs shell completions
-  - [ ] Checks and installs dependencies (see [DEPENDENCIES.md](DEPENDENCIES.md))
-  - [ ] Asks for the folder where repos live and the worktrees folder (default `~/.wt`)
-  - [ ] Optional: installs the AI skill and the herdr plugin
+- [x] Prebuilt, signed binaries for Linux and macOS on GitHub Releases on every `v*` tag ([RELEASING.md](RELEASING.md))
+- [ ] Windows binaries and a PowerShell installer (see [Native Windows](#native-windows))
+- [x] Installer (`curl ... | sh`) that:
+  - [x] Puts `twig` on the PATH and installs shell completions
+  - [x] Checks and installs dependencies (see [DEPENDENCIES.md](DEPENDENCIES.md))
+  - [x] Asks for the folder where repos live and the worktrees folder (default `~/.wt`)
+  - [x] Installs the AI skill and the herdr plugin (with the `prefix+shift+o` shortcut)
   - [ ] Installs the third-party plugins approved in `herdr-plugins/README.md` (pinned refs) and writes the shortcuts to herdr's `config.toml` without duplicating them
-- [ ] Updater (`twig update`): downloads the new version, migrates config, shows the changelog
+- [x] `twig update`: finds a newer release and reinstalls twig, plugin and skill
+  - [ ] Migrate the config between schema versions and show the changelog
+- [x] `twig uninstall`: removes twig, plugin, skill and completions; asks about config and az/gh/herdr
 - [x] `twig doctor`: checks dependencies, login, config and repos
 
 ## Config
@@ -86,10 +90,28 @@ Use [herdr-reviewr](https://github.com/persiyanov/herdr-reviewr) to review PRs w
 - [ ] Generate `terminal.integrated.env.linux` in the `.code-workspace` clearing `HERDR_*`
 - [ ] Option to open the card's herdr in a terminal in the editor area
 
+## Native Windows
+
+Windows works today through WSL (Linux binary and `install.sh`). Native Windows depends on
+herdr's native Windows support, which is still in beta, so this waits until it's stable.
+
+- [ ] Build `x86_64-pc-windows-msvc` in the release workflow and publish a `.zip` (signed checksums like the other targets)
+- [ ] `install.ps1` (`irm …/install.ps1 | iex`), mirroring `install.sh`:
+  - [ ] Dependencies via winget: `Git.Git`, `GitHub.cli`, `Microsoft.AzureCLI`, `Microsoft.VisualStudioCode`
+  - [ ] herdr via its installer (`irm https://herdr.dev/install.ps1 | iex`) and Claude Code via its Windows installer
+  - [ ] Binary in `%LOCALAPPDATA%\Programs\twig`, added to the user `PATH`; skill, herdr plugin and PowerShell completions
+- [ ] `twig update` runs `install.ps1` on Windows
+- [ ] `twig uninstall` removes dependencies with `winget uninstall`
+- [ ] herdr plugin: Windows variant of `open-code` (`.cmd`/`.ps1`) and `windows` in `platforms`
+- [ ] `.code-workspace`: also set `terminal.integrated.env.windows`
+- [ ] Review Unix-only assumptions (paths, `sh -c` in `run`/`install` commands, process groups when starting the herdr server)
+- [ ] Integration tests on a Windows runner in CI
+- [ ] Optional: Authenticode signing, so SmartScreen doesn't warn on first run
+
 ## Quality
 
 - [x] Integration tests for `doctor`, `config edit`, `code` and the herdr plugin (fake tools on a controlled `PATH`)
 - [ ] Integration tests for `new` / `add-repo` / `rm` / `prune` against local git remotes
-- [ ] CI: `cargo fmt --check`, `cargo clippy`, `cargo test` on Linux, macOS and Windows
+- [ ] CI on pull requests: `cargo fmt --check`, `cargo clippy`, `cargo test`, `shellcheck install.sh` (today tests only run on release tags)
 - [ ] Translate runtime messages and the generated `CLAUDE.md` to English (or make them localizable)
-- [ ] macOS and native Windows support (today used on Linux/WSL)
+- [ ] Test on macOS (today used on Linux/WSL)

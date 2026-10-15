@@ -76,6 +76,8 @@ Your main clones stay on `main`. Two cards never step on each other.
 
 ## Requirements
 
+The installer takes care of these.
+
 | Tool | |
 |---|---|
 | `git` | required |
@@ -88,22 +90,43 @@ Details in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ## Install
 
-Prebuilt binaries are on the roadmap. For now, build from source (Rust is only
-needed to build; the binary is self-contained):
+Linux (x86_64, arm64, WSL) and macOS (Intel, Apple Silicon):
 
 ```bash
-git clone <this repo> twig && cd twig
+curl -fsSL https://raw.githubusercontent.com/RafaelKC/twig/main/install.sh | sh
+```
+
+The installer checks and installs the dependencies (git, herdr, az/gh, Claude Code,
+optionally VS Code), sets up logins, downloads the release for your system, verifies its
+checksum and [Sigstore signature](docs/RELEASING.md#signing-and-verification), and
+installs twig, the AI skill, the herdr plugin and shell completions. Running it again
+updates. Details: [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+
+Then register your repos and check everything:
+
+```bash
+twig config edit
+twig doctor
+```
+
+| | |
+|---|---|
+| Update | `twig update` |
+| Specific version | `curl -fsSL …/install.sh \| sh -s -- --version v0.2.0` |
+| Uninstall | `twig uninstall` |
+
+<details>
+<summary>Build from source</summary>
+
+```bash
+git clone https://github.com/RafaelKC/twig && cd twig
 cargo build --release
 ln -s "$PWD/target/release/twig" ~/.local/bin/twig
-
-# config
 mkdir -p ~/.config/twig && cp examples/config.toml ~/.config/twig/config.toml
-twig config edit        # set your repos
-twig doctor             # check everything
-
-# shell completions (bash, zsh, fish, powershell, elvish)
 twig completions bash > ~/.local/share/bash-completion/completions/twig
 ```
+
+</details>
 
 ## Usage
 
@@ -130,6 +153,8 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `prune` | clean orphaned worktree records |
 | `doctor` | check dependencies, logins, config and repos |
 | `config edit` | edit the config and validate it on save |
+| `update` | update to the latest release |
+| `uninstall` | remove twig, its plugin and skill |
 | `completions <shell>` | shell completion script |
 
 All options: [docs/COMMANDS.md](docs/COMMANDS.md).
@@ -178,7 +203,10 @@ tests/            integration tests (fake tools on a controlled PATH)
 examples/         example config
 herdr-plugins/    herdr plugin
 skills/           AI agent skill
-docs/             commands, config, dependencies, roadmap
+scripts/          release helper
+.github/          release workflow
+install.sh        installer
+docs/             commands, config, dependencies, releasing, roadmap
 refs/             evaluated but unused references
 ```
 
@@ -191,7 +219,7 @@ cargo test        # unit + integration tests
 Early and opinionated: built for a daily Azure DevOps + .NET + Angular workflow on
 Linux/WSL, now generalized through the config. Runtime messages and the generated
 `CLAUDE.md` are still in Portuguese. See the [roadmap](docs/ROADMAP.md) for what's next
-(prebuilt binaries, installer, per-card ports, more herdr actions).
+(per-card ports, more herdr actions, native Windows).
 
 ## License
 

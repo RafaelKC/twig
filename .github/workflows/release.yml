@@ -1,0 +1,92 @@
+name: release
+
+# Push a tag like v0.2.0 (scripts/release.sh does it) to build, sign and publish a release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: tag matches Cargo.toml version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != Cargo.toml v$version"; exit 1; }
+      - run: cargo test --locked
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-24.04 }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
+          - { target: x86_64-apple-darwin, os: macos-14 }
+          - { target: aarch64-apple-darwin, os: macos-14 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update -qq && sudo apt-get install -y musl-tools
+      - name: build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: package
+        run: |
+          pkg=twig-${{ matrix.target }}
+          mkdir -p "$pkg/skills" "$pkg/herdr-plugins"
+          cp target/${{ matrix.target }}/release/twig "$pkg/"
+          cp -R skills/twig "$pkg/skills/"
+          cp -R herdr-plugins/twig "$pkg/herdr-plugins/"
+          cp LICENSE README.md "$pkg/"
+          tar -czf "$pkg.tar.gz" "$pkg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: twig-${{ matrix.target }}
+          path: twig-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create the release
+      id-token: write # Sigstore keyless signing (GitHub OIDC)
+      attestations: write # build provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: checksums
+        working-directory: dist
+        run: |
+          cp ../install.sh .
+          sha256sum *.tar.gz install.sh > SHA256SUMS
+          cat SHA256SUMS
+      - uses: sigstore/cosign-installer@v3
+      - name: sign checksums (Sigstore keyless)
+        working-directory: dist
+        run: cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - name: build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/install.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

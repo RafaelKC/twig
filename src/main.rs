@@ -6,6 +6,7 @@ mod config_edit;
 mod doctor;
 mod herdr;
 mod provider;
+mod selfmgmt;
 mod sys;
 mod ui;
 mod workspace;
@@ -125,6 +126,21 @@ enum Cmd {
         #[command(subcommand)]
         cmd: ConfigCmd,
     },
+    /// Update twig (and its herdr plugin and skill) to the latest release.
+    Update {
+        /// Only report whether a new version exists.
+        #[arg(long)]
+        check: bool,
+        /// Install this version instead of the latest (e.g. v0.2.0).
+        #[arg(long)]
+        version: Option<String>,
+    },
+    /// Remove twig, its herdr plugin, skill and completions; asks about config and az/gh/herdr.
+    Uninstall {
+        /// Don't ask: remove twig's pieces, keep config and dependencies.
+        #[arg(short, long)]
+        yes: bool,
+    },
     /// Generate the shell completion script (e.g. twig completions bash > ~/.local/share/bash-completion/completions/twig).
     Completions { shell: Shell },
 }
@@ -143,6 +159,8 @@ fn run(cli: Cli) -> Result<()> {
             return Ok(());
         }
         Cmd::Doctor => return doctor::run(),
+        Cmd::Update { check, version } => return selfmgmt::update(check, version),
+        Cmd::Uninstall { yes } => return selfmgmt::uninstall(yes),
         Cmd::Config { cmd: ConfigCmd::Edit } => return config_edit::edit(),
         _ => {}
     }
@@ -163,7 +181,9 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
         Cmd::Rm { id, branches } => commands::rm(&cfg, &id, branches),
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
-        Cmd::Completions { .. } | Cmd::Doctor | Cmd::Config { .. } => unreachable!(),
+        Cmd::Completions { .. } | Cmd::Doctor | Cmd::Config { .. } | Cmd::Update { .. } | Cmd::Uninstall { .. } => {
+            unreachable!()
+        }
     }
 }
 

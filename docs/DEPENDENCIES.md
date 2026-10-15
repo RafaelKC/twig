@@ -1,99 +1,74 @@
 # Dependencies
 
-External tools `twig` uses and how the installer handles each one.
+External tools `twig` uses and how [`install.sh`](../install.sh) handles each one.
 
-`twig` ships as a native binary (Rust), so the installing machine **doesn't need
-Rust**. The tools below are still programs that `twig` calls and must be
-installed.
+`twig` ships as a native binary, so the machine **doesn't need Rust**. The tools below
+are programs `twig` calls and must be installed.
 
 ## Summary
 
 | Group | Tool | Rule | Login checked |
 |---|---|---|---|
-| Required | `git` | always installed | — (checks `user.name` / `user.email`) |
-| Required | `herdr` | always installed | — |
-| Optional | VS Code (`code`) | asks whether you want it | — |
-| Provider (at least one) | `az` (Azure DevOps) | pick one or both | yes |
-| Provider (at least one) | `gh` (GitHub) | pick one or both | yes |
-| AI (pick one) | Claude Code (`claude`) | only option for now | no (for now) |
+| Required | `git` | installed if missing | — (checks `user.name` / `user.email`) |
+| Required | `herdr` | installed if missing | — |
+| Optional | VS Code (`code`) | asks; default no | — |
+| Provider (at least one) | `az` (Azure DevOps) | use the installed ones, or pick one to install | yes |
+| Provider (at least one) | `gh` (GitHub) | same | yes |
+| AI (pick one) | Claude Code (`claude`) | only option for now | no |
+
+The installer also needs `curl` and `tar` (present on Linux and macOS).
+
+## How each tool is installed
+
+The installer detects the package manager (`brew`, `apt-get`, `dnf`, `pacman`, `zypper`)
+and uses `sudo` when not root.
+
+| Tool | macOS / Homebrew | Debian/Ubuntu | Fedora/RHEL | Arch | Fallback |
+|---|---|---|---|---|---|
+| `git` | `brew install git` (or Xcode CLT) | `apt-get install git` | `dnf install git` | `pacman -S git` | — |
+| `herdr` | `brew install herdr` | `curl -fsSL https://herdr.dev/install.sh \| sh` | same | same | — |
+| `gh` | `brew install gh` | official `cli.github.com` apt repo | `dnf install gh` | `pacman -S github-cli` | link to cli.github.com |
+| `az` | `brew install azure-cli` | `curl -fsSL https://aka.ms/InstallAzureCLIDeb \| sudo bash` | — | — | link to Microsoft docs |
+| VS Code | `brew install --cask visual-studio-code` | `snap install code --classic` | same | same | link; on WSL, install on Windows |
+| Claude Code | `curl -fsSL https://claude.ai/install.sh \| bash` | same | same | same | — |
 
 ## Installer flow
 
-The installer follows the same logic for every dependency:
+1. **git**: installs if missing. Then checks `git config --global user.name/user.email`;
+   if either is empty, asks to set them now.
+2. **herdr**: installs if missing.
+3. **VS Code** (optional): found → `vscode.enabled = true`; missing → asks to install
+   (default no). On WSL, `code` comes from Windows VS Code, so it only gives instructions.
+4. **Provider**: for each of `az`/`gh` already installed, asks whether to use it. None
+   chosen → asks which one to install. For each chosen provider:
 
-1. **Detects** whether it's already installed (binary on the `PATH` + version).
-2. **Decides** based on the group (required, optional, choice).
-3. **Installs** via the OS package manager when needed (`apt` / `brew` / `winget`),
-   always showing the command before running it and asking for confirmation when it uses `sudo`.
-4. **Configures / logs in** when the tool requires it.
+   | Provider | Checks | If it fails |
+   |---|---|---|
+   | `az` | `azure-devops` extension; default organization (asks for it if missing); access with `az devops project list` | adds the extension; asks to run `az login` |
+   | `gh` | `gh auth status` | asks to run `gh auth login` |
 
-At the end it shows a summary of what was detected, installed, configured and skipped.
-All of this is also checked later by `twig doctor`.
+   `az account show` is not used on purpose: access through `az devops login` (PAT) works
+   without it.
+5. **AI**: Claude Code installed → asks whether to use it; missing → asks to install.
+   No login check: `claude` asks on first run.
+6. **twig**: downloads the release for the OS/arch, verifies the checksum and, when
+   `cosign` is installed, the Sigstore signature (see [RELEASING.md](RELEASING.md)).
+   Installs the binary, the AI skill (`~/.claude/skills/twig`), the herdr plugin (linked,
+   plus the `prefix+shift+o` shortcut unless that key is taken) and shell completions.
+7. **Config**: only if `~/.config/twig/config.toml` doesn't exist. Asks for the repos folder
+   and the worktrees folder and writes the provider, organization and `vscode.enabled`
+   chosen above. Repos are not registered here: `twig config edit`.
+8. Runs `twig doctor`.
 
-### Required: `git` and `herdr`
+Without a terminal (CI, `--yes`), every question takes its default: required tools are
+installed, optional ones are skipped, installed providers are used.
 
-`twig` doesn't work without them, so there's no question about whether to use them.
-
-- Not installed → installs it.
-- Installed → moves on (warns if the version is below the minimum supported).
-
-**git: identity.** After making sure git is present (already there or just installed),
-the installer checks the global config:
-
-```bash
-git config --global user.name
-git config --global user.email
-```
-
-- Both set → shows the values and moves on.
-- Either empty → asks whether to configure it now. If yes, asks for name and/or email
-  and saves them with `git config --global`. If no, moves on and `twig doctor` keeps warning.
-
-### Optional: VS Code (`code`)
-
-Used by `twig code` and by the herdr plugin's `open-code` action.
-
-- Installed → just confirms `code` is on the `PATH`.
-- Not installed → asks whether to install it. If not, the commands that open VS Code
-  are disabled with a clear message.
-
-> On WSL, `code` comes from Windows VS Code (WSL extension); the installer doesn't install
-> VS Code inside the distro, it only gives instructions.
-
-### Project provider: `az` and/or `gh` (at least one)
-
-This is where `twig` gets the work item/issue, title, branch and PR from.
-
-1. Detects which ones are already installed.
-2. For each installed one, asks whether to use it.
-3. If none was chosen, asks you to pick between `az` and `gh` (at least one) and
-   installs the chosen one.
-4. For each chosen provider, checks the login and, if not logged in, asks
-   whether to log in now:
-
-| Provider | Login check | Login | Extra |
-|---|---|---|---|
-| `az` | `az account show` | `az login` | `azure-devops` extension (`az extension add --name azure-devops`) and org/project defaults (`az devops configure --defaults organization=… project=…`) |
-| `gh` | `gh auth status` | `gh auth login` | — |
-
-If the user declines to log in, the provider stays configured but the commands that
-depend on it fail with instructions on how to log in (and `twig doctor` flags it).
-
-### AI: Claude Code (pick one)
-
-Agent that `twig herdr` starts in the `agent` tab.
-
-- For now the list has **only Claude Code**. It's already a choice so that Codex and
-  others can be added later without changing the flow.
-- Installed → asks whether to use the existing install.
-- Not installed → installs it.
-- **No login check for now**: login happens on the first run
-  of `claude` itself.
-- Optional: installs the card skill into `~/.claude/skills/`.
+**Running it again updates**: dependencies are only installed if missing, the config is
+kept, and twig, the skill, the plugin and completions are replaced. `twig update` runs the
+installer in `--update` mode, which skips the dependency steps.
 
 ## Not installer dependencies
 
 - `jq`: not needed; `twig` parses JSON internally.
-- `dotnet`, `node`/`npm` etc.: needed to **run the card's projects**
-  (`run` tab), not for `twig` itself. They're handled by the run strategies and
-  `twig doctor`, not the installer.
+- `dotnet`, `node`/`npm` etc.: needed to **run the card's projects** (`run` tab), not
+  for `twig` itself.
