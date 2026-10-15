@@ -45,7 +45,7 @@ impl Report {
                 true
             }
             None => {
-                self.error(format!("{bin} não encontrado no PATH ({why})"));
+                self.error(format!("{bin} not found on PATH ({why})"));
                 false
             }
         }
@@ -74,32 +74,32 @@ pub fn run() -> Result<()> {
     let path = config_path()?;
     let cfg = match Config::load_from(&path) {
         Ok(cfg) => {
-            r.ok(format!("{} válido", path.display()));
+            r.ok(format!("{} valid", path.display()));
             Some(cfg)
         }
         Err(e) => {
             r.error(format!("{e:#}"));
-            r.info("corrija com `twig config edit`; as checagens que dependem do config foram puladas");
+            r.info("fix it with `twig config edit`; checks that depend on the config were skipped");
             None
         }
     };
 
     r.section("git");
-    if r.require_bin("git", "obrigatório") {
+    if r.require_bin("git", "required") {
         for key in ["user.name", "user.email"] {
             match git_global(key) {
-                v if v.is_empty() => r.warn(format!("{key} não configurado (git config --global {key} ...)")),
+                v if v.is_empty() => r.warn(format!("{key} not set (git config --global {key} ...)")),
                 v => r.ok(format!("{key} = {v}")),
             }
         }
     }
 
     r.section("herdr");
-    if r.require_bin("herdr", "obrigatório") {
+    if r.require_bin("herdr", "required") {
         if succeeds("herdr", &["workspace", "list"]) {
-            r.ok("servidor do herdr respondendo");
+            r.ok("herdr server responding");
         } else {
-            r.info("servidor do herdr parado (o twig sobe sozinho quando precisa)");
+            r.info("herdr server stopped (twig starts it when needed)");
         }
     }
 
@@ -111,7 +111,7 @@ pub fn run() -> Result<()> {
     if cfg.vscode.enabled {
         r.require_bin("code", "vscode.enabled = true");
     } else {
-        r.info("desativado no config (vscode.enabled = false)");
+        r.info("disabled in the config (vscode.enabled = false)");
     }
 
     r.section("provider");
@@ -119,7 +119,7 @@ pub fn run() -> Result<()> {
         ProviderKind::Az => {
             if r.require_bin("az", "provider.default = \"az\"") {
                 if succeeds("az", &["extension", "show", "--name", "azure-devops", "--output", "none"]) {
-                    r.ok("extensão azure-devops instalada");
+                    r.ok("azure-devops extension installed");
                     // `az account show` isn't enough: ADO access may come from `az devops login` (PAT)
                     let mut args = vec!["devops", "project", "list", "--top", "1", "--output", "none"];
                     let org = &cfg.provider.az.organization;
@@ -127,58 +127,58 @@ pub fn run() -> Result<()> {
                         args.extend(["--organization", org.as_str()]);
                     }
                     if succeeds("az", &args) {
-                        r.ok("acesso ao Azure DevOps ok");
+                        r.ok("Azure DevOps access ok");
                     } else {
-                        r.warn("az sem acesso ao Azure DevOps (az login ou az devops login; confira provider.az.organization)");
+                        r.warn("az has no access to Azure DevOps (az login or az devops login; check provider.az.organization)");
                     }
                 } else {
-                    r.warn("extensão azure-devops ausente (az extension add --name azure-devops)");
+                    r.warn("azure-devops extension missing (az extension add --name azure-devops)");
                 }
             }
         }
         ProviderKind::Gh => {
             if r.require_bin("gh", "provider.default = \"gh\"") {
                 if succeeds("gh", &["auth", "status"]) {
-                    r.ok("gh logado");
+                    r.ok("gh logged in");
                 } else {
-                    r.warn("gh não está logado (gh auth login)");
+                    r.warn("gh is not logged in (gh auth login)");
                 }
             }
         }
     }
 
-    r.section("IA");
+    r.section("AI");
     let ai_bin = cfg.ai.command.split_whitespace().next().unwrap_or_default();
     if ai_bin.is_empty() {
-        r.error("ai.command vazio");
+        r.error("ai.command is empty");
     } else {
         r.require_bin(ai_bin, "ai.command");
     }
 
-    r.section("pastas");
+    r.section("folders");
     let wt = cfg.worktrees();
     if wt.is_dir() {
         r.ok(format!("worktrees: {}", wt.display()));
     } else if nearest_existing(&wt).is_some_and(Path::is_dir) {
-        r.info(format!("worktrees: {} ainda não existe (criada no primeiro `twig new`)", wt.display()));
+        r.info(format!("worktrees: {} does not exist yet (created on the first `twig new`)", wt.display()));
     } else {
-        r.error(format!("worktrees: {} não pode ser criada", wt.display()));
+        r.error(format!("worktrees: {} cannot be created", wt.display()));
     }
 
     r.section("repos");
     if cfg.repos.is_empty() {
-        r.warn("nenhum repo cadastrado (veja docs/CONFIG.md → Configurar os repos)");
+        r.warn("no repos registered (see docs/CONFIG.md → Configuring repos)");
     } else if cfg.default_repos().is_empty() {
-        r.warn("nenhum repo com `default = true`: `twig new` vai exigir --repos");
+        r.warn("no repo with `default = true`: `twig new` will require --repos");
     }
     for name in cfg.repos.keys() {
         match cfg.repo_path(name) {
             Some(p) => r.ok(format!("{name} ({})", p.display())),
-            None => r.error(format!("{name}: clone não encontrado ou não é repo git")),
+            None => r.error(format!("{name}: clone not found or not a git repo")),
         }
     }
 
-    r.section("worktrees órfãs");
+    r.section("orphaned worktrees");
     let mut any = false;
     for repo in cfg.known_repos() {
         let Some(main) = cfg.repo_path(&repo) else { continue };
@@ -188,9 +188,9 @@ pub fn run() -> Result<()> {
         }
     }
     if any {
-        r.info("limpe com `twig prune`");
+        r.info("clean up with `twig prune`");
     } else {
-        r.ok("nenhuma");
+        r.ok("none");
     }
 
     finish(&r)
@@ -199,12 +199,12 @@ pub fn run() -> Result<()> {
 fn finish(r: &Report) -> Result<()> {
     println!();
     if r.errors > 0 {
-        bail!("{} erro(s), {} aviso(s)", r.errors, r.warnings);
+        bail!("{} error(s), {} warning(s)", r.errors, r.warnings);
     }
     if r.warnings > 0 {
-        println!("\x1b[33m! tudo funcional, com {} aviso(s)\x1b[0m", r.warnings);
+        println!("\x1b[33m! all working, with {} warning(s)\x1b[0m", r.warnings);
     } else {
-        println!("\x1b[32m✔ tudo certo\x1b[0m");
+        println!("\x1b[32m✔ all good\x1b[0m");
     }
     Ok(())
 }

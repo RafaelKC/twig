@@ -46,7 +46,7 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
 
     if !deps.is_empty() {
         tasks.push(json!({
-            "label": "twig: subir tudo",
+            "label": "twig: start all",
             "dependsOn": deps,
             "dependsOrder": "parallel",
             "problemMatcher": []
@@ -106,7 +106,7 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
                 "version": "0.2.0",
                 "configurations": [],
                 "compounds": [{
-                    "name": format!("▶ card #{id}: subir e debugar tudo"),
+                    "name": format!("▶ card #{id}: start and debug all"),
                     "configurations": compound,
                     "stopAll": true,
                     "presentation": { "group": "0-card", "order": 1 }
@@ -117,9 +117,9 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
 
     fs::write(cfg.workspace_file(id), serde_json::to_string_pretty(&Value::Object(ws))? + "\n")?;
     if n_dbg >= 2 {
-        ui::ok(format!("workspace do VS Code gerado (cor {color}, compound com {n_dbg} processos)"));
+        ui::ok(format!("VS Code workspace generated (color {color}, compound with {n_dbg} processes)"));
     } else {
-        ui::ok(format!("workspace do VS Code gerado (cor {color})"));
+        ui::ok(format!("VS Code workspace generated (color {color})"));
     }
     Ok(())
 }

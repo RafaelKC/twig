@@ -98,7 +98,7 @@ enum Cmd {
     /// List active cards and each repo's branch (* = uncommitted changes).
     #[command(alias = "list")]
     Ls,
-    /// Regenerate .code-workspace and CLAUDE.md, keeping the "Contexto do card" section.
+    /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
         id: String,
         /// Drop the cache and fetch the card data from the provider again.

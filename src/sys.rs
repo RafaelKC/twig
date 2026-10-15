@@ -25,10 +25,10 @@ pub fn output(cmd: &mut Command) -> Result<String> {
     let out = cmd
         .stdin(Stdio::null())
         .output()
-        .with_context(|| format!("não consegui executar {:?}", cmd.get_program()))?;
+        .with_context(|| format!("could not run {:?}", cmd.get_program()))?;
     if !out.status.success() {
         bail!(
-            "{:?} falhou: {}",
+            "{:?} failed: {}",
             cmd.get_program(),
             String::from_utf8_lossy(&out.stderr).trim()
         );
@@ -40,9 +40,9 @@ pub fn output(cmd: &mut Command) -> Result<String> {
 pub fn run(cmd: &mut Command) -> Result<()> {
     let status = cmd
         .status()
-        .with_context(|| format!("não consegui executar {:?}", cmd.get_program()))?;
+        .with_context(|| format!("could not run {:?}", cmd.get_program()))?;
     if !status.success() {
-        bail!("{:?} saiu com {status}", cmd.get_program());
+        bail!("{:?} exited with {status}", cmd.get_program());
     }
     Ok(())
 }

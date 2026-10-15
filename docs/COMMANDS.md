@@ -120,7 +120,8 @@ Lists active cards and each repo's branch. A `*` marks uncommitted changes.
 ## `twig refresh <id> [--refetch]`
 
 Regenerates the `.code-workspace` and `CLAUDE.md` of an existing card, preserving the
-"Contexto do card" (card context) section of `CLAUDE.md` if it has been filled in.
+"Card context" section of `CLAUDE.md` if it has been filled in (a section under the
+old Portuguese heading `## Contexto do card` is also kept, and moved to the new heading).
 Use it after renaming a branch or changing the config.
 
 | Option | Description |
@@ -176,8 +177,8 @@ may include arguments (e.g. `EDITOR="code --wait"`). Since it follows the symlin
 real file.
 
 - Config doesn't exist → creates it from a minimal template before opening.
-- When the editor closes, it validates. Invalid → shows the error and asks `reabrir para corrigir? [Y/n]`
-  ("reopen to fix?"). Without a terminal, an empty answer counts as "no", to avoid looping.
+- When the editor closes, it validates. Invalid → shows the error and asks `reopen to fix it? [Y/n]`.
+  Without a terminal, an empty answer counts as "no", to avoid looping.
 - Exits with 1 if the file is left invalid.
 
 ## `twig update [--check] [--version vX.Y.Z]`

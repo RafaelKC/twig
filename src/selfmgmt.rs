@@ -35,7 +35,7 @@ fn herdr_config() -> Result<PathBuf> {
 
 fn curl() -> Result<Command> {
     if sys::which("curl").is_none() {
-        bail!("curl não encontrado no PATH");
+        bail!("curl not found on PATH");
     }
     let mut cmd = Command::new("curl");
     cmd.args(["-fsSL", "--retry", "2"]);
@@ -55,9 +55,9 @@ fn latest_tag() -> Result<String> {
         cmd.args(["-H", &format!("Authorization: Bearer {token}")]);
     }
     cmd.arg(format!("https://api.github.com/repos/{}/releases/latest", repo()));
-    let body = sys::output(&mut cmd).context("não consegui consultar a última release no GitHub")?;
-    let json: serde_json::Value = serde_json::from_str(&body).context("resposta inesperada do GitHub")?;
-    json["tag_name"].as_str().map(String::from).context("release sem tag_name")
+    let body = sys::output(&mut cmd).context("could not query the latest release on GitHub")?;
+    let json: serde_json::Value = serde_json::from_str(&body).context("unexpected response from GitHub")?;
+    json["tag_name"].as_str().map(String::from).context("release without tag_name")
 }
 
 pub fn update(check: bool, version: Option<String>) -> Result<()> {
@@ -74,19 +74,19 @@ pub fn update(check: bool, version: Option<String>) -> Result<()> {
     };
 
     if !forced && !newer {
-        ui::ok(format!("twig já está na última versão ({current})"));
+        ui::ok(format!("twig is already on the latest version ({current})"));
         return Ok(());
     }
     if check {
-        ui::info(format!("nova versão disponível: {tag} (atual: {current}). Rode `twig update`."));
+        ui::info(format!("new version available: {tag} (current: {current}). Run `twig update`."));
         return Ok(());
     }
 
-    ui::info(format!("atualizando twig {current} → {tag}"));
+    ui::info(format!("updating twig {current} → {tag}"));
     let script = std::env::temp_dir().join(format!("twig-install-{}.sh", std::process::id()));
     let url = format!("https://raw.githubusercontent.com/{}/{tag}/install.sh", repo());
     let result = sys::run(curl()?.arg("-o").arg(&script).arg(&url))
-        .with_context(|| format!("não consegui baixar {url}"))
+        .with_context(|| format!("could not download {url}"))
         .and_then(|_| sys::run(Command::new("sh").arg(&script).args(["--update", "--version", &tag])));
     let _ = fs::remove_file(&script);
     result
@@ -120,9 +120,9 @@ fn strip_herdr_block(text: &str) -> Option<String> {
 fn remove_path(p: &Path, what: &str) {
     let res = if p.is_dir() && !p.is_symlink() { fs::remove_dir_all(p) } else { fs::remove_file(p) };
     match res {
-        Ok(()) => ui::ok(format!("{what} removido: {}", p.display())),
+        Ok(()) => ui::ok(format!("{what} removed: {}", p.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => ui::warn(format!("não consegui remover {}: {e}", p.display())),
+        Err(e) => ui::warn(format!("could not remove {}: {e}", p.display())),
     }
 }
 
@@ -181,37 +181,37 @@ fn remove_tool(bin: &str, pkgs: &Packages) -> Result<()> {
     if sys::which("pacman").is_some() && sys::quiet(Command::new("pacman").args(["-Qi", pkgs.pacman])) {
         return run_maybe_sudo(&["pacman", "-R", "--noconfirm", pkgs.pacman]);
     }
-    let path = sys::which(bin).context("binário não encontrado")?;
+    let path = sys::which(bin).context("binary not found")?;
     if path.starts_with(home()?) {
         fs::remove_file(&path)?;
-        ui::ok(format!("{} removido", path.display()));
+        ui::ok(format!("{} removed", path.display()));
         return Ok(());
     }
-    bail!("não sei como {bin} foi instalado; remova manualmente: {}", path.display())
+    bail!("don't know how {bin} was installed; remove it manually: {}", path.display())
 }
 
 pub fn uninstall(yes: bool) -> Result<()> {
-    if !yes && !ui::confirm("remover o twig (binário, plugin do herdr, skill e autocomplete)? [y/N]: ") {
-        bail!("cancelado (use --yes para não perguntar)");
+    if !yes && !ui::confirm("remove twig (binary, herdr plugin, skill and completions)? [y/N]: ") {
+        bail!("cancelled (use --yes to skip the prompt)");
     }
 
     // herdr plugin and shortcut
     if sys::which("herdr").is_some() {
         if sys::quiet(Command::new("herdr").args(["plugin", "unlink", "twig"])) {
-            ui::ok("plugin twig desligado do herdr");
+            ui::ok("twig plugin unlinked from herdr");
         }
     }
     let hc = herdr_config()?;
     if let Ok(text) = fs::read_to_string(&hc) {
         if let Some(stripped) = strip_herdr_block(&text) {
             fs::write(&hc, stripped)?;
-            ui::ok(format!("atalho do twig removido de {}", hc.display()));
+            ui::ok(format!("twig shortcut removed from {}", hc.display()));
             if sys::which("herdr").is_some() {
                 sys::quiet(Command::new("herdr").args(["server", "reload-config"]));
             }
         }
     }
-    remove_path(&data_dir()?, "dados do twig (plugin do herdr)");
+    remove_path(&data_dir()?, "twig data (herdr plugin)");
 
     // AI skill: only ours
     let skill = home()?.join(".claude/skills/twig");
@@ -221,7 +221,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
     }
 
     for f in completion_files()? {
-        remove_path(&f, "autocomplete");
+        remove_path(&f, "completion");
     }
 
     // PATH line install.sh appended (`export PATH="...:$PATH"  # twig`)
@@ -234,19 +234,19 @@ pub fn uninstall(yes: bool) -> Result<()> {
             .collect();
         if kept.len() != text.lines().count() {
             fs::write(&rc, kept.join("\n") + "\n")?;
-            ui::ok(format!("linha do PATH removida de {}", rc.display()));
+            ui::ok(format!("PATH line removed from {}", rc.display()));
         }
     }
 
     let cfg = config_path()?;
     if cfg.exists() {
-        if !yes && ui::confirm(&format!("remover também o config ({})? [y/N]: ", cfg.display())) {
+        if !yes && ui::confirm(&format!("also remove the config ({})? [y/N]: ", cfg.display())) {
             remove_path(&cfg, "config");
         } else {
-            ui::info(format!("config mantido: {}", cfg.display()));
+            ui::info(format!("config kept: {}", cfg.display()));
         }
     }
-    ui::info("as pastas dos cards (paths.worktrees) não foram tocadas; use `twig rm` antes, se quiser");
+    ui::info("card folders (paths.worktrees) were not touched; use `twig rm` first if you want");
 
     if !yes {
         let tools: [(&str, &str, Packages); 3] = [
@@ -258,7 +258,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
             if sys::which(bin).is_none() {
                 continue;
             }
-            if !ui::confirm(&format!("remover também o {name} ({bin})? [y/N]: ")) {
+            if !ui::confirm(&format!("also remove {name} ({bin})? [y/N]: ")) {
                 continue;
             }
             if *bin == "herdr" {
@@ -273,10 +273,10 @@ pub fn uninstall(yes: bool) -> Result<()> {
     // last: the binary itself (the PATH entry, symlink or file)
     let bin = sys::which("twig").or_else(|| std::env::current_exe().ok());
     match bin {
-        Some(b) => remove_path(&b, "binário"),
-        None => ui::warn("binário do twig não encontrado no PATH"),
+        Some(b) => remove_path(&b, "binary"),
+        None => ui::warn("twig binary not found on PATH"),
     }
-    ui::ok("twig desinstalado");
+    ui::ok("twig uninstalled");
     Ok(())
 }
 
@@ -285,14 +285,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compara_versoes() {
+    fn compares_versions() {
         assert_eq!(parse_version("v1.2.3"), Some((1, 2, 3)));
         assert!(parse_version("v0.10.0") > parse_version("0.9.9"));
         assert_eq!(parse_version("v1.2"), None);
     }
 
     #[test]
-    fn remove_so_o_bloco_do_twig() {
+    fn removes_only_the_twig_block() {
         let text = "[ui]\ntheme = \"x\"\n\n# twig:begin (managed)\n[[keys.command]]\nkey = \"a\"\n# twig:end\n\n[other]\nx = 1\n";
         assert_eq!(strip_herdr_block(text).unwrap(), "[ui]\ntheme = \"x\"\n\n[other]\nx = 1\n");
         assert_eq!(strip_herdr_block("[ui]\n"), None);

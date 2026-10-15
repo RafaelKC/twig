@@ -60,7 +60,7 @@ impl Sandbox {
     }
 
     fn git_identity(&self) -> &Self {
-        fs::write(self.home.join(".gitconfig"), "[user]\n\tname = Teste\n\temail = t@t\n").unwrap();
+        fs::write(self.home.join(".gitconfig"), "[user]\n\tname = Test\n\temail = t@t\n").unwrap();
         self
     }
 
@@ -114,89 +114,89 @@ fn text(o: &Output) -> String {
 }
 
 fn assert_exit(o: &Output, code: i32) {
-    assert_eq!(o.status.code(), Some(code), "saída:\n{}", text(o));
+    assert_eq!(o.status.code(), Some(code), "output:\n{}", text(o));
 }
 
 fn assert_has(o: &Output, needle: &str) {
-    assert!(text(o).contains(needle), "esperava {needle:?} na saída:\n{}", text(o));
+    assert!(text(o).contains(needle), "expected {needle:?} in the output:\n{}", text(o));
 }
 
 // ───────────────────────── doctor ─────────────────────────
 
 #[test]
-fn doctor_tudo_certo() {
+fn doctor_all_good() {
     let s = Sandbox::new();
     s.all_tools().git_identity();
     s.valid_config("");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 0);
-    assert_has(&o, "tudo certo");
+    assert_has(&o, "all good");
 }
 
 #[test]
-fn doctor_sem_herdr_e_erro() {
+fn doctor_without_herdr_is_error() {
     let s = Sandbox::new();
     s.stub("az", "exit 0").stub("claude", "exit 0").stub("code", "exit 0").git_identity();
     s.valid_config("");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 1);
-    assert_has(&o, "herdr não encontrado no PATH");
+    assert_has(&o, "herdr not found on PATH");
 }
 
 #[test]
-fn doctor_sem_acesso_ao_ado_e_aviso() {
+fn doctor_without_ado_access_is_warning() {
     let s = Sandbox::new();
     s.all_tools().git_identity();
     s.stub("az", "case \"$*\" in *\"devops project\"*) exit 1;; esac\nexit 0");
     s.valid_config("");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 0);
-    assert_has(&o, "az sem acesso ao Azure DevOps");
+    assert_has(&o, "az has no access to Azure DevOps");
 }
 
 #[test]
-fn doctor_sem_identidade_do_git_e_aviso() {
+fn doctor_without_git_identity_is_warning() {
     let s = Sandbox::new();
     s.all_tools();
     s.valid_config("");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 0);
-    assert_has(&o, "user.name não configurado");
-    assert_has(&o, "user.email não configurado");
+    assert_has(&o, "user.name not set");
+    assert_has(&o, "user.email not set");
 }
 
 #[test]
-fn doctor_config_invalido_e_erro() {
+fn doctor_invalid_config_is_error() {
     let s = Sandbox::new();
     s.all_tools().git_identity();
-    s.write_config("version = 1\n[vscode]\nativo = true\n");
+    s.write_config("version = 1\n[vscode]\nactive = true\n");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 1);
-    assert_has(&o, "config inválido");
+    assert_has(&o, "invalid config");
 }
 
 #[test]
-fn doctor_vscode_desativado_dispensa_code() {
+fn doctor_vscode_disabled_skips_code() {
     let s = Sandbox::new();
     s.stub("herdr", "exit 0").stub("az", "exit 0").stub("claude", "exit 0").git_identity();
     s.valid_config("[vscode]\nenabled = false\n");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 0);
-    assert_has(&o, "desativado no config");
+    assert_has(&o, "disabled in the config");
 }
 
 #[test]
-fn doctor_repo_que_nao_e_git_e_erro() {
+fn doctor_repo_that_is_not_git_is_error() {
     let s = Sandbox::new();
     s.all_tools().git_identity();
     s.valid_config("");
-    fs::create_dir_all(s.path("solto")).unwrap();
+    fs::create_dir_all(s.path("loose")).unwrap();
     let mut cfg = fs::read_to_string(&s.config).unwrap();
-    cfg += &format!("\n[repos.solto]\npath = \"{}\"\n", s.path("solto").display());
+    cfg += &format!("\n[repos.loose]\npath = \"{}\"\n", s.path("loose").display());
     fs::write(&s.config, cfg).unwrap();
     let o = s.run(&["doctor"]);
     assert_exit(&o, 1);
-    assert_has(&o, "solto: clone não encontrado");
+    assert_has(&o, "loose: clone not found");
 }
 
 // ───────────────────────── config edit ─────────────────────────
@@ -208,36 +208,36 @@ fn edit(s: &Sandbox, editor: &Path, stdin: &str) -> Output {
 }
 
 #[test]
-fn config_edit_sem_mudanca_e_ok() {
+fn config_edit_without_changes_is_ok() {
     let s = Sandbox::new();
     s.valid_config("");
     let o = edit(&s, &s.script("noop.sh", "exit 0"), "");
     assert_exit(&o, 0);
-    assert_has(&o, "config válido");
+    assert_has(&o, "config valid");
 }
 
 #[test]
-fn config_edit_invalido_e_recusa_reabrir() {
+fn config_edit_invalid_and_declines_reopen() {
     let s = Sandbox::new();
     s.valid_config("");
-    let o = edit(&s, &s.script("estraga.sh", "echo 'lixo =' >> \"$1\""), "n\n");
+    let o = edit(&s, &s.script("breaks.sh", "echo 'junk =' >> \"$1\""), "n\n");
     assert_exit(&o, 1);
-    assert_has(&o, "config ficou inválido");
+    assert_has(&o, "config left invalid");
 }
 
 #[test]
-fn config_edit_reabre_ate_corrigir() {
+fn config_edit_reopens_until_fixed() {
     let s = Sandbox::new();
     s.valid_config("");
     let original = fs::read_to_string(&s.config).unwrap();
     let backup = s.path("backup.toml");
     fs::write(&backup, original).unwrap();
-    let marker = s.path("ja-estragou");
+    let marker = s.path("already-broken");
     // 1st run breaks it, 2nd run restores the original
     let editor = s.script(
-        "ida-e-volta.sh",
+        "round-trip.sh",
         &format!(
-            "if [ -f {m} ]; then {cat} {b} > \"$1\"; else : > {m}; echo 'lixo =' >> \"$1\"; fi",
+            "if [ -f {m} ]; then {cat} {b} > \"$1\"; else : > {m}; echo 'junk =' >> \"$1\"; fi",
             m = marker.display(),
             b = backup.display(),
             cat = real("cat").display()
@@ -245,24 +245,24 @@ fn config_edit_reabre_ate_corrigir() {
     );
     let o = edit(&s, &editor, "y\n");
     assert_exit(&o, 0);
-    assert_has(&o, "reabrir para corrigir");
-    assert_has(&o, "config válido");
+    assert_has(&o, "reopen to fix it");
+    assert_has(&o, "config valid");
 }
 
 #[test]
-fn config_edit_cria_modelo_quando_nao_existe() {
+fn config_edit_creates_template_when_missing() {
     let s = Sandbox::new();
     let o = edit(&s, &s.script("noop.sh", "exit 0"), "");
     assert_exit(&o, 0);
-    assert_has(&o, "config criado a partir do modelo");
+    assert_has(&o, "config created from the template");
     assert!(fs::read_to_string(&s.config).unwrap().contains("version = 1"));
 }
 
 #[test]
-fn config_edit_prefere_visual_a_editor() {
+fn config_edit_prefers_visual_over_editor() {
     let s = Sandbox::new();
     s.valid_config("");
-    let marker = s.path("quem-abriu");
+    let marker = s.path("who-opened");
     let visual = s.script("visual.sh", &format!("echo visual > {}", marker.display()));
     let editor = s.script("editor.sh", &format!("echo editor > {}", marker.display()));
     let mut c = s.cmd(&["config", "edit"]);
@@ -289,7 +289,7 @@ fn opened(log: &Path) -> String {
 }
 
 #[test]
-fn code_com_id_abre_o_workspace_do_card() {
+fn code_with_id_opens_the_card_workspace() {
     let (s, log) = code_sandbox();
     let o = s.run(&["code", "123"]);
     assert_exit(&o, 0);
@@ -298,7 +298,7 @@ fn code_com_id_abre_o_workspace_do_card() {
 }
 
 #[test]
-fn code_sem_id_usa_label_do_workspace_do_herdr() {
+fn code_without_id_uses_herdr_workspace_label() {
     let (s, log) = code_sandbox();
     let mut c = s.cmd(&["code"]);
     c.env("HERDR_PLUGIN_CONTEXT_JSON", r#"{"workspace_label":"123"}"#);
@@ -308,7 +308,7 @@ fn code_sem_id_usa_label_do_workspace_do_herdr() {
 }
 
 #[test]
-fn code_sem_id_usa_cwd_dentro_do_card() {
+fn code_without_id_uses_cwd_inside_the_card() {
     let (s, log) = code_sandbox();
     let mut c = s.cmd(&["code"]);
     c.current_dir(s.path("wt/123/r1"));
@@ -318,19 +318,19 @@ fn code_sem_id_usa_cwd_dentro_do_card() {
 }
 
 #[test]
-fn code_fora_de_card_abre_a_pasta() {
+fn code_outside_a_card_opens_the_folder() {
     let (s, log) = code_sandbox();
-    fs::create_dir_all(s.path("outro")).unwrap();
+    fs::create_dir_all(s.path("other")).unwrap();
     let mut c = s.cmd(&["code"]);
-    let ctx = format!(r#"{{"workspace_label":"xyz","focused_pane_cwd":"{}"}}"#, s.path("outro").display());
+    let ctx = format!(r#"{{"workspace_label":"xyz","focused_pane_cwd":"{}"}}"#, s.path("other").display());
     c.env("HERDR_PLUGIN_CONTEXT_JSON", ctx);
     let o = s.run_with(c, "");
     assert_exit(&o, 0);
-    assert_eq!(opened(&log), s.path("outro").display().to_string());
+    assert_eq!(opened(&log), s.path("other").display().to_string());
 }
 
 #[test]
-fn plugin_do_herdr_abre_o_card_focado() {
+fn herdr_plugin_opens_the_focused_card() {
     let (s, log) = code_sandbox();
     symlink(env!("CARGO_BIN_EXE_twig"), s.bin.join("twig")).unwrap();
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("herdr-plugins/twig/open-code.sh");
@@ -372,26 +372,26 @@ esac"#,
 }
 
 #[test]
-fn update_check_avisa_versao_nova() {
+fn update_check_reports_new_version() {
     let s = Sandbox::new();
     fake_github(&s, "v99.0.0");
     let o = s.run(&["update", "--check"]);
     assert_exit(&o, 0);
-    assert_has(&o, "nova versão disponível: v99.0.0");
+    assert_has(&o, "new version available: v99.0.0");
 }
 
 #[test]
-fn update_na_ultima_versao_nao_faz_nada() {
+fn update_on_latest_version_does_nothing() {
     let s = Sandbox::new();
     let calls = fake_github(&s, &format!("v{}", env!("CARGO_PKG_VERSION")));
     let o = s.run(&["update"]);
     assert_exit(&o, 0);
-    assert_has(&o, "já está na última versão");
+    assert_has(&o, "already on the latest version");
     assert!(!calls.exists());
 }
 
 #[test]
-fn update_roda_o_instalador_da_tag() {
+fn update_runs_the_tag_installer() {
     let s = Sandbox::new();
     let calls = fake_github(&s, "v99.0.0");
     let o = s.run(&["update"]);
@@ -400,7 +400,7 @@ fn update_roda_o_instalador_da_tag() {
 }
 
 #[test]
-fn uninstall_remove_as_pecas_do_twig() {
+fn uninstall_removes_twigs_pieces() {
     let s = Sandbox::new();
     let herdr_log = s.path("herdr.log");
     s.stub("herdr", &format!("echo \"$@\" >> {}", herdr_log.display()));
@@ -436,12 +436,12 @@ fn uninstall_remove_as_pecas_do_twig() {
     let o = s.run_with(c, "");
     assert_exit(&o, 0);
 
-    assert!(!bin.exists(), "binário continua lá");
+    assert!(!bin.exists(), "binary is still there");
     assert!(!skill.exists() && other_skill.exists());
     assert!(!s.path(".local/share/twig").exists());
     assert!(!completion.exists());
     assert_eq!(fs::read_to_string(&herdr_cfg).unwrap(), "[ui]\nx = 1\n");
-    assert!(s.config.exists(), "--yes mantém o config");
+    assert!(s.config.exists(), "--yes keeps the config");
     let herdr_calls = fs::read_to_string(&herdr_log).unwrap();
     assert!(herdr_calls.contains("plugin unlink twig"), "{herdr_calls}");
 }

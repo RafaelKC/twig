@@ -166,7 +166,7 @@ fn truncate(t: &str, limit: usize) -> String {
     }
     let cut: String = t.chars().take(limit).collect();
     let cut = cut.rsplit_once('\n').map(|(a, _)| a.to_string()).unwrap_or(cut);
-    format!("{cut}\n\n_(truncado)_")
+    format!("{cut}\n\n_(truncated)_")
 }
 
 pub fn strip_html(raw: &str, limit: usize) -> String {
@@ -227,13 +227,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn slug_remove_acentos_e_corta_na_palavra() {
+    fn slug_strips_accents_and_cuts_at_word() {
         assert_eq!(slugify("Aferição de Pneus: ajuste", 40), "afericao-de-pneus-ajuste");
         assert_eq!(slugify("um titulo bem comprido que passa do limite de quarenta", 40), "um-titulo-bem-comprido-que-passa-do");
     }
 
     #[test]
-    fn html_vira_texto() {
+    fn html_becomes_text() {
         let t = strip_html("<div>Oi&nbsp;<b>mundo</b></div><ul><li>a</li><li>b</li></ul>", 100);
         assert_eq!(t, "Oi mundo\n\n- a\n- b");
     }

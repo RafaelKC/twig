@@ -80,7 +80,7 @@ while [ $# -gt 0 ]; do
     --bin-dir) BIN_DIR="$2"; shift 2 ;;
     -y | --yes) YES=1; shift ;;
     -h | --help) sed -n '2,20p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) die "opção desconhecida: $1" ;;
+    *) die "unknown option: $1" ;;
   esac
 done
 
@@ -89,13 +89,13 @@ done
 case "$(uname -s)" in
   Linux) OS=linux ;;
   Darwin) OS=macos ;;
-  *) die "sistema não suportado: $(uname -s) (só Linux e macOS)" ;;
+  *) die "unsupported system: $(uname -s) (Linux and macOS only)" ;;
 esac
 
 case "$(uname -m)" in
   x86_64 | amd64) ARCH=x86_64 ;;
   aarch64 | arm64) ARCH=aarch64 ;;
-  *) die "arquitetura não suportada: $(uname -m)" ;;
+  *) die "unsupported architecture: $(uname -m)" ;;
 esac
 
 if [ "$OS" = linux ]; then TARGET="$ARCH-unknown-linux-musl"; else TARGET="$ARCH-apple-darwin"; fi
@@ -111,8 +111,8 @@ done
 SUDO=""
 if [ "$(id -u)" != 0 ] && have sudo; then SUDO=sudo; fi
 
-have curl || die "curl é necessário para instalar o twig"
-have tar || die "tar é necessário para instalar o twig"
+have curl || die "curl is required to install twig"
+have tar || die "tar is required to install twig"
 
 # ───────────────────────── package installs ─────────────────────────
 
@@ -130,9 +130,9 @@ pm_install() { # pm_install <brew> <apt> <dnf> <pacman> <zypper>
 install_git() {
   if [ "$OS" = macos ] && [ "$PM" != brew ]; then
     xcode-select --install || true
-    die "instale as Command Line Tools do Xcode (janela aberta) e rode o instalador de novo"
+    die "install the Xcode Command Line Tools (a window just opened) and run the installer again"
   fi
-  pm_install git git git git git || die "não sei instalar o git aqui; instale manualmente"
+  pm_install git git git git git || die "don't know how to install git here; install it manually"
 }
 
 install_herdr() {
@@ -159,7 +159,7 @@ install_gh() {
         $SUDO tee /etc/apt/sources.list.d/github-cli.list >/dev/null
       $SUDO apt-get update -qq && $SUDO apt-get install -y gh
       ;;
-    *) die "não sei instalar o gh aqui; veja https://cli.github.com" ;;
+    *) die "don't know how to install gh here; see https://cli.github.com" ;;
   esac
 }
 
@@ -167,13 +167,13 @@ install_az() {
   case "$PM" in
     brew) brew install azure-cli ;;
     apt-get) curl -fsSL https://aka.ms/InstallAzureCLIDeb | $SUDO bash ;;
-    *) die "não sei instalar o az aqui; veja https://learn.microsoft.com/cli/azure/install-azure-cli" ;;
+    *) die "don't know how to install az here; see https://learn.microsoft.com/cli/azure/install-azure-cli" ;;
   esac
 }
 
 install_vscode() {
   if [ "$IS_WSL" = 1 ]; then
-    warn "no WSL o VS Code é instalado no Windows (https://code.visualstudio.com) com a extensão WSL; o \`code\` aparece sozinho"
+    warn "on WSL, install VS Code on Windows (https://code.visualstudio.com) with the WSL extension; \`code\` then shows up on its own"
     return 1
   fi
   if [ "$PM" = brew ]; then
@@ -181,7 +181,7 @@ install_vscode() {
   elif have snap; then
     $SUDO snap install code --classic
   else
-    warn "instale o VS Code manualmente: https://code.visualstudio.com/download"
+    warn "install VS Code manually: https://code.visualstudio.com/download"
     return 1
   fi
 }
@@ -202,29 +202,29 @@ setup_git() {
   section "git"
   if have git; then
     ok "git $(git --version | awk '{print $3}')"
-  elif confirm "git não encontrado (obrigatório). Instalar?" y; then
+  elif confirm "git not found (required). Install it?" y; then
     install_git
-    ok "git instalado"
+    ok "git installed"
   else
-    die "o git é obrigatório"
+    die "git is required"
   fi
 
   name=$(git config --global user.name || true)
   email=$(git config --global user.email || true)
   if [ -n "$name" ] && [ -n "$email" ]; then
-    ok "identidade do git: $name <$email>"
-  elif confirm "user.name/user.email do git não configurados. Configurar agora?" y; then
-    [ -n "$name" ] || name=$(ask "nome:" "")
-    [ -n "$email" ] || email=$(ask "e-mail:" "")
+    ok "git identity: $name <$email>"
+  elif confirm "git user.name/user.email not set. Set them now?" y; then
+    [ -n "$name" ] || name=$(ask "name:" "")
+    [ -n "$email" ] || email=$(ask "email:" "")
     [ -n "$name" ] && git config --global user.name "$name"
     [ -n "$email" ] && git config --global user.email "$email"
     if [ -n "$name" ] && [ -n "$email" ]; then
-      ok "identidade do git configurada"
+      ok "git identity set"
     else
-      warn "identidade do git incompleta (git config --global user.name/user.email)"
+      warn "git identity incomplete (git config --global user.name/user.email)"
     fi
   else
-    warn "identidade do git não configurada (o \`twig doctor\` vai continuar avisando)"
+    warn "git identity not set (\`twig doctor\` will keep warning about it)"
   fi
 }
 
@@ -232,65 +232,65 @@ setup_herdr() {
   section "herdr"
   if have herdr; then
     ok "$(herdr --version 2>/dev/null || echo herdr)"
-  elif confirm "herdr não encontrado (obrigatório). Instalar?" y; then
+  elif confirm "herdr not found (required). Install it?" y; then
     install_herdr
-    have herdr || die "herdr instalado, mas não está no PATH; abra um terminal novo e rode o instalador de novo"
-    ok "herdr instalado"
+    have herdr || die "herdr was installed but is not on PATH; open a new terminal and run the installer again"
+    ok "herdr installed"
   else
-    die "o herdr é obrigatório"
+    die "herdr is required"
   fi
 }
 
 setup_vscode() {
-  section "VS Code (opcional)"
+  section "VS Code (optional)"
   if have code; then
-    ok "code encontrado"
+    ok "code found"
     VSCODE_ENABLED=true
-  elif confirm "VS Code não encontrado. Instalar?" n && install_vscode && have code; then
-    ok "VS Code instalado"
+  elif confirm "VS Code not found. Install it?" n && install_vscode && have code; then
+    ok "VS Code installed"
     VSCODE_ENABLED=true
   else
-    info "seguindo sem VS Code (vscode.enabled = false)"
+    info "continuing without VS Code (vscode.enabled = false)"
   fi
 }
 
 check_az_login() {
   if ! az extension show --name azure-devops >/dev/null 2>&1; then
-    info "adicionando a extensão azure-devops do az"
-    az extension add --name azure-devops --only-show-errors || warn "não consegui adicionar a extensão azure-devops"
+    info "adding the az azure-devops extension"
+    az extension add --name azure-devops --only-show-errors || warn "could not add the azure-devops extension"
   fi
   AZ_ORG=$(az devops configure --list 2>/dev/null | sed -n 's/^organization *= *//p')
   if [ -z "$AZ_ORG" ]; then
-    AZ_ORG=$(ask "organização do Azure DevOps (ex.: https://dev.azure.com/minha-org, vazio pula):" "")
+    AZ_ORG=$(ask "Azure DevOps organization (e.g. https://dev.azure.com/my-org, empty to skip):" "")
     [ -n "$AZ_ORG" ] && az devops configure --defaults organization="$AZ_ORG"
   fi
   if az devops project list --top 1 --output none >/dev/null 2>&1; then
-    ok "az com acesso ao Azure DevOps"
-  elif confirm "az sem acesso ao Azure DevOps. Fazer login agora?" y; then
-    run_tty az login || warn "login do az falhou"
+    ok "az has access to Azure DevOps"
+  elif confirm "az has no access to Azure DevOps. Log in now?" y; then
+    run_tty az login || warn "az login failed"
   else
-    warn "az sem login (az login ou az devops login)"
+    warn "az not logged in (az login or az devops login)"
   fi
 }
 
 check_gh_login() {
   if gh auth status >/dev/null 2>&1; then
-    ok "gh logado"
-  elif confirm "gh não está logado. Fazer login agora?" y; then
-    run_tty gh auth login || warn "login do gh falhou"
+    ok "gh logged in"
+  elif confirm "gh is not logged in. Log in now?" y; then
+    run_tty gh auth login || warn "gh login failed"
   else
-    warn "gh sem login (gh auth login)"
+    warn "gh not logged in (gh auth login)"
   fi
 }
 
 setup_provider() {
-  section "provider de cards (az e/ou gh)"
+  section "card provider (az and/or gh)"
   chosen=""
   for p in az gh; do
-    if have "$p" && confirm "$p já está instalado. Usar?" y; then chosen="$chosen $p"; fi
+    if have "$p" && confirm "$p is already installed. Use it?" y; then chosen="$chosen $p"; fi
   done
   if [ -z "$chosen" ]; then
-    case "$(ask "escolha um provider: [1] az (Azure DevOps) [2] gh (GitHub)" 1)" in
+    case "$(ask "choose a provider: [1] az (Azure DevOps) [2] gh (GitHub)" 1)" in
       2 | gh) install_gh; chosen=" gh" ;;
       *) install_az; chosen=" az" ;;
     esac
@@ -306,15 +306,15 @@ setup_provider() {
 }
 
 setup_ai() {
-  section "IA"
+  section "AI"
   # only Claude Code for now; the question is here so other agents can be added
   if have claude; then
-    if confirm "Claude Code já está instalado. Usar?" y; then AI=claude && ok "usando Claude Code"; fi
-  elif confirm "Claude Code não encontrado. Instalar?" y; then
+    if confirm "Claude Code is already installed. Use it?" y; then AI=claude && ok "using Claude Code"; fi
+  elif confirm "Claude Code not found. Install it?" y; then
     install_claude
-    have claude && AI=claude && ok "Claude Code instalado"
+    have claude && AI=claude && ok "Claude Code installed"
   fi
-  [ -n "$AI" ] || warn "sem IA: a tab agent do herdr não vai ter o que rodar"
+  [ -n "$AI" ] || warn "no AI: the herdr agent tab will have nothing to run"
 }
 
 # ───────────────────────── download and verify ─────────────────────────
@@ -333,42 +333,42 @@ download_release() {
   if [ -z "$VERSION" ]; then
     VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
       sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)
-    [ -n "$VERSION" ] || die "não achei a última release de $REPO"
+    [ -n "$VERSION" ] || die "could not find the latest release of $REPO"
   fi
   asset="twig-$TARGET.tar.gz"
   base="https://github.com/$REPO/releases/download/$VERSION"
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT
 
-  info "baixando twig $VERSION ($TARGET)"
+  info "downloading twig $VERSION ($TARGET)"
   for f in "$asset" SHA256SUMS SHA256SUMS.sigstore.json; do
     if [ -n "${TWIG_DIST_DIR:-}" ]; then
       [ -f "$TWIG_DIST_DIR/$f" ] && cp "$TWIG_DIST_DIR/$f" "$TMP/$f"
     else
-      curl -fsSL -o "$TMP/$f" "$base/$f" || [ "$f" = SHA256SUMS.sigstore.json ] || die "falha ao baixar $base/$f"
+      curl -fsSL -o "$TMP/$f" "$base/$f" || [ "$f" = SHA256SUMS.sigstore.json ] || die "failed to download $base/$f"
     fi
   done
-  [ -f "$TMP/$asset" ] || die "release $VERSION não tem $asset"
+  [ -f "$TMP/$asset" ] || die "release $VERSION has no $asset"
 
   expected=$(awk -v a="$asset" '$2 == a || $2 == "*"a {print $1}' "$TMP/SHA256SUMS")
-  [ -n "$expected" ] || die "$asset não está no SHA256SUMS"
-  sha256_check "$TMP/$asset" "$expected" || die "checksum não confere para $asset"
-  ok "checksum conferido"
+  [ -n "$expected" ] || die "$asset is not in SHA256SUMS"
+  sha256_check "$TMP/$asset" "$expected" || die "checksum mismatch for $asset"
+  ok "checksum verified"
 
   if [ -f "$TMP/SHA256SUMS.sigstore.json" ] && have cosign; then
     cosign verify-blob \
       --bundle "$TMP/SHA256SUMS.sigstore.json" \
       --certificate-identity-regexp "^https://github.com/$REPO/\.github/workflows/release\.yml@refs/tags/" \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-      "$TMP/SHA256SUMS" >/dev/null 2>&1 || die "assinatura Sigstore inválida para $VERSION"
-    ok "assinatura Sigstore conferida"
+      "$TMP/SHA256SUMS" >/dev/null 2>&1 || die "invalid Sigstore signature for $VERSION"
+    ok "Sigstore signature verified"
   else
-    info "cosign não instalado: assinatura não conferida (o checksum foi). Verificação manual em docs/RELEASING.md"
+    info "cosign not installed: signature not verified (the checksum was). Manual verification in docs/RELEASING.md"
   fi
 
   tar -xzf "$TMP/$asset" -C "$TMP"
   PKG="$TMP/twig-$TARGET"
-  [ -x "$PKG/twig" ] || die "pacote sem o binário twig"
+  [ -x "$PKG/twig" ] || die "package is missing the twig binary"
 }
 
 # ───────────────────────── install pieces ─────────────────────────
@@ -390,9 +390,9 @@ install_binary() {
   chmod 755 "$BIN_DIR/twig"
   TWIG="$BIN_DIR/twig"
   if [ -n "$OLD_VERSION" ]; then
-    ok "twig $OLD_VERSION → ${VERSION#v} em $TWIG"
+    ok "twig $OLD_VERSION → ${VERSION#v} at $TWIG"
   else
-    ok "twig ${VERSION#v} instalado em $TWIG"
+    ok "twig ${VERSION#v} installed at $TWIG"
   fi
 
   case ":$PATH:" in
@@ -403,12 +403,12 @@ install_binary() {
         bash) rc="$HOME/.bashrc" ;;
         zsh) rc="$HOME/.zshrc" ;;
       esac
-      if [ -n "$rc" ] && ! grep -qs "$BIN_DIR" "$rc" && confirm "$BIN_DIR não está no PATH. Adicionar em $rc?" y; then
+      if [ -n "$rc" ] && ! grep -qs "$BIN_DIR" "$rc" && confirm "$BIN_DIR is not on PATH. Add it to $rc?" y; then
         # shellcheck disable=SC2016 # $PATH must expand when the rc file runs, not now
         printf '\nexport PATH="%s:$PATH"  # twig\n' "$BIN_DIR" >>"$rc"
-        ok "PATH ajustado em $rc (abra um terminal novo)"
+        ok "PATH updated in $rc (open a new terminal)"
       else
-        warn "adicione $BIN_DIR ao PATH"
+        warn "add $BIN_DIR to your PATH"
       fi
       ;;
   esac
@@ -420,27 +420,27 @@ install_skill() {
   mkdir -p "$(dirname "$dest")"
   rm -rf "$dest"
   cp -R "$PKG/skills/twig" "$dest"
-  ok "skill do Claude Code em $dest"
+  ok "Claude Code skill at $dest"
 }
 
 install_herdr_plugin() {
-  have herdr || { warn "herdr não encontrado: plugin não instalado"; return; }
+  have herdr || { warn "herdr not found: plugin not installed"; return; }
   pdir="$DATA_DIR/herdr-plugins/twig"
   mkdir -p "$DATA_DIR/herdr-plugins"
   rm -rf "$pdir"
   cp -R "$PKG/herdr-plugins/twig" "$pdir"
   herdr plugin unlink twig >/dev/null 2>&1 || true
   if herdr plugin link "$pdir" >/dev/null 2>&1; then
-    ok "plugin do herdr ligado ($pdir)"
+    ok "herdr plugin linked ($pdir)"
   else
-    warn "não consegui ligar o plugin; rode: herdr plugin link $pdir"
+    warn "could not link the plugin; run: herdr plugin link $pdir"
     return
   fi
 
   if grep -qs '# twig:begin' "$HERDR_CONFIG"; then
     : # shortcut already added by a previous install
   elif grep -qs 'key = "prefix+shift+o"' "$HERDR_CONFIG"; then
-    warn "prefix+shift+o já tem outro atalho no herdr; aponte para \"twig.open-code\" em $HERDR_CONFIG se quiser"
+    warn "prefix+shift+o is already bound to another herdr shortcut; point it to \"twig.open-code\" in $HERDR_CONFIG if you want"
   else
     mkdir -p "$(dirname "$HERDR_CONFIG")"
     cat >>"$HERDR_CONFIG" <<'EOF'
@@ -453,7 +453,7 @@ command = "twig.open-code"
 description = "open card in VS Code"
 # twig:end
 EOF
-    ok "atalho prefix+shift+o → twig.open-code"
+    ok "shortcut prefix+shift+o → twig.open-code"
   fi
   herdr server reload-config >/dev/null 2>&1 || true
 }
@@ -467,19 +467,19 @@ install_completions() {
     *) return ;;
   esac
   mkdir -p "$(dirname "$file")"
-  "$TWIG" completions "$shell" >"$file" && ok "autocomplete ($shell) em $file"
+  "$TWIG" completions "$shell" >"$file" && ok "completions ($shell) at $file"
   if [ "$shell" = zsh ]; then
-    info "no zsh, garanta no ~/.zshrc: fpath=(${file%/*} \$fpath)"
+    info "on zsh, make sure ~/.zshrc has: fpath=(${file%/*} \$fpath)"
   fi
 }
 
 write_config() {
-  [ -f "$CONFIG_FILE" ] && { ok "config mantido: $CONFIG_FILE"; return; }
+  [ -f "$CONFIG_FILE" ] && { ok "config kept: $CONFIG_FILE"; return; }
   section "config"
   # shellcheck disable=SC2088 # literal ~ on purpose: twig expands it when reading the config
-  repos=$(ask "pasta onde ficam os clones dos seus repos [~]:" "~")
+  repos=$(ask "folder where your repo clones live [~]:" "~")
   # shellcheck disable=SC2088
-  worktrees=$(ask "pasta das worktrees dos cards [~/.wt]:" "~/.wt")
+  worktrees=$(ask "folder for card worktrees [~/.wt]:" "~/.wt")
   mkdir -p "$(dirname "$CONFIG_FILE")"
   cat >"$CONFIG_FILE" <<EOF
 # twig config. Format: https://github.com/$REPO/blob/main/docs/CONFIG.md
@@ -517,8 +517,8 @@ branch_prefix = { Bug = "fix", default = "feat" }
 # default = true
 # run     = "dotnet watch run"
 EOF
-  ok "config criado: $CONFIG_FILE"
-  info "cadastre seus repos com \`twig config edit\` (veja docs/CONFIG.md)"
+  ok "config created: $CONFIG_FILE"
+  info "register your repos with \`twig config edit\` (see docs/CONFIG.md)"
 }
 
 # ───────────────────────── main ─────────────────────────
@@ -532,8 +532,8 @@ if [ "$MODE" = install ]; then
   setup_provider
   setup_ai
 else
-  have git || warn "git não encontrado"
-  have herdr || warn "herdr não encontrado"
+  have git || warn "git not found"
+  have herdr || warn "herdr not found"
 fi
 
 download_release
@@ -549,4 +549,4 @@ if [ "$MODE" = install ]; then
 fi
 
 printf "\n" >&2
-ok "pronto: twig ${VERSION#v}"
+ok "done: twig ${VERSION#v}"

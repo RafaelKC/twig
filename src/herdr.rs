@@ -14,7 +14,7 @@ use crate::{card, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
     let out = sys::output(Command::new("herdr").args(args))?;
-    serde_json::from_str(&out).with_context(|| format!("resposta inesperada do herdr: herdr {}", args.join(" ")))
+    serde_json::from_str(&out).with_context(|| format!("unexpected response from herdr: herdr {}", args.join(" ")))
 }
 
 fn herdr_quiet(args: &[&str]) {
@@ -25,7 +25,7 @@ fn str_at(v: &Value, ptr: &str) -> Result<String> {
     v.pointer(ptr)
         .and_then(Value::as_str)
         .map(String::from)
-        .with_context(|| format!("resposta do herdr sem {ptr}"))
+        .with_context(|| format!("herdr response without {ptr}"))
 }
 
 fn server_up() -> bool {
@@ -35,12 +35,12 @@ fn server_up() -> bool {
 /// Make sure the herdr server is up (the workspace/pane CLI talks to it).
 pub fn ensure_server() -> Result<()> {
     if sys::which("herdr").is_none() {
-        bail!("herdr não encontrado no PATH");
+        bail!("herdr not found on PATH");
     }
     if server_up() {
         return Ok(());
     }
-    ui::info("subindo o servidor do herdr...");
+    ui::info("starting the herdr server...");
     let mut cmd = Command::new("herdr");
     cmd.arg("server").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(unix)]
@@ -48,14 +48,14 @@ pub fn ensure_server() -> Result<()> {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
-    cmd.spawn().context("não consegui subir o servidor do herdr")?;
+    cmd.spawn().context("could not start the herdr server")?;
     for _ in 0..20 {
         thread::sleep(Duration::from_millis(250));
         if server_up() {
             return Ok(());
         }
     }
-    bail!("servidor do herdr não respondeu")
+    bail!("herdr server did not respond")
 }
 
 pub fn find_workspace(id: &str) -> Result<Option<String>> {
@@ -110,7 +110,7 @@ fn ensure_panel(cfg: &Config, ws: &str, tab_label: &str, repo: &str, cmd: &str, 
                 Some((id, _, _)) => id.clone(),
                 None => {
                     // first split is side by side; later ones stack on the last pane
-                    let last = panes.last().map(|p| p.0.clone()).context("tab do herdr sem painéis")?;
+                    let last = panes.last().map(|p| p.0.clone()).context("herdr tab without panes")?;
                     let dir = if panes.len() <= 1 { "right" } else { "down" };
                     let v = herdr(&["pane", "split", &last, "--direction", dir, "--cwd", &cwd_s, "--no-focus"])?;
                     force = true;
@@ -134,7 +134,7 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
     ensure_server()?;
     let dir = card::require_card(cfg, id)?;
     let repos = card::repos_ordered(cfg, &dir);
-    let first = repos.first().with_context(|| format!("card {id} sem worktrees"))?;
+    let first = repos.first().with_context(|| format!("card {id} has no worktrees"))?;
 
     let (ws, fresh) = match find_workspace(id)? {
         Some(ws) => (ws, false),
@@ -143,7 +143,7 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
             let v = herdr(&["workspace", "create", "--cwd", &cwd, "--label", id, "--no-focus"])?;
             let ws = str_at(&v, "/result/workspace/workspace_id")?;
             herdr_quiet(&["tab", "rename", &str_at(&v, "/result/tab/tab_id")?, "agent"]);
-            ui::ok(format!("workspace herdr #{id} criado"));
+            ui::ok(format!("herdr workspace #{id} created"));
             (ws, true)
         }
     };

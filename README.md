@@ -21,9 +21,9 @@ $ twig new 52644
 ✔ [api] feat/52644-vehicle-category-per-route
 → [web] fetch...
 ✔ [web] feat/52644-vehicle-category-per-route
-✔ workspace do VS Code gerado (cor #af601a, compound com 2 processos)
-✔ CLAUDE.md gerado em ~/.wt/52644
-✔ workspace herdr #52644 criado
+✔ VS Code workspace generated (color #af601a, compound with 2 processes)
+✔ CLAUDE.md generated in ~/.wt/52644
+✔ herdr workspace #52644 created
 ```
 
 ## Why
@@ -217,8 +217,7 @@ cargo test        # unit + integration tests
 ## Status
 
 Early and opinionated: built for a daily Azure DevOps + .NET + Angular workflow on
-Linux/WSL, now generalized through the config. Runtime messages and the generated
-`CLAUDE.md` are still in Portuguese. See the [roadmap](docs/ROADMAP.md) for what's next
+Linux/WSL, now generalized through the config. See the [roadmap](docs/ROADMAP.md) for what's next
 (per-card ports, more herdr actions, native Windows).
 
 ## License

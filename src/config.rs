@@ -161,7 +161,7 @@ pub fn config_path() -> Result<PathBuf> {
         return Ok(PathBuf::from(p));
     }
     let base = if cfg!(windows) {
-        dirs::config_dir().context("pasta de config do usuário não encontrada")?
+        dirs::config_dir().context("user config folder not found")?
     } else {
         home()?.join(".config")
     };
@@ -169,7 +169,7 @@ pub fn config_path() -> Result<PathBuf> {
 }
 
 pub fn home() -> Result<PathBuf> {
-    dirs::home_dir().context("home do usuário não encontrado")
+    dirs::home_dir().context("user home not found")
 }
 
 /// Expand a leading `~` in the path.
@@ -196,17 +196,17 @@ impl Config {
         let file = file.to_path_buf();
         let text = fs::read_to_string(&file).with_context(|| {
             format!(
-                "config não encontrado em {} (veja docs/CONFIG.md; dá para apontar outro com TWIG_CONFIG)",
+                "config not found at {} (see docs/CONFIG.md; you can point to another one with TWIG_CONFIG)",
                 file.display()
             )
         })?;
         let mut cfg: Config =
-            toml::from_str(&text).with_context(|| format!("config inválido: {}", file.display()))?;
+            toml::from_str(&text).with_context(|| format!("invalid config: {}", file.display()))?;
         if cfg.version != 1 {
-            bail!("versão de config não suportada: {} (esperado 1)", cfg.version);
+            bail!("unsupported config version: {} (expected 1)", cfg.version);
         }
         if cfg.ai.provider != "claude" {
-            bail!("ai.provider não suportado: {} (por enquanto só \"claude\")", cfg.ai.provider);
+            bail!("unsupported ai.provider: {} (only \"claude\" for now)", cfg.ai.provider);
         }
         cfg.file = file;
         Ok(cfg)
@@ -304,7 +304,7 @@ impl Config {
         }
         doc["repos"][name] = toml_edit::Item::Table(table);
         fs::write(&self.file, doc.to_string())
-            .with_context(|| format!("não consegui gravar {}", self.file.display()))?;
+            .with_context(|| format!("could not write {}", self.file.display()))?;
 
         let repo = Repo { path: if in_root { String::new() } else { clone.display().to_string() }, ..Default::default() };
         self.repos.insert(name.to_string(), repo);

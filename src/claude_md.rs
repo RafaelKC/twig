@@ -8,19 +8,33 @@ use crate::config::{Config, ProviderKind};
 use crate::provider::{self, CardInfo};
 use crate::{card, sys, ui, workspace};
 
-const CONTEXT_HEADING: &str = "## Contexto do card";
-const CONTEXT_PLACEHOLDER: &str = "_(a preencher)_";
+const CONTEXT_HEADING: &str = "## Card context";
+const CONTEXT_PLACEHOLDER: &str = "_(to fill in)_";
+// what versions before the English translation generated; still recognized when reading
+const LEGACY_CONTEXT_HEADING: &str = "## Contexto do card";
+const LEGACY_CONTEXT_PLACEHOLDER: &str = "_(a preencher)_";
+
+/// The "Card context" section of an existing CLAUDE.md, if it has been filled in.
+/// Accepts the legacy Portuguese heading too, rewriting it to the current one (body untouched).
+fn kept_context(old: &str) -> Option<String> {
+    let (start, heading) = [CONTEXT_HEADING, LEGACY_CONTEXT_HEADING]
+        .into_iter()
+        .filter_map(|h| old.find(h).map(|i| (i, h)))
+        .min_by_key(|(i, _)| *i)?;
+    let ctx = &old[start..];
+    if ctx.contains(CONTEXT_PLACEHOLDER) || ctx.contains(LEGACY_CONTEXT_PLACEHOLDER) {
+        return None;
+    }
+    Some(format!("{CONTEXT_HEADING}{}", ctx[heading.len()..].trim_end()))
+}
 
 pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Result<()> {
     let dir = cfg.card_dir(id);
     let path = dir.join("CLAUDE.md");
     let repos = card::repos_ordered(cfg, &dir);
 
-    // keep the "Contexto do card" section if it has already been filled in
-    let kept = fs::read_to_string(&path).ok().and_then(|old| {
-        let ctx = &old[old.find(CONTEXT_HEADING)?..];
-        (!ctx.contains(CONTEXT_PLACEHOLDER)).then(|| ctx.trim_end().to_string())
-    });
+    // keep the "Card context" section if it has already been filled in
+    let kept = fs::read_to_string(&path).ok().and_then(|old| kept_context(&old));
 
     let mut rows = String::new();
     let mut runs = String::new();
@@ -33,7 +47,7 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
         }
     }
     if runs.is_empty() {
-        runs = "_(nenhum comando de run configurado para estes repos)_\n".into();
+        runs = "_(no run command configured for these repos)_\n".into();
     }
 
     let mut heading = format!("# Card #{id}");
@@ -48,34 +62,34 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
     if !url.is_empty() {
         meta += &format!("**Work item:** {url}\n");
     }
-    let mut pede = String::new();
+    let mut asks = String::new();
     if let Some(i) = info {
         if !i.kind.is_empty() {
             let state = if i.state.is_empty() { "?" } else { &i.state };
-            meta += &format!("**Tipo:** {} · **Estado:** {state}\n", i.kind);
+            meta += &format!("**Type:** {} · **State:** {state}\n", i.kind);
         }
         if !i.assigned.is_empty() {
-            meta += &format!("**Atribuído a:** {}\n", i.assigned);
+            meta += &format!("**Assigned to:** {}\n", i.assigned);
         }
         if !i.tags.is_empty() {
             meta += &format!("**Tags:** {}\n", i.tags);
         }
         if !i.description.is_empty() || !i.acceptance.is_empty() {
-            pede += "\n## O que o card pede\n\n<!-- Copiado do provider pelo twig. Não edite: `twig refresh` sobrescreve. -->\n";
+            asks += "\n## What the card asks for\n\n<!-- Copied from the provider by twig. Do not edit: `twig refresh` overwrites it. -->\n";
             if !i.description.is_empty() {
-                pede += &format!("\n{}\n", i.description);
+                asks += &format!("\n{}\n", i.description);
             }
             if !i.acceptance.is_empty() {
-                pede += &format!("\n### Critérios de aceite\n\n{}\n", i.acceptance);
+                asks += &format!("\n### Acceptance criteria\n\n{}\n", i.acceptance);
             }
         }
     }
 
     let debug_note = if workspace::debug_count(cfg, &repos) >= 2 && cfg.vscode.enabled {
         format!(
-            "Para debugar tudo de uma vez, o workspace define o compound\n\
-             `▶ card #{id}: subir e debugar tudo`, no topo do dropdown de Run and Debug\n\
-             (`F5`). Ele compõe as configs que já existem no `launch.json` de cada repo.\n\n"
+            "To debug everything at once, the workspace defines the compound\n\
+             `▶ card #{id}: start and debug all`, at the top of the Run and Debug dropdown\n\
+             (`F5`). It composes the configs that already exist in each repo's `launch.json`.\n\n"
         )
     } else {
         String::new()
@@ -83,25 +97,25 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
 
     let vscode_note = if cfg.vscode.enabled {
         format!(
-            "As mesmas coisas existem como tasks do VS Code no arquivo `{id}.code-workspace`\n\
-             (`run: <repo>` e `twig: subir tudo`).\n\n"
+            "The same things exist as VS Code tasks in the `{id}.code-workspace` file\n\
+             (`run: <repo>` and `twig: start all`).\n\n"
         )
     } else {
         String::new()
     };
 
     let provider_rule = match cfg.provider.default {
-        ProviderKind::Az => "- **O `az` cli está disponível.** Pode consultar o Azure DevOps direto\n  \
-             (`az boards work-item show --id <id>`, `az repos pr list`, etc.) em vez de\n  \
-             pedir pro usuário.\n",
-        ProviderKind::Gh => "- **O `gh` cli está disponível.** Pode consultar o GitHub direto\n  \
-             (`gh issue view <id>`, `gh pr list`, etc.) em vez de pedir pro usuário.\n",
+        ProviderKind::Az => "- **The `az` CLI is available.** You can query Azure DevOps directly\n  \
+             (`az boards work-item show --id <id>`, `az repos pr list`, etc.) instead of\n  \
+             asking the user.\n",
+        ProviderKind::Gh => "- **The `gh` CLI is available.** You can query GitHub directly\n  \
+             (`gh issue view <id>`, `gh pr list`, etc.) instead of asking the user.\n",
     };
 
     let context = kept.unwrap_or_else(|| {
         format!(
-            "{CONTEXT_HEADING}\n\n<!-- Preencha com o que importa: decisões tomadas, arquivos centrais,\n     \
-             pontas soltas. Isto sobrevive entre sessões e ao `twig refresh`. -->\n\n{CONTEXT_PLACEHOLDER}"
+            "{CONTEXT_HEADING}\n\n<!-- Fill in what matters: decisions made, key files,\n     \
+             loose ends. This survives across sessions and `twig refresh`. -->\n\n{CONTEXT_PLACEHOLDER}"
         )
     });
 
@@ -109,36 +123,65 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
     let dir_s = dir.display();
     let body = format!(
         "{heading}\n\n\
-<!-- Gerado pelo twig {version}. `twig refresh {id}` regenera. -->\n\n\
-{meta}{pede}\n\
-## Onde você está\n\n\
-Esta pasta **não é um clone normal**. Cada subdiretório abaixo é uma `git worktree`\n\
-dedicada a este card. Os clones principais moram em outro lugar e continuam na\n\
-branch base; mexer neles quebra o isolamento do card.\n\n\
-| nome | repo (worktree aqui) | branch | clone principal |\n\
+<!-- Generated by twig {version}. `twig refresh {id}` regenerates it. -->\n\n\
+{meta}{asks}\n\
+## Where you are\n\n\
+This folder **is not a regular clone**. Each subdirectory below is a `git worktree`\n\
+dedicated to this card. The main clones live elsewhere and stay on the\n\
+base branch; touching them breaks the card's isolation.\n\n\
+| name | repo (worktree here) | branch | main clone |\n\
 |---|---|---|---|\n\
 {rows}\n\
-Branch base: `{base}`\n\n\
-## Como rodar\n\n\
+Base branch: `{base}`\n\n\
+## How to run\n\n\
 {runs}\n\
 {vscode_note}{debug_note}\
-## Regras deste diretório\n\n\
-- **Trabalhe apenas dentro de `{dir_s}`.** Não edite, não faça checkout e não\n  \
-comite nos clones principais listados na tabela: eles são compartilhados por\n  \
-todos os cards.\n\
-- **Não troque de branch dentro das worktrees.** Se precisar de outra branch, é\n  \
-outro card (`twig new`).\n\
-- **Cada repo comita separado.** Não existe commit atômico entre eles; quando a\n  \
-mudança é acoplada, cite o card (`#{id}`) nas mensagens para dar rastreabilidade.\n\
-- **Dependências e caches são por worktree.** Não compartilhe nem crie symlink\n  \
-de `node_modules`, `bin/`, `obj/` etc. entre cards.\n\
-- **Não comite este arquivo.** Ele mora fora dos repos de propósito.\n\
+## Rules for this directory\n\n\
+- **Work only inside `{dir_s}`.** Do not edit, check out, or commit in the\n  \
+main clones listed in the table: they are shared by all cards.\n\
+- **Do not switch branches inside the worktrees.** If you need another branch,\n  \
+that's another card (`twig new`).\n\
+- **Each repo commits separately.** There is no atomic commit across them; when the\n  \
+change is coupled, mention the card (`#{id}`) in the messages for traceability.\n\
+- **Dependencies and caches are per worktree.** Do not share or symlink\n  \
+`node_modules`, `bin/`, `obj/` etc. between cards.\n\
+- **Do not commit this file.** It lives outside the repos on purpose.\n\
 {provider_rule}\n\
 {context}\n",
         version = env!("CARGO_PKG_VERSION"),
     );
 
     fs::write(&path, body)?;
-    ui::ok(format!("CLAUDE.md gerado em {}", dir.display()));
+    ui::ok(format!("CLAUDE.md generated in {}", dir.display()));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_filled_context_with_current_heading() {
+        let old = "# Card #1\n\n## Rules\n\n- x\n\n## Card context\n\nDecided to use X.\n\n";
+        assert_eq!(kept_context(old).unwrap(), "## Card context\n\nDecided to use X.");
+    }
+
+    #[test]
+    fn legacy_heading_is_rewritten_and_body_kept() {
+        let old = "# Card #1\n\n## Contexto do card\n\n<!-- nota -->\n\nDecidimos usar X.\n";
+        assert_eq!(kept_context(old).unwrap(), "## Card context\n\n<!-- nota -->\n\nDecidimos usar X.");
+    }
+
+    #[test]
+    fn placeholder_in_either_language_means_not_filled() {
+        assert_eq!(kept_context("## Card context\n\n_(to fill in)_\n"), None);
+        assert_eq!(kept_context("## Contexto do card\n\n_(a preencher)_\n"), None);
+        assert_eq!(kept_context("## Contexto do card\n\n_(to fill in)_\n"), None);
+        assert_eq!(kept_context("## Card context\n\n_(a preencher)_\n"), None);
+    }
+
+    #[test]
+    fn no_context_section_keeps_nothing() {
+        assert_eq!(kept_context("# Card #1\n\n## Where you are\n"), None);
+    }
 }

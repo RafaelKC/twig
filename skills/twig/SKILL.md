@@ -29,7 +29,7 @@ a card.
 
 1. **Inside `~/.wt/<id>/`?** Read `~/.wt/<id>/CLAUDE.md` first. It says what the
    card asks for, which repos and branches are in the card, and has the
-   "Contexto do card" section (card context) with notes from previous sessions.
+   "Card context" section with notes from previous sessions.
 2. **Is `twig` available?** `command -v twig`. If not, look in
    `~/card-cli/target/release/twig`. On environment errors, run `twig doctor`.
 
@@ -108,7 +108,7 @@ Two pitfalls:
   in the messages on both sides when the change is coupled.
 - **Dependencies and caches are per worktree** (`node_modules`, `bin/`, `obj/`...). Don't
   symlink between cards.
-- **The card's `CLAUDE.md` is not versioned.** Update the "Contexto do card" (card context)
+- **The card's `CLAUDE.md` is not versioned.** Update the "Card context"
   section with decisions and loose ends; it survives `twig refresh`. The rest of the file
   is regenerated.
 

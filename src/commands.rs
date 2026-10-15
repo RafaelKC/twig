@@ -37,10 +37,10 @@ fn check_code_flag(cfg: &Config, code: bool) -> Result<()> {
         return Ok(());
     }
     if !cfg.vscode.enabled {
-        bail!("VS Code desativado no config (vscode.enabled = false)");
+        bail!("VS Code disabled in the config (vscode.enabled = false)");
     }
     if sys::which("code").is_none() {
-        bail!("o `code` não está no PATH");
+        bail!("`code` is not on PATH");
     }
     Ok(())
 }
@@ -51,13 +51,13 @@ fn open_after(cfg: &Config, id: &str, ws: Option<&str>, code: bool, herdr_flag: 
         if sys::which("code").is_some() {
             open_code(cfg, id)?;
         } else {
-            ui::warn("vscode.open_on_new ligado, mas o `code` não está no PATH");
+            ui::warn("vscode.open_on_new is on, but `code` is not on PATH");
         }
     }
     if herdr_flag || cfg.herdr.open_on_new {
         match ws {
             Some(ws) => herdr::open(ws)?,
-            None => ui::warn("workspace do herdr não foi criado; tente `twig herdr <id>`"),
+            None => ui::warn("herdr workspace was not created; try `twig herdr <id>`"),
         }
     }
     Ok(())
@@ -85,7 +85,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
 
     let repos = a.repos.unwrap_or_else(|| cfg.default_repos());
     if repos.is_empty() {
-        bail!("nenhum repo: passe --repos ou marque `default = true` em algum repo do config");
+        bail!("no repos: pass --repos or set `default = true` on some repo in the config");
     }
     // validate (and register) the repos before creating anything
     let mut paths = vec![];
@@ -96,9 +96,9 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     let dir = cfg.card_dir(&id);
     if dir.is_dir() {
         if !card::repos_in(&dir).is_empty() {
-            bail!("card {id} já existe: use `twig code {id}`, `twig herdr {id}` ou `twig rm {id}`");
+            bail!("card {id} already exists: use `twig code {id}`, `twig herdr {id}` or `twig rm {id}`");
         }
-        ui::warn(format!("{} existia sem worktrees dentro, reaproveitando", dir.display()));
+        ui::warn(format!("{} existed with no worktrees inside, reusing it", dir.display()));
     }
 
     let info: Option<CardInfo> = if a.no_ado {
@@ -110,7 +110,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         ui::info(format!("card: {}", i.title));
         if slug.is_empty() {
             slug = i.slug();
-            ui::info(format!("slug derivado do título: {slug}"));
+            ui::info(format!("slug derived from the title: {slug}"));
         }
     }
 
@@ -140,7 +140,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
             Err(e) => {
                 ui::warn(format!("{e:#}"));
                 card::rollback(cfg, &dir, &done);
-                bail!("[{repo}] falhou ao criar a worktree");
+                bail!("[{repo}] failed to create the worktree");
             }
         }
     }
@@ -166,10 +166,10 @@ fn install(cfg: &Config, id: &str, repos: &[String]) -> Result<()> {
             Some(r) => {
                 ui::info(format!("[{repo}] {}...", r.install));
                 if let Err(e) = sys::run(&mut sys::shell(&r.install, &dir.join(repo))) {
-                    ui::warn(format!("[{repo}] install falhou: {e:#}"));
+                    ui::warn(format!("[{repo}] install failed: {e:#}"));
                 }
             }
-            None => ui::info(format!("[{repo}] sem `install` no config, pulando")),
+            None => ui::info(format!("[{repo}] no `install` in the config, skipping")),
         }
     }
     Ok(())
@@ -198,7 +198,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     let mut added = false;
     for (repo, path) in a.repos.iter().zip(&paths) {
         if dir.join(repo).join(".git").exists() {
-            ui::info(format!("[{repo}] já está no card"));
+            ui::info(format!("[{repo}] is already in the card"));
             continue;
         }
         card::make_worktree(repo, path, &dir.join(repo), &opts)?;
@@ -209,7 +209,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     regenerate(cfg, &a.id, info.as_ref())?;
     let ws = sync_herdr(cfg, &a.id);
     if added && cfg.vscode.enabled {
-        ui::info("se o VS Code do card estiver aberto, aceite o reload do workspace");
+        ui::info("if the card's VS Code is open, accept the workspace reload");
     }
     open_after(cfg, &a.id, ws.as_deref(), a.code, a.herdr)
 }
@@ -247,7 +247,7 @@ pub fn open_code(cfg: &Config, id: &str) -> Result<()> {
         workspace::write(cfg, id, &title)?;
     }
     launch_code(&file)?;
-    ui::ok(format!("abrindo #{id} no VS Code"));
+    ui::ok(format!("opening #{id} in VS Code"));
     Ok(())
 }
 
@@ -261,7 +261,7 @@ pub fn code(cfg: &Config, id: Option<&str>) -> Result<()> {
         card::Current::Card(id) => open_code(cfg, &id),
         card::Current::Dir(dir) => {
             launch_code(&dir)?;
-            ui::ok(format!("não é um card; abrindo {} no VS Code", dir.display()));
+            ui::ok(format!("not a card; opening {} in VS Code", dir.display()));
             Ok(())
         }
     }
@@ -280,7 +280,7 @@ fn launch_code(target: &Path) -> Result<()> {
 pub fn ls(cfg: &Config) -> Result<()> {
     let ids = card::list_cards(cfg);
     if ids.is_empty() {
-        ui::info("nenhum card ativo");
+        ui::info("no active cards");
         return Ok(());
     }
     for id in ids {
@@ -300,7 +300,7 @@ pub fn refresh(cfg: &Config, id: &str, refetch: bool) -> Result<()> {
     let dir = card::require_card(cfg, id)?;
     if refetch {
         provider::drop_cache(cfg, id);
-        ui::info("cache do card descartado");
+        ui::info("card cache dropped");
     }
     let info = provider::load(cfg, id, card::repos_ordered(cfg, &dir).first().and_then(|r| cfg.repo_path(r)).as_deref());
     regenerate(cfg, id, info.as_ref())
@@ -312,7 +312,7 @@ pub fn rm(cfg: &Config, id: &str, branches: bool) -> Result<()> {
 
     for repo in &repos {
         if sys::git_is_dirty(&dir.join(repo)) {
-            bail!("[{repo}] tem alteração não commitada, resolva antes");
+            bail!("[{repo}] has uncommitted changes, resolve them first");
         }
     }
 
@@ -320,7 +320,7 @@ pub fn rm(cfg: &Config, id: &str, branches: bool) -> Result<()> {
         let wt = dir.join(repo);
         let branch = sys::git_current_branch(&wt);
         let Some(main) = cfg.repo_path(repo) else {
-            ui::warn(format!("[{repo}] clone principal não encontrado, removendo só a pasta"));
+            ui::warn(format!("[{repo}] main clone not found, removing only the folder"));
             continue;
         };
         sys::run(sys::git(&main).args(["worktree", "remove", "--force", &wt.to_string_lossy()]))?;
@@ -328,20 +328,20 @@ pub fn rm(cfg: &Config, id: &str, branches: bool) -> Result<()> {
         if branches {
             if let Some(b) = branch.filter(|b| b != "HEAD") {
                 if sys::quiet(sys::git(&main).args(["branch", "-D", &b])) {
-                    ui::info(format!("[{repo}] branch {b} apagada"));
+                    ui::info(format!("[{repo}] branch {b} deleted"));
                 }
             }
         }
-        ui::ok(format!("[{repo}] worktree removida"));
+        ui::ok(format!("[{repo}] worktree removed"));
     }
 
     fs::remove_dir_all(&dir)?;
-    ui::ok(format!("card {id} removido"));
+    ui::ok(format!("card {id} removed"));
     Ok(())
 }
 
 pub fn prune(cfg: &Config, dry_run: bool) -> Result<()> {
-    ui::info("procurando registros de worktree órfãos...");
+    ui::info("looking for orphaned worktree records...");
     let mut found = false;
     for repo in &cfg.known_repos() {
         let Some(main) = cfg.repo_path(repo) else { continue };
@@ -356,11 +356,11 @@ pub fn prune(cfg: &Config, dry_run: bool) -> Result<()> {
         }
         if !dry_run {
             sys::quiet(sys::git(&main).args(["worktree", "prune"]));
-            ui::ok(format!("[{repo}] registros limpos"));
+            ui::ok(format!("[{repo}] records cleaned"));
         }
     }
     if !found {
-        ui::ok("nenhum registro órfão");
+        ui::ok("no orphaned records");
     }
 
     let leftovers: Vec<_> = card::list_cards(cfg)
@@ -372,22 +372,22 @@ pub fn prune(cfg: &Config, dry_run: bool) -> Result<()> {
         return Ok(());
     }
     println!();
-    ui::warn("pastas de card sem worktree dentro:");
+    ui::warn("card folders with no worktree inside:");
     for d in &leftovers {
         println!("      {}", d.display());
     }
     if dry_run {
-        ui::info("(dry-run: nada removido)");
+        ui::info("(dry-run: nothing removed)");
         return Ok(());
     }
     // they may hold a CLAUDE.md with notes, so ask first
-    if ui::confirm("   remover essas pastas? [y/N]: ") {
+    if ui::confirm("   remove these folders? [y/N]: ") {
         for d in &leftovers {
             fs::remove_dir_all(d)?;
-            ui::ok(format!("removida {}", d.display()));
+            ui::ok(format!("removed {}", d.display()));
         }
     } else {
-        ui::info("mantidas");
+        ui::info("kept");
     }
     Ok(())
 }

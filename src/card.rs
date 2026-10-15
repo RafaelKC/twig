@@ -53,7 +53,7 @@ pub fn list_cards(cfg: &Config) -> Vec<String> {
 pub fn require_card(cfg: &Config, id: &str) -> Result<PathBuf> {
     let dir = cfg.card_dir(id);
     if !dir.is_dir() {
-        bail!("card {id} não encontrado em {}", cfg.worktrees().display());
+        bail!("card {id} not found in {}", cfg.worktrees().display());
     }
     Ok(dir)
 }
@@ -104,30 +104,30 @@ pub fn ensure_repo(cfg: &mut Config, name: &str) -> Result<PathBuf> {
     if let Some(p) = cfg.repo_path(name) {
         if !cfg.repos.contains_key(name) {
             cfg.register_repo(name, &p)?;
-            ui::ok(format!("repo {name} cadastrado no config ({})", p.display()));
+            ui::ok(format!("repo {name} registered in the config ({})", p.display()));
         }
         return Ok(p);
     }
     if let Some(r) = cfg.repo(name) {
         if !r.path.is_empty() {
-            bail!("repo {name}: path do config não é um repo git: {}", r.path);
+            bail!("repo {name}: config path is not a git repo: {}", r.path);
         }
     }
 
-    ui::warn(format!("repo {name} não encontrado. Procurei em:"));
+    ui::warn(format!("repo {name} not found. Looked in:"));
     for root in cfg.search_roots() {
         eprintln!("     {}", root.join(name).display());
     }
-    let answer = ui::ask(&format!("   caminho do clone de {name} (vazio cancela): "));
+    let answer = ui::ask(&format!("   path to the {name} clone (empty cancels): "));
     if answer.is_empty() {
-        bail!("repo git não encontrado: {name}");
+        bail!("git repo not found: {name}");
     }
     let p = expand(&answer);
     if !p.join(".git").exists() {
-        bail!("{} não é um repo git", p.display());
+        bail!("{} is not a git repo", p.display());
     }
     cfg.register_repo(name, &p)?;
-    ui::ok(format!("repo {name} cadastrado no config ({})", p.display()));
+    ui::ok(format!("repo {name} registered in the config ({})", p.display()));
     Ok(p)
 }
 
@@ -184,12 +184,12 @@ fn resolve_branch(repo_name: &str, repo: &Path, o: &BranchOpts) -> (String, Orig
         0 => (branch_name(o.prefix, o.id, o.slug), Origin::New),
         1 => (matches[0].clone(), Origin::Remote),
         n => {
-            ui::warn(format!("[{repo_name}] {n} branches no origin com '{}':", o.id));
+            ui::warn(format!("[{repo_name}] {n} branches on origin with '{}':", o.id));
             for (i, b) in matches.iter().enumerate() {
                 eprintln!("   \x1b[1m{})\x1b[0m {b}", i + 1);
             }
-            eprintln!("   \x1b[1m0)\x1b[0m criar branch nova a partir de origin/{}", o.base);
-            let choice = ui::ask("   escolha [1]: ");
+            eprintln!("   \x1b[1m0)\x1b[0m create a new branch from origin/{}", o.base);
+            let choice = ui::ask("   choice [1]: ");
             match choice.as_str() {
                 "0" => (branch_name(o.prefix, o.id, o.slug), Origin::New),
                 c => {
@@ -205,7 +205,7 @@ fn resolve_branch(repo_name: &str, repo: &Path, o: &BranchOpts) -> (String, Orig
 pub fn make_worktree(repo_name: &str, repo: &Path, dest: &Path, o: &BranchOpts) -> Result<String> {
     ui::info(format!("[{repo_name}] fetch..."));
     sys::run(sys::git(repo).args(["fetch", "origin", "--prune", "--quiet"]))
-        .with_context(|| format!("[{repo_name}] git fetch falhou"))?;
+        .with_context(|| format!("[{repo_name}] git fetch failed"))?;
     // without this an interrupted `new` leaves the path registered and blocks the next one
     sys::quiet(sys::git(repo).args(["worktree", "prune"]));
 
@@ -214,12 +214,12 @@ pub fn make_worktree(repo_name: &str, repo: &Path, dest: &Path, o: &BranchOpts) 
 
     if sys::git_ref_exists(repo, &format!("refs/heads/{branch}")) {
         sys::run(sys::git(repo).args(["worktree", "add", &dest_s, &branch]))?;
-        ui::info(format!("[{repo_name}] branch local já existia"));
+        ui::info(format!("[{repo_name}] local branch already existed"));
     } else if matches!(origin, Origin::Remote) {
         sys::run(sys::git(repo).args([
             "worktree", "add", "--track", "-b", &branch, &dest_s, &format!("origin/{branch}"),
         ]))?;
-        ui::info(format!("[{repo_name}] veio do origin (upstream configurado)"));
+        ui::info(format!("[{repo_name}] came from origin (upstream set)"));
     } else {
         // --no-track: branching from origin/<base> would make git adopt the base as upstream,
         // and a bare push/pull would target it
@@ -233,7 +233,7 @@ pub fn make_worktree(repo_name: &str, repo: &Path, dest: &Path, o: &BranchOpts) 
             &format!("refs/heads/{branch}"),
         ]));
         ui::warn(format!(
-            "[{repo_name}] branch NOVA a partir de origin/{} (upstream: origin/{branch}, criado no 1º push)",
+            "[{repo_name}] NEW branch from origin/{} (upstream: origin/{branch}, created on first push)",
             o.base
         ));
     }
@@ -243,18 +243,18 @@ pub fn make_worktree(repo_name: &str, repo: &Path, dest: &Path, o: &BranchOpts) 
 
 /// Undo a `new` that failed midway: remove the created worktrees and the card folder.
 pub fn rollback(cfg: &Config, dir: &Path, done: &[String]) {
-    ui::warn("desfazendo o que já tinha sido criado...");
+    ui::warn("undoing what had already been created...");
     for repo in done {
         if let Some(main) = cfg.repo_path(repo) {
             let wt = dir.join(repo);
             sys::quiet(sys::git(&main).args(["worktree", "remove", "--force", &wt.to_string_lossy()]));
             sys::quiet(sys::git(&main).args(["worktree", "prune"]));
-            ui::info(format!("[{repo}] worktree desfeita"));
+            ui::info(format!("[{repo}] worktree undone"));
         }
     }
     let _ = fs::remove_dir_all(dir);
-    ui::info(format!("pasta {} removida", dir.display()));
-    ui::info("se o erro acima fala em 'already registered', rode: twig prune");
+    ui::info(format!("folder {} removed", dir.display()));
+    ui::info("if the error above mentions 'already registered', run: twig prune");
 }
 
 /// Copy gitignored files from the main clone into the card's worktrees.
@@ -271,7 +271,7 @@ pub fn copy_local_files(cfg: &Config, dir: &Path) {
         for pattern in patterns {
             let full = main.join(&pattern);
             let Ok(paths) = glob::glob(&full.to_string_lossy()) else {
-                ui::warn(format!("[{repo}] padrão inválido em local_files: {pattern}"));
+                ui::warn(format!("[{repo}] invalid pattern in local_files: {pattern}"));
                 continue;
             };
             for src in paths.flatten().filter(|p| p.is_file()) {
@@ -285,14 +285,14 @@ pub fn copy_local_files(cfg: &Config, dir: &Path) {
                     let _ = fs::create_dir_all(parent);
                 }
                 if fs::copy(&src, &dst).is_ok() {
-                    ui::info(format!("copiado {repo}/{rel_s}"));
+                    ui::info(format!("copied {repo}/{rel_s}"));
                     n += 1;
                 }
             }
         }
     }
     if n > 0 {
-        ui::ok(format!("{n} arquivo(s) local(is) copiado(s)"));
+        ui::ok(format!("{n} local file(s) copied"));
     }
 }
 
@@ -313,13 +313,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn separa_id_e_slug() {
+    fn splits_id_and_slug() {
         assert_eq!(split_id("50306-dispositivos"), ("50306".into(), Some("dispositivos".into())));
         assert_eq!(split_id("50306"), ("50306".into(), None));
     }
 
     #[test]
-    fn cor_deterministica_por_id() {
+    fn color_is_deterministic_per_id() {
         // 52644 % 10 = 4
         assert_eq!(color("52644"), "#af601a");
     }
