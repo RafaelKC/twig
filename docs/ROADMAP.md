@@ -21,7 +21,7 @@ Not scheduled yet; grouped by theme.
 - **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `config get/set`, `.twig.toml`; [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
 
-Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
+Current: v0.2.5 (`status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hint, CI on PRs and branch rules on `main`, PR-based release flow; on top of v0.2.0's `rm` that closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
 
 ## Product and name
 
