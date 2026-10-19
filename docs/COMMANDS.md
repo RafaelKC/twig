@@ -8,6 +8,7 @@
 |---|---|
 | `twig new <id> [slug]` | creates the card: worktrees, herdr workspace and, if enabled, `.code-workspace` |
 | `twig add-repo <id> <repo,...>` | adds more repos to an existing card |
+| `twig template ls` / `show NAME` / `edit` | lists, shows and edits the card templates (`templates.toml`) |
 | `twig open [id] [default\|herdr\|code]` | opens the card in the chosen target (default: `[open] default`, herdr) |
 | `twig open-card [id]` (`opcd`) | opens the card's page in the browser (Azure DevOps only for now) |
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
@@ -20,10 +21,21 @@
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor [--json]` | checks dependencies, login and config without changing anything |
 | `twig config edit` | opens the config in an editor and validates it on save |
+| `twig config get <key>` / `twig config set <key> <value>` | reads / writes one config value by dotted key, validated, comments preserved |
 | `twig update [--check] [--version vX.Y.Z]` | updates twig, its herdr plugin and skill to the latest release |
 | `twig uninstall [--yes]` | removes twig, its herdr plugin, skill and completions |
 | `twig completions <shell>` | generates the completion script (bash, zsh, fish, powershell, elvish) |
 | `twig help [command]` | general help or help for one command |
+
+## Global options
+
+| Option | Description |
+|---|---|
+| `--no-hooks` | skips every lifecycle hook (`[hooks]`, `[repos.<name>.hooks]`) for this invocation; see [CONFIG.md](CONFIG.md) |
+
+Lifecycle hooks fire from `new`/`add-repo` (`post_create`), `rm` (`pre_rm`, `post_rm`),
+`open`/`herdr`/`code` (`post_open`) and `refresh` (`post_refresh`). A failing `pre_*` hook aborts
+the command; a failing `post_*` hook only warns.
 
 ## Opening in herdr and VS Code
 
@@ -53,7 +65,8 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 | Option | Description |
 |---|---|
-| `--repos a,b` | the card's repos; without it, uses the repos with `default = true` |
+| `--template NAME` | applies a preset from `templates.toml` (repos, agent, install, branch prefix/base, hooks); without it, `[templates] default`. Explicit flags below override it |
+| `--repos a,b` | the card's repos; without it, the template's, else the repos with `default = true` |
 | `--branch NAME` | forces this branch in every repo |
 | `--base NAME` | base for the new branch (default: `git.base_branch`) |
 | `--fix` | new branch with the `fix/` prefix (a story that turned into a fix) |
@@ -241,7 +254,9 @@ running, the herdr steps are skipped.
 | Option | Description |
 |---|---|
 | `--branches` | also deletes the local branches |
-| `-f`, `--force` | skips both checks (uncommitted changes and running agent) |
+| `-f`, `--force` | skips both checks (uncommitted changes and running agent) and the `pre_rm` hooks |
+
+Hooks: `pre_rm` runs after the checks and aborts the removal if it fails; `post_rm` runs at the end (warns on failure).
 
 ## `twig sync <id> [--merge | --rebase] [-n | --dry-run]`
 
@@ -317,6 +332,16 @@ messages are the human-readable ones and may change, the keys and levels are the
 ADO access is tested with a real call because `az account show` fails for
 users of `az devops login` (PAT), even though `az boards` still works.
 
+## `twig template ls` / `show NAME` / `edit`
+
+Card templates live in `templates.toml` next to the config (`TWIG_TEMPLATES` overrides the path);
+format in [CONFIG.md](CONFIG.md#templates-and-templatestoml).
+
+- `ls` prints each template and its repos (no file = a hint, exit 0).
+- `show NAME` prints repos, agent, install, branch prefix/base and hooks; an unknown name lists the available ones.
+- `edit` works like `config edit`: opens `$VISUAL`/`$EDITOR`, creates a commented file if missing and
+  validates on save (repo names must exist in the config).
+
 ## `twig config edit`
 
 Opens the config in `$VISUAL`, else `$EDITOR`, else `nano` (Windows: `notepad`). The value
@@ -327,6 +352,44 @@ real file.
 - When the editor closes, it validates. Invalid → shows the error and asks `reopen to fix it? [Y/n]`.
   Without a terminal, an empty answer counts as "no", to avoid looping.
 - Exits with 1 if the file is left invalid.
+
+## `twig config get <key>` / `twig config set <key> <value>`
+
+Reads or writes one value by dotted key: `git.base_branch`, `open.default`,
+`repos.my-backend.run`. Non-interactive, so it is the way for scripts and agents to change the
+config (instead of editing the file by hand).
+
+`get`:
+
+- Scalars (string, number, bool) print bare, with no quotes. Arrays and tables print as TOML.
+- Unknown key: error and exit 1.
+- Only needs the file to be valid TOML, so it also works while a value is invalid.
+
+`set`:
+
+- Edits the file in place with comments, blank lines and key order preserved (the trailing
+  comment of a replaced value stays). Missing tables (e.g. a new `[repos.x]`) are created.
+- Validates the result with the same checks as `config edit`. Invalid (unknown key, wrong
+  type, value not allowed) → error naming the key and the valid options, exit 1, **file
+  untouched**.
+- The file only has to be valid TOML: you can fix an invalid value with `set`, as long as the
+  result is valid. The config must already exist (`twig config edit` creates it).
+- Value types are inferred: `true`/`false` → bool, integers → number, anything else → string
+  (quotes optional). If that reading is not valid for the field, it falls back to a string, then
+  to a list (so `short 123` is the string `"123"` and `local_files .env` is `[".env"]`).
+- Arrays: `a,b,c` or `[a, b, c]`; quoted TOML (`'["a b", "c"]'`) also works. `[]` empties it.
+- Keys are split on `.`, so repo names containing a dot are not addressable (use `config edit`).
+
+```bash
+twig config set git.base_branch develop
+twig config set open.default code
+twig config set repos.my-backend.run "dotnet watch run"
+twig config set repos.my-backend.local_files ".env,.env.local"
+twig config get repos.my-backend
+```
+
+Not part of this command (still open on [#19](https://github.com/RafaelKC/twig/issues/19)):
+per-repo `.twig.toml`, per-card overrides and environment variable overrides.
 
 ## `twig update [--check] [--version vX.Y.Z]`
 

@@ -60,6 +60,8 @@ Seus clones principais ficam na `main`. Dois cards nunca pisam um no outro.
   `run:` e um compound que depura todos os repos de uma vez.
 - **Arquivos locais.** Arquivos no gitignore (`appsettings.Development.json`, `.env.local`, …)
   são copiados do clone principal para cada worktree.
+- **Hooks de ciclo de vida.** Seus próprios comandos de shell em `post_create`, `pre_rm`, `post_rm`, `post_open` e `post_refresh`, no card todo ou por repo; `--no-hooks` ignora todos.
+- **Templates de card.** Presets nomeados em `~/.config/twig/templates.toml` (repos, agente, install, hooks): `twig new 123 --template fullstack`; as flags têm precedência.
 - **Uma só config.** Tudo que é específico do time fica em `~/.config/twig/config.toml`.
 - **Autodiagnóstico.** `twig doctor` verifica ferramentas, logins, config e repos, e encontra
   worktrees órfãos.
@@ -162,7 +164,9 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `rm <id> [-f]` | remove o card e o workspace do herdr (recusa se houver alterações não commitadas ou agente rodando; `-f` ignora) |
 | `prune` | limpa registros de worktrees órfãos |
 | `doctor` | verifica dependências, logins, config e repos (`--json` para scripts) |
+| `template ls` / `show NOME` / `edit` | lista, mostra e edita os templates de card (`new --template NOME` aplica um) |
 | `config edit` | edita a config e valida ao salvar |
+| `config get <chave>` / `config set <chave> <valor>` | lê / grava um valor por chave com pontos (`git.base_branch`), validado, preservando comentários |
 | `update` | atualiza para a última release |
 | `uninstall` | remove o twig, seu plugin e a skill |
 | `completions <shell>` | script de completion do shell |

@@ -588,7 +588,148 @@ fn completions_list_the_open_targets() {
     assert_exit(&o, 0);
     let out = text(&o);
     assert!(
-        out.contains("opts=\"-h --help default herdr code\""),
+        out.contains("opts=\"-h --no-hooks --help default herdr code\""),
+        "{out}"
+    );
+}
+
+// ───────────────────────── config get / set ─────────────────────────
+
+const COMMENTED: &str = "# my config\nversion = 1\n\n[git]\nbase_branch = \"main\" # trunk\nbranch_prefix = { Bug = \"fix\", default = \"feat\" }\n\n# the repos\n[repos.my-back]\nrun = \"dotnet run\"\n";
+
+fn stdout(o: &Output) -> String {
+    String::from_utf8_lossy(&o.stdout).into_owned()
+}
+
+#[test]
+fn config_get_scalar_table_and_missing() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    let o = s.run(&["config", "get", "git.base_branch"]);
+    assert_exit(&o, 0);
+    assert_eq!(stdout(&o), "main\n");
+    assert_eq!(stdout(&s.run(&["config", "get", "version"])), "1\n");
+    let o = s.run(&["config", "get", "repos.my-back"]);
+    assert_exit(&o, 0);
+    assert_eq!(stdout(&o), "run = \"dotnet run\"\n");
+    let o = s.run(&["config", "get", "git.branch_prefix"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "Bug = \"fix\"");
+    let o = s.run(&["config", "get", "git.nope"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "key not found: git.nope");
+}
+
+#[test]
+fn config_set_preserves_comments() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    let o = s.run(&["config", "set", "git.base_branch", "develop"]);
+    assert_exit(&o, 0);
+    assert_eq!(
+        fs::read_to_string(&s.config).unwrap(),
+        COMMENTED.replace("\"main\" # trunk", "\"develop\" # trunk")
+    );
+    let o = s.run(&["config", "get", "git.base_branch"]);
+    assert_eq!(stdout(&o), "develop\n");
+}
+
+#[test]
+fn config_set_invalid_value_is_rejected_and_file_untouched() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    let o = s.run(&["config", "set", "open.default", "banana"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "open.default");
+    assert_has(&o, "herdr");
+    let o2 = s.run(&["config", "set", "git.bogus", "1"]);
+    assert_exit(&o2, 1);
+    assert_has(&o2, "bogus");
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), COMMENTED);
+    // no temp file left behind
+    assert_eq!(fs::read_dir(s.config.parent().unwrap()).unwrap().count(), 1);
+}
+
+#[test]
+fn config_set_infers_types_and_arrays() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    assert_exit(&s.run(&["config", "set", "update.check", "false"]), 0);
+    assert_exit(
+        &s.run(&["config", "set", "update.check_interval_hours", "6"]),
+        0,
+    );
+    assert_exit(
+        &s.run(&["config", "set", "worktree.local_files", ".env,.env.local"]),
+        0,
+    );
+    assert_exit(
+        &s.run(&[
+            "config",
+            "set",
+            "repos.my-back.debug",
+            "[Debug: Back, Other]",
+        ]),
+        0,
+    );
+    let after = fs::read_to_string(&s.config).unwrap();
+    assert!(after.contains("check = false"), "{after}");
+    assert!(after.contains("check_interval_hours = 6"), "{after}");
+    let o = s.run(&["config", "get", "worktree.local_files"]);
+    assert_eq!(stdout(&o), "[\".env\", \".env.local\"]\n");
+    let o = s.run(&["config", "get", "repos.my-back.debug"]);
+    assert_eq!(stdout(&o), "[\"Debug: Back\", \"Other\"]\n");
+    // a lone scalar for an array field becomes a one-element list
+    assert_exit(
+        &s.run(&["config", "set", "repos.my-back.local_files", ".env"]),
+        0,
+    );
+    let o = s.run(&["config", "get", "repos.my-back.local_files"]);
+    assert_eq!(stdout(&o), "[\".env\"]\n");
+    // a number for a string field stays a string
+    assert_exit(&s.run(&["config", "set", "repos.my-back.short", "42"]), 0);
+    let o = s.run(&["config", "get", "repos.my-back.short"]);
+    assert_eq!(stdout(&o), "42\n");
+}
+
+#[test]
+fn config_set_creates_nested_repo_key() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    let o = s.run(&["config", "set", "repos.new-front.run", "pnpm dev"]);
+    assert_exit(&o, 0);
+    let o = s.run(&["config", "get", "repos.new-front.run"]);
+    assert_eq!(stdout(&o), "pnpm dev\n");
+    let after = fs::read_to_string(&s.config).unwrap();
+    assert!(after.starts_with("# my config\n"), "{after}");
+    assert!(after.contains("[repos.new-front]"), "{after}");
+}
+
+#[test]
+fn config_set_can_fix_an_invalid_config() {
+    let s = Sandbox::new();
+    let bad = "version = 1\n[open]\ndefault = \"nope\"\n";
+    s.write_config(bad);
+    assert_exit(&s.run(&["config", "get", "open.default"]), 0);
+    // unrelated key: the result is still invalid, so it is rejected
+    assert_exit(&s.run(&["config", "set", "git.base_branch", "x"]), 1);
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), bad);
+    // fixing the offending key works
+    assert_exit(&s.run(&["config", "set", "open.default", "code"]), 0);
+    let o = s.run(&["config", "get", "open.default"]);
+    assert_eq!(stdout(&o), "code\n");
+}
+
+#[test]
+fn completions_list_the_config_subcommands() {
+    let s = Sandbox::new();
+    let o = s.run(&["completions", "bash"]);
+    assert_exit(&o, 0);
+    let out = text(&o);
+    // global flags (e.g. --no-hooks) also land in this list, so only check the subcommands
+    assert!(
+        out.lines()
+            .any(|l| l.contains("opts=\"") && l.contains(" edit get set help\"")),
         "{out}"
     );
 }
@@ -1459,4 +1600,458 @@ fn doctor_json_with_invalid_config_is_an_error_entry() {
     let v = json_of(&o);
     assert_eq!(v["ok"], false);
     assert_eq!(v["sections"][0]["checks"][0]["level"], "error");
+}
+
+// ───────────────────────── hooks ─────────────────────────
+
+/// Append raw TOML to the sandbox config.
+fn append_config(s: &Sandbox, extra: &str) {
+    let mut cfg = fs::read_to_string(&s.config).unwrap();
+    cfg.push_str(extra);
+    fs::write(&s.config, cfg).unwrap();
+}
+
+/// Shell snippet that appends one line of hook context to `log`.
+fn hook_line(log: &Path, tag: &str) -> String {
+    format!(
+        r#"echo "{tag}|$TWIG_EVENT|$TWIG_CARD_ID|$TWIG_REPO|$TWIG_BRANCH|${{TWIG_CARD_DIR##*/}}|${{TWIG_REPO_DIR##*/}}|${{PWD##*/}}" >> {log}"#,
+        log = log.display()
+    )
+}
+
+fn hook_log(log: &Path) -> String {
+    fs::read_to_string(log).unwrap_or_default()
+}
+
+#[test]
+fn hooks_post_create_fire_on_new_and_add_repo_with_env() {
+    let s = new_sandbox();
+    let log = s.path("hooks.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npost_create = [{card:?}]\n\n[repos.a.hooks]\npost_create = [{a:?}]\n\n[repos.b.hooks]\npost_create = [{b:?}]\n",
+            card = hook_line(&log, "card"),
+            a = hook_line(&log, "a"),
+            b = hook_line(&log, "b"),
+        ),
+    );
+    assert_exit(&s.run(&["new", "7", "slug", "--no-ado"]), 0);
+    let l = hook_log(&log);
+    // repo-level runs in the worktree; card-level in the card folder with no repo
+    assert!(l.contains("a|post_create|7|a|feat/7-slug|7|a|a\n"), "{l}");
+    assert!(l.contains("card|post_create|7|||7||7\n"), "{l}");
+    assert!(!l.contains("b|post_create"), "{l}");
+
+    assert_exit(&s.run(&["add-repo", "7", "b"]), 0);
+    let l = hook_log(&log);
+    assert!(l.contains("b|post_create|7|b|feat/7|7|b|b\n"), "{l}");
+    assert_eq!(l.matches("a|post_create").count(), 1, "{l}");
+}
+
+#[test]
+fn hooks_legacy_repo_post_create_is_unchanged() {
+    let s = new_sandbox();
+    let log = s.path("legacy.log");
+    let cfg = fs::read_to_string(&s.config).unwrap().replace(
+        "[repos.a]\ndefault = true\n",
+        &format!(
+            "[repos.a]\ndefault = true\ninstall = \"echo install >> {log}\"\npost_create = [\"echo legacy $TWIG_CARD $TWIG_REPO >> {log}\"]\n",
+            log = log.display()
+        ),
+    );
+    fs::write(&s.config, cfg).unwrap();
+    // not run without auto_install / --install
+    assert_exit(&s.run(&["new", "7", "slug", "--no-ado"]), 0);
+    assert_eq!(hook_log(&log), "");
+    assert_exit(&s.run(&["rm", "7"]), 0);
+    assert_exit(&s.run(&["new", "7", "slug", "--no-ado", "--install"]), 0);
+    assert_eq!(hook_log(&log), "install\nlegacy 7 a\n");
+}
+
+#[test]
+fn hooks_pre_rm_and_post_rm_fire_with_env() {
+    let (s, _log) = rm_sandbox("idle");
+    let log = s.path("hooks.log");
+    let cpost = format!(
+        r#"echo "cpost|$TWIG_EVENT|$TWIG_CARD_ID|$TWIG_REPO" >> {}"#,
+        log.display()
+    );
+    let rpost = format!(
+        r#"echo "rpost|$TWIG_EVENT|$TWIG_REPO|$TWIG_BRANCH|${{TWIG_REPO_DIR##*/}}" >> {}"#,
+        log.display()
+    );
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npre_rm = [{:?}]\npost_rm = [{cpost:?}]\n\n[repos.r1.hooks]\npre_rm = [{:?}]\npost_rm = [{rpost:?}]\n",
+            hook_line(&log, "cpre"),
+            hook_line(&log, "rpre"),
+        ),
+    );
+    assert_exit(&s.run(&["rm", "123"]), 0);
+    assert_eq!(
+        hook_log(&log),
+        "cpre|pre_rm|123|||123||123\n\
+         rpre|pre_rm|123|r1|card-123|123|r1|r1\n\
+         rpost|post_rm|r1|card-123|r1\n\
+         cpost|post_rm|123|\n"
+    );
+    assert!(!s.path("wt/123").exists());
+}
+
+#[test]
+fn hooks_failing_pre_rm_blocks_and_force_bypasses() {
+    let (s, _log) = rm_sandbox("idle");
+    let marker = s.path("pre.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npre_rm = [\"echo ran >> {}; exit 3\"]\n",
+            marker.display()
+        ),
+    );
+    let o = s.run(&["rm", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "pre_rm hook");
+    assert!(s.path("wt/123/r1").exists(), "card must survive");
+    assert_eq!(hook_log(&marker), "ran\n");
+
+    // --force skips pre_* hooks
+    assert_exit(&s.run(&["rm", "-f", "123"]), 0);
+    assert_eq!(hook_log(&marker), "ran\n");
+    assert!(!s.path("wt/123").exists());
+}
+
+#[test]
+fn hooks_failing_post_hook_only_warns() {
+    let (s, _log) = rm_sandbox("idle");
+    append_config(&s, "\n[hooks]\npost_rm = [\"exit 5\"]\n");
+    let o = s.run(&["rm", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "post_rm hook `exit 5` failed");
+    assert!(!s.path("wt/123").exists());
+}
+
+#[test]
+fn hooks_no_hooks_flag_skips_everything() {
+    let (s, _log) = rm_sandbox("idle");
+    let marker = s.path("any.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npre_rm = [\"echo pre >> {m}; exit 1\"]\npost_rm = [\"echo post >> {m}\"]\n",
+            m = marker.display()
+        ),
+    );
+    assert_exit(&s.run(&["rm", "123", "--no-hooks"]), 0);
+    assert_eq!(hook_log(&marker), "");
+    assert!(!s.path("wt/123").exists());
+}
+
+#[test]
+fn hooks_post_open_fires_for_code_and_herdr() {
+    let (s, _code_log, _herdr_log) = open_sandbox("");
+    let log = s.path("hooks.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npost_open = [{:?}]\n\n[repos.r1.hooks]\npost_open = [{:?}]\n",
+            hook_line(&log, "card"),
+            hook_line(&log, "r1")
+        ),
+    );
+    assert_exit(&run_open(&s, &["code", "123"], None), 0);
+    let l = hook_log(&log);
+    assert!(l.contains("r1|post_open|123|r1||123|r1|r1\n"), "{l}");
+    assert!(l.contains("card|post_open|123|||123||123\n"), "{l}");
+
+    fs::remove_file(&log).unwrap();
+    assert_exit(&run_open(&s, &["herdr", "123"], None), 0);
+    assert!(hook_log(&log).contains("card|post_open|123"));
+
+    fs::remove_file(&log).unwrap();
+    assert_exit(&run_open(&s, &["open", "123", "code"], None), 0);
+    assert!(hook_log(&log).contains("card|post_open|123"));
+
+    fs::remove_file(&log).unwrap();
+    assert_exit(&run_open(&s, &["herdr", "123", "--no-hooks"], None), 0);
+    assert_eq!(hook_log(&log), "");
+}
+
+#[test]
+fn hooks_post_refresh_fires() {
+    let (s, _code_log) = code_sandbox();
+    let log = s.path("hooks.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npost_refresh = [{:?}]\n",
+            hook_line(&log, "card")
+        ),
+    );
+    assert_exit(&s.run(&["refresh", "123"]), 0);
+    assert!(hook_log(&log).contains("card|post_refresh|123|||123||123\n"));
+}
+
+#[test]
+fn doctor_flags_empty_hook_commands() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    append_config(
+        &s,
+        "\n[hooks]\npost_open = [\"echo ok\", \"  \"]\n\n[repos.r1.hooks]\npre_rm = [\"\"]\n",
+    );
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "hooks.post_open[1] is an empty command");
+    assert_has(&o, "repos.r1.hooks.pre_rm[0] is an empty command");
+}
+
+#[test]
+fn doctor_counts_valid_hooks() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    append_config(&s, "\n[hooks]\npost_open = [\"echo ok\"]\n");
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "1 hook command(s) configured");
+}
+
+// ───────────────────────── templates ─────────────────────────
+
+fn write_templates(s: &Sandbox, body: &str) {
+    fs::write(s.config.parent().unwrap().join("templates.toml"), body).unwrap();
+}
+
+fn tpl_sandbox(templates: &str) -> Sandbox {
+    let s = new_sandbox();
+    write_templates(&s, templates);
+    s
+}
+
+#[test]
+fn template_applies_its_repos() {
+    let s = tpl_sandbox("[both]\nrepos = [\"a\", \"b\"]\n");
+    assert_exit(
+        &s.run(&["new", "7", "x", "--no-ado", "--template", "both"]),
+        0,
+    );
+    assert!(s.path("wt/7/a/.git").exists());
+    assert!(s.path("wt/7/b/.git").exists());
+}
+
+#[test]
+fn explicit_repos_and_flags_override_the_template() {
+    let s =
+        tpl_sandbox("[t]\nrepos = [\"a\", \"b\"]\nbranch_prefix = \"chore\"\nbase = \"nope\"\n");
+    let o = s.run(&[
+        "new",
+        "7",
+        "x",
+        "--no-ado",
+        "--template",
+        "t",
+        "--repos",
+        "b",
+        "--base",
+        "main",
+    ]);
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/7/a").exists());
+    // the template's branch_prefix applies (no --fix); --base beat the template's bad base
+    assert_eq!(branch_of(s.path("wt/7/b")), "chore/7-x");
+
+    let o = s.run(&[
+        "new",
+        "8",
+        "x",
+        "--no-ado",
+        "--template",
+        "t",
+        "--base",
+        "main",
+        "--fix",
+    ]);
+    assert_exit(&o, 0);
+    assert_eq!(branch_of(s.path("wt/8/a")), "fix/8-x");
+}
+
+#[test]
+fn default_template_from_the_config_is_used() {
+    let s = tpl_sandbox("[both]\nrepos = [\"a\", \"b\"]\n");
+    append_config(&s, "\n[templates]\ndefault = \"both\"\n");
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado"]), 0);
+    assert!(s.path("wt/7/b/.git").exists());
+}
+
+#[test]
+fn unknown_template_lists_the_available_ones() {
+    let s = tpl_sandbox("[one]\nrepos = [\"a\"]\n\n[two]\nrepos = [\"b\"]\n");
+    let o = s.run(&["new", "7", "x", "--no-ado", "--template", "nope"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "unknown template `nope`");
+    assert_has(&o, "one, two");
+    assert!(!s.path("wt/7").exists());
+}
+
+#[test]
+fn template_hooks_fire_after_config_hooks_and_follow_the_card() {
+    let s = tpl_sandbox("");
+    let log = s.path("hooks.log");
+    append_config(
+        &s,
+        &format!("\n[hooks]\npost_create = [{:?}]\n", hook_line(&log, "cfg")),
+    );
+    write_templates(
+        &s,
+        &format!(
+            "[t]\nrepos = [\"a\"]\n\n[t.hooks]\npost_create = [{:?}]\npost_refresh = [{:?}]\n",
+            hook_line(&log, "tpl"),
+            hook_line(&log, "tplrefresh"),
+        ),
+    );
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado", "--template", "t"]), 0);
+    let l = hook_log(&log);
+    let (c, t) = (l.find("cfg|post_create"), l.find("tpl|post_create"));
+    assert!(c.is_some() && t.is_some() && c < t, "{l}");
+
+    // refresh re-reads the template recorded for the card
+    assert_exit(&s.run(&["refresh", "7"]), 0);
+    assert!(hook_log(&log).contains("tplrefresh|post_refresh|7"));
+
+    // a card made without the template does not run its hooks
+    assert_exit(&s.run(&["new", "8", "x", "--no-ado"]), 0);
+    assert!(!hook_log(&log).contains("tpl|post_create|8"));
+}
+
+#[test]
+fn template_agent_picks_the_context_file() {
+    let s = tpl_sandbox("[cx]\nrepos = [\"a\"]\nagent = \"codex\"\n");
+    assert_exit(
+        &s.run(&["new", "7", "x", "--no-ado", "--template", "cx"]),
+        0,
+    );
+    assert!(s.path("wt/7/AGENTS.md").exists());
+    assert!(!s.path("wt/7/CLAUDE.md").exists());
+    assert_exit(&s.run(&["refresh", "7"]), 0);
+    assert!(s.path("wt/7/AGENTS.md").exists());
+    assert!(!s.path("wt/7/CLAUDE.md").exists());
+}
+
+#[test]
+fn template_install_runs_the_repo_setup() {
+    let s = tpl_sandbox("[t]\nrepos = [\"a\"]\ninstall = true\n");
+    let log = s.path("install.log");
+    let cfg = fs::read_to_string(&s.config).unwrap().replace(
+        "[repos.a]\ndefault = true\n",
+        &format!(
+            "[repos.a]\ndefault = true\ninstall = \"echo installed >> {}\"\n",
+            log.display()
+        ),
+    );
+    fs::write(&s.config, cfg).unwrap();
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado", "--template", "t"]), 0);
+    assert!(hook_log(&log).contains("installed"));
+    assert_exit(
+        &s.run(&["new", "8", "x", "--no-ado", "--template", "t", "--no-setup"]),
+        0,
+    );
+    assert_eq!(hook_log(&log).matches("installed").count(), 1);
+}
+
+#[test]
+fn no_templates_file_changes_nothing() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado"]), 0);
+    assert!(s.path("wt/7/CLAUDE.md").exists());
+    let o = s.run(&["new", "8", "x", "--no-ado", "--template", "t"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "no templates file");
+    assert_exit(&s.run(&["template", "ls"]), 0);
+}
+
+#[test]
+fn template_env_var_overrides_the_path() {
+    let s = new_sandbox();
+    let f = s.path("elsewhere.toml");
+    fs::write(&f, "[x]\nrepos = [\"b\"]\n").unwrap();
+    let mut c = s.cmd(&["new", "7", "x", "--no-ado", "--template", "x"]);
+    c.env("TWIG_TEMPLATES", &f);
+    assert_exit(&s.run_with(c, ""), 0);
+    assert!(s.path("wt/7/b/.git").exists());
+}
+
+#[test]
+fn doctor_catches_a_template_with_an_unknown_repo_agent_or_hook() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    write_templates(
+        &s,
+        "[bad]\nrepos = [\"r1\", \"ghost\"]\n\n[bad.hooks]\npre_rm = [\" \"]\n",
+    );
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "[bad] repo `ghost` is not in the config");
+    assert_has(&o, "[bad] bad.hooks.pre_rm[0] is an empty command");
+
+    write_templates(&s, "[bad]\nagent = \"gemini\"\n");
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "claude");
+
+    write_templates(&s, "[ok]\nrepos = [\"r1\"]\n");
+    append_config(&s, "\n[templates]\ndefault = \"missing\"\n");
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "templates.default = `missing`");
+
+    let cfg = fs::read_to_string(&s.config)
+        .unwrap()
+        .replace("missing", "ok");
+    fs::write(&s.config, cfg).unwrap();
+    assert_exit(&s.run(&["doctor"]), 0);
+}
+
+#[test]
+fn template_ls_and_show() {
+    let s = tpl_sandbox(
+        "[full]\nrepos = [\"a\", \"b\"]\nagent = \"codex\"\ninstall = true\n\n[full.hooks]\npost_create = [\"echo hi\"]\n\n[solo]\nrepos = [\"a\"]\n",
+    );
+    let o = s.run(&["template", "ls"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "full");
+    assert_has(&o, "a, b");
+    assert_has(&o, "solo");
+
+    let o = s.run(&["template", "show", "full"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "codex");
+    assert_has(&o, "install        true");
+    assert_has(&o, "echo hi");
+
+    let o = s.run(&["template", "show", "nope"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "full, solo");
+}
+
+#[test]
+fn template_edit_creates_and_validates() {
+    let s = new_sandbox();
+    let ed = s.script("ed.sh", "printf '[t]\\nrepos = [\"ghost\"]\\n' > \"$1\"");
+    let mut c = s.cmd(&["template", "edit"]);
+    c.env("EDITOR", &ed);
+    // the unknown repo is invalid; declining the reopen leaves an error
+    let o = s.run_with(c, "n\n");
+    assert_exit(&o, 1);
+    assert_has(&o, "ghost");
+
+    let ed = s.script("ed2.sh", "printf '[t]\\nrepos = [\"a\"]\\n' > \"$1\"");
+    let mut c = s.cmd(&["template", "edit"]);
+    c.env("EDITOR", &ed);
+    assert_exit(&s.run_with(c, ""), 0);
+    assert_has(&s.run(&["template", "ls"]), "t");
 }

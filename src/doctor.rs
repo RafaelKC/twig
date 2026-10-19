@@ -286,6 +286,19 @@ pub fn run(json: bool) -> Result<()> {
         }
     }
 
+    let (hook_count, hook_errors) = crate::hooks::validate(&cfg);
+    if hook_count > 0 {
+        r.section("hooks");
+        for e in &hook_errors {
+            r.error(e);
+        }
+        if hook_errors.is_empty() {
+            r.ok(format!("{hook_count} hook command(s) configured"));
+        }
+    }
+
+    templates_section(&mut r, &cfg);
+
     r.section("orphaned worktrees");
     let mut any = false;
     for repo in cfg.known_repos() {
@@ -304,6 +317,53 @@ pub fn run(json: bool) -> Result<()> {
     }
 
     finish(r)
+}
+
+fn templates_section(r: &mut Report, cfg: &Config) {
+    let path = match crate::templates::templates_path() {
+        Ok(p) => p,
+        Err(e) => {
+            r.error(format!("{e:#}"));
+            return;
+        }
+    };
+    if !path.exists() && cfg.templates.default.is_none() {
+        return;
+    }
+    r.section("templates");
+    let mut all = None;
+    if path.exists() {
+        match crate::templates::parse_file(&path) {
+            Ok(t) => {
+                let errors = crate::templates::validate(Some(cfg), &t);
+                for e in &errors {
+                    r.error(e);
+                }
+                if errors.is_empty() {
+                    r.ok(format!(
+                        "{} valid ({} template(s))",
+                        path.display(),
+                        t.len()
+                    ));
+                }
+                all = Some(t);
+            }
+            Err(e) => r.error(format!("{e:#}")),
+        }
+    }
+    if let Some(d) = &cfg.templates.default {
+        match &all {
+            Some(t) if t.contains_key(d) => r.ok(format!("templates.default = {d}")),
+            Some(_) => r.error(format!(
+                "templates.default = `{d}` is not in {}",
+                path.display()
+            )),
+            None => r.error(format!(
+                "templates.default = `{d}` but {} is missing or invalid",
+                path.display()
+            )),
+        }
+    }
 }
 
 fn finish(r: Report) -> Result<()> {
