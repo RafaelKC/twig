@@ -6,9 +6,9 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 
 ## Releases
 
-### Next: v0.3.0
+### Next: v0.4.0
 
-Not planned yet; pick from [Later](#later).
+Not planned yet; pick from [Later](#later). Suggested: the GitHub path ([#4](https://github.com/RafaelKC/twig/issues/4), `open-card` for `gh`, [#12](https://github.com/RafaelKC/twig/issues/12)).
 
 ### In development
 
@@ -25,7 +25,7 @@ Not scheduled yet; grouped by theme.
 - **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes (simple version in development, see above); [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `.twig.toml`, per-card and env overrides (`config get/set` done); [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
 
-Current: v0.2.5 (`status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hint, CI on PRs and branch rules on `main`, PR-based release flow; on top of v0.2.0's `rm` that closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
+Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates.toml`, `twig memo` in development; on top of v0.2.5's `status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hint, CI on PRs and branch rules on `main`, PR-based release flow; on top of v0.2.0's `rm` that closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
 
 ## Product and name
 
