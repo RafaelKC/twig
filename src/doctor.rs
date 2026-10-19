@@ -5,7 +5,7 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-use crate::config::{config_path, Config, ProviderKind};
+use crate::config::{config_path, Config, OpenTarget, ProviderKind};
 use crate::sys;
 
 #[derive(Default)]
@@ -88,7 +88,9 @@ pub fn run() -> Result<()> {
     if r.require_bin("git", "required") {
         for key in ["user.name", "user.email"] {
             match git_global(key) {
-                v if v.is_empty() => r.warn(format!("{key} not set (git config --global {key} ...)")),
+                v if v.is_empty() => {
+                    r.warn(format!("{key} not set (git config --global {key} ...)"))
+                }
                 v => r.ok(format!("{key} = {v}")),
             }
         }
@@ -114,14 +116,30 @@ pub fn run() -> Result<()> {
         r.info("disabled in the config (vscode.enabled = false)");
     }
 
+    if cfg.open.default == OpenTarget::Code && !cfg.vscode.enabled {
+        r.error("open.default = \"code\" but vscode.enabled = false");
+    }
+
     r.section("provider");
     match cfg.provider.default {
         ProviderKind::Az => {
             if r.require_bin("az", "provider.default = \"az\"") {
-                if succeeds("az", &["extension", "show", "--name", "azure-devops", "--output", "none"]) {
+                if succeeds(
+                    "az",
+                    &[
+                        "extension",
+                        "show",
+                        "--name",
+                        "azure-devops",
+                        "--output",
+                        "none",
+                    ],
+                ) {
                     r.ok("azure-devops extension installed");
                     // `az account show` isn't enough: ADO access may come from `az devops login` (PAT)
-                    let mut args = vec!["devops", "project", "list", "--top", "1", "--output", "none"];
+                    let mut args = vec![
+                        "devops", "project", "list", "--top", "1", "--output", "none",
+                    ];
                     let org = &cfg.provider.az.organization;
                     if !org.is_empty() {
                         args.extend(["--organization", org.as_str()]);
@@ -147,12 +165,17 @@ pub fn run() -> Result<()> {
         }
     }
 
-    r.section("AI");
-    let ai_bin = cfg.ai.command.split_whitespace().next().unwrap_or_default();
+    r.section("agent");
+    let ai_bin = cfg
+        .ai
+        .command()
+        .split_whitespace()
+        .next()
+        .unwrap_or_default();
     if ai_bin.is_empty() {
-        r.error("ai.command is empty");
+        r.error("agent.command is empty");
     } else {
-        r.require_bin(ai_bin, "ai.command");
+        r.require_bin(ai_bin, "agent.command");
     }
 
     r.section("folders");
@@ -160,7 +183,10 @@ pub fn run() -> Result<()> {
     if wt.is_dir() {
         r.ok(format!("worktrees: {}", wt.display()));
     } else if nearest_existing(&wt).is_some_and(Path::is_dir) {
-        r.info(format!("worktrees: {} does not exist yet (created on the first `twig new`)", wt.display()));
+        r.info(format!(
+            "worktrees: {} does not exist yet (created on the first `twig new`)",
+            wt.display()
+        ));
     } else {
         r.error(format!("worktrees: {} cannot be created", wt.display()));
     }
@@ -181,7 +207,9 @@ pub fn run() -> Result<()> {
     r.section("orphaned worktrees");
     let mut any = false;
     for repo in cfg.known_repos() {
-        let Some(main) = cfg.repo_path(&repo) else { continue };
+        let Some(main) = cfg.repo_path(&repo) else {
+            continue;
+        };
         for o in sys::git_orphan_worktrees(&main) {
             r.warn(format!("{repo}: {o}"));
             any = true;
@@ -202,7 +230,10 @@ fn finish(r: &Report) -> Result<()> {
         bail!("{} error(s), {} warning(s)", r.errors, r.warnings);
     }
     if r.warnings > 0 {
-        println!("\x1b[33m! all working, with {} warning(s)\x1b[0m", r.warnings);
+        println!(
+            "\x1b[33m! all working, with {} warning(s)\x1b[0m",
+            r.warnings
+        );
     } else {
         println!("\x1b[32m✔ all good\x1b[0m");
     }

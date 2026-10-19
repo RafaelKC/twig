@@ -39,7 +39,7 @@ DevOps work item or a GitHub issue) its own sandbox:
 ~/.wt/52644/
 ├── api/                    git worktree on the card's branch
 ├── web/                    git worktree on the card's branch
-├── CLAUDE.md               the card's title, description, acceptance criteria, repos and rules
+├── CLAUDE.md               (AGENTS.md for Codex) the card's title, description, acceptance criteria, repos and rules
 ├── 52644.code-workspace    VS Code workspace, colored per card, with run tasks and a debug compound
 └── .ado.json               cached work item
 ```
@@ -52,7 +52,7 @@ Your main clones stay on `main`. Two cards never step on each other.
   picked for you: an existing `origin` branch with the id in its name, or a new
   `feat/<id>-<slug>` (or `fix/` for bugs), with the slug taken from the card's title.
 - **Card context for the agent.** Title, state, description and acceptance criteria are pulled
-  from Azure DevOps (`az`) or GitHub (`gh`) into the card's `CLAUDE.md`, along with a
+  from Azure DevOps (`az`) or GitHub (`gh`) into the card's `CLAUDE.md` (or `AGENTS.md` with Codex), along with a
   "card context" section that survives regeneration.
 - **herdr workspace.** An `agent` tab with one AI agent per repo, and a `run` tab that starts
   each project. Closed a pane by accident? `twig add-repo` brings it back.
@@ -136,6 +136,8 @@ twig completions bash > ~/.local/share/bash-completion/completions/twig
 twig new 52644                      # create the card with the default repos
 twig new 52644 --repos api,ui-kit   # pick the repos
 twig add-repo 52644 web             # add a repo later (or restore closed panes)
+twig open 52644                     # open the card in the default target (herdr or code)
+twig open-card 52644              # open the card page (Azure DevOps) in the browser
 twig herdr 52644                    # open the card in herdr
 twig code                           # open the current card in VS Code
 twig ls                             # cards, branches, uncommitted changes (*)
@@ -145,13 +147,15 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 
 | Command | What it does |
 |---|---|
-| `new <id> [slug]` | worktrees, `CLAUDE.md`, herdr workspace and, if enabled, the VS Code workspace |
+| `new <id> [slug]` | worktrees, `CLAUDE.md`/`AGENTS.md`, herdr workspace and, if enabled, the VS Code workspace |
 | `add-repo <id> <repo,...>` | add repos to a card; recreates missing herdr panes |
+| `open [id] [default\|herdr\|code]` | open a card in the chosen target; default from `[open] default` (herdr) |
+| `open-card [id]` (`opcd`) | open the card page in the browser (Azure DevOps only for now) |
 | `herdr <id>` | open/focus the card in herdr |
 | `code [id]` | open the card in VS Code; without an id, the current card |
 | `ls` | active cards and each repo's branch |
-| `refresh <id>` | regenerate `CLAUDE.md` and the `.code-workspace` |
-| `rm <id>` | remove the card (refuses with uncommitted changes) |
+| `refresh <id>` | regenerate `CLAUDE.md`/`AGENTS.md` and the `.code-workspace` |
+| `rm <id> [-f]` | remove the card and its herdr workspace (refuses with uncommitted changes or a running agent; `-f` overrides) |
 | `prune` | clean orphaned worktree records |
 | `doctor` | check dependencies, logins, config and repos |
 | `config edit` | edit the config and validate it on save |

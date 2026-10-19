@@ -17,7 +17,7 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 
-use config::Config;
+use config::{Config, OpenTarget};
 
 /// Per-card environment: git worktrees of several repos under <worktrees>/<id>/,
 /// a herdr workspace with agents and, if enabled, a VS Code workspace.
@@ -97,6 +97,23 @@ enum Cmd {
         #[arg(long)]
         code: bool,
     },
+    /// Open a card in herdr or VS Code (target defaults to `[open] default` in the config).
+    ///
+    /// Without <ID>, the card is inferred like `twig code` does; a lone target (`twig open code`)
+    /// is read as the target. `twig herdr` and `twig code`
+    /// are aliases of `twig open <id> herdr` / `twig open [id] code`.
+    Open {
+        id: Option<String>,
+        /// Where to open it: `default` uses `[open] default` from the config.
+        #[arg(value_enum)]
+        target: Option<Target>,
+    },
+    /// Open the card's page (work item) in the default browser (Azure DevOps only for now).
+    ///
+    /// Without <ID>, the card is inferred from the current directory; outside a card, it is a
+    /// usage error. With `provider = "gh"` this is not supported yet.
+    #[command(name = "open-card", alias = "opcd")]
+    OpenCard { id: Option<String> },
     /// Open the card's herdr workspace (creates whatever is missing).
     Herdr { id: String },
     /// Open the card in VS Code (generates the .code-workspace if missing).
@@ -114,13 +131,16 @@ enum Cmd {
         #[arg(long)]
         refetch: bool,
     },
-    /// Remove the card's worktrees and folder (refuses with uncommitted changes).
+    /// Remove the card's worktrees, folder and herdr workspace (refuses with uncommitted changes or a running agent).
     #[command(alias = "remove")]
     Rm {
         id: String,
         /// Also delete the local branches.
         #[arg(long)]
         branches: bool,
+        /// Remove even with uncommitted changes or a running agent.
+        #[arg(short, long)]
+        force: bool,
     },
     /// Clean up orphaned worktree records and empty card folders.
     Prune {
@@ -154,6 +174,15 @@ enum Cmd {
     Completions { shell: Shell },
 }
 
+/// Target of `twig open`.
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum Target {
+    /// The `[open] default` from the config (herdr if unset).
+    Default,
+    Herdr,
+    Code,
+}
+
 #[derive(Subcommand)]
 enum ConfigCmd {
     /// Open the config in $VISUAL/$EDITOR (creates it from the template if missing) and validate on save.
@@ -170,27 +199,97 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Doctor => return doctor::run(),
         Cmd::Update { check, version } => return selfmgmt::update(check, version),
         Cmd::Uninstall { yes } => return selfmgmt::uninstall(yes),
-        Cmd::Config { cmd: ConfigCmd::Edit } => return config_edit::edit(),
+        Cmd::Config {
+            cmd: ConfigCmd::Edit,
+        } => return config_edit::edit(),
         _ => {}
     }
 
     let mut cfg = Config::load()?;
     match cli.cmd {
-        Cmd::New { id, slug, repos, branch, base, fix, install, no_setup, herdr, code, no_ado } => commands::new(
+        Cmd::New {
+            id,
+            slug,
+            repos,
+            branch,
+            base,
+            fix,
+            install,
+            no_setup,
+            herdr,
+            code,
+            no_ado,
+        } => commands::new(
             &mut cfg,
-            commands::NewArgs { id, slug, repos, branch, base, fix, install, no_setup, herdr, code, no_ado },
+            commands::NewArgs {
+                id,
+                slug,
+                repos,
+                branch,
+                base,
+                fix,
+                install,
+                no_setup,
+                herdr,
+                code,
+                no_ado,
+            },
         ),
-        Cmd::AddRepo { id, repos, branch, base, fix, install, no_setup, herdr, code } => commands::add_repo(
+        Cmd::AddRepo {
+            id,
+            repos,
+            branch,
+            base,
+            fix,
+            install,
+            no_setup,
+            herdr,
+            code,
+        } => commands::add_repo(
             &mut cfg,
-            commands::AddRepoArgs { id, repos, branch, base, fix, install, no_setup, herdr, code },
+            commands::AddRepoArgs {
+                id,
+                repos,
+                branch,
+                base,
+                fix,
+                install,
+                no_setup,
+                herdr,
+                code,
+            },
         ),
+        Cmd::Open { id, target } => {
+            // `twig open code`: a lone target name is the target, not a card id
+            let (id, target) = match (id.as_deref(), target) {
+                (Some(t), None) if <Target as clap::ValueEnum>::from_str(t, true).is_ok() => {
+                    (None, <Target as clap::ValueEnum>::from_str(t, true).ok())
+                }
+                _ => (id, target),
+            };
+            let target = match target {
+                None | Some(Target::Default) => None,
+                Some(Target::Herdr) => Some(OpenTarget::Herdr),
+                Some(Target::Code) => Some(OpenTarget::Code),
+            };
+            commands::open(&cfg, id.as_deref(), target)
+        }
+        Cmd::OpenCard { id } => commands::open_card(&cfg, id.as_deref()),
         Cmd::Herdr { id } => commands::herdr_cmd(&cfg, &id),
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
         Cmd::Ls => commands::ls(&cfg),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
-        Cmd::Rm { id, branches } => commands::rm(&cfg, &id, branches),
+        Cmd::Rm {
+            id,
+            branches,
+            force,
+        } => commands::rm(&cfg, &id, branches, force),
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
-        Cmd::Completions { .. } | Cmd::Doctor | Cmd::Config { .. } | Cmd::Update { .. } | Cmd::Uninstall { .. } => {
+        Cmd::Completions { .. }
+        | Cmd::Doctor
+        | Cmd::Config { .. }
+        | Cmd::Update { .. }
+        | Cmd::Uninstall { .. } => {
             unreachable!()
         }
     }

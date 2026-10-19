@@ -8,11 +8,13 @@
 |---|---|
 | `twig new <id> [slug]` | creates the card: worktrees, herdr workspace and, if enabled, `.code-workspace` |
 | `twig add-repo <id> <repo,...>` | adds more repos to an existing card |
+| `twig open [id] [default\|herdr\|code]` | opens the card in the chosen target (default: `[open] default`, herdr) |
+| `twig open-card [id]` (`opcd`) | opens the card's page in the browser (Azure DevOps only for now) |
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls` | lists active cards and each repo's branch |
-| `twig refresh <id>` | regenerates `.code-workspace` and `CLAUDE.md` |
-| `twig rm <id>` | removes the card's worktrees and folder |
+| `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
+| `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor` | checks dependencies, login and config without changing anything |
 | `twig config edit` | opens the config in an editor and validates it on save |
@@ -35,7 +37,7 @@ You can open both, just one, or neither. See [CONFIG.md](CONFIG.md) → `[vscode
 
 ## `twig new <id> [slug] [options]`
 
-Creates the `<worktrees>/<id>/` folder with one worktree per repo, the card's `CLAUDE.md`,
+Creates the `<worktrees>/<id>/` folder with one worktree per repo, the card's context file (`CLAUDE.md`, or `AGENTS.md` with `agent.provider = "codex"`),
 the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 **Arguments**
@@ -69,7 +71,7 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 - Fetches the card's title, type, state, tags, assignee, area, description, acceptance
   criteria and URL from the provider and caches them in the card folder.
-- Generates the card's `CLAUDE.md`: repos and branches, card data and instructions for the agent.
+- Generates the card's context file (`CLAUDE.md`, or `AGENTS.md` with `agent.provider = "codex"`): repos and branches, card data and instructions for the agent.
 - Copies each repo's `local_files` from the main clone into the worktree.
 - A repo that isn't in the config gets registered (see [CONFIG.md](CONFIG.md) → Repos).
 - If something fails midway, rolls back the worktrees already created.
@@ -79,7 +81,7 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 Adds more repos to an existing card. Safe to run again:
 
 - Repo without a worktree in the card → creates it, with the same branch rule as `twig new`.
-- Regenerates `.code-workspace` (if VS Code is enabled) and `CLAUDE.md`.
+- Regenerates `.code-workspace` (if VS Code is enabled) and the context file.
 - herdr: creates missing panes, including ones the user closed.
 
 | Option | Description |
@@ -90,11 +92,48 @@ Adds more repos to an existing card. Safe to run again:
 | `--herdr` | opens herdr at the end |
 | `--code` | opens VS Code at the end (error if VS Code isn't enabled/installed) |
 
+## `twig open [id] [default|herdr|code]`
+
+Opens a card in one target:
+
+| Target | Same as |
+|---|---|
+| `herdr` | `twig herdr <id>` |
+| `code` | `twig code [id]` |
+| `default` (or omitted) | the target set in `[open] default` (`herdr` if unset) |
+
+`twig herdr` and `twig code` are aliases that go through the same code path, with the same
+options and errors. Without `<id>`, the card is inferred as in `twig code` (see below); with
+the `herdr` target, a folder that isn't a card is an error (there is no workspace to open).
+An unknown target is rejected. See [CONFIG.md](CONFIG.md) → `[open]`.
+
+```bash
+twig open 52644             # default target from the config
+twig open 52644 code        # = twig code 52644
+twig open                   # current card, default target
+twig open code              # current card, in VS Code (a lone target is not read as an id)
+```
+
+## `twig open-card [id]` (alias `opcd`)
+
+Opens the card's page (the Azure DevOps work item) in the default browser, using the URL the
+provider cached for the card (fetched once from `az` if missing). Uses `xdg-open` on Linux and
+`open` on macOS; if no opener is found, it prints the URL instead.
+
+Without `<id>`, the card is inferred from the current directory; outside a card it fails with a
+usage error. With `provider = "gh"` it exits non-zero ("not supported yet") until GitHub
+`owner/repo#123` ids exist.
+
+```bash
+twig open-card 52644
+twig opcd                   # current card
+```
+
 ## `twig herdr <id>`
 
 Opens the card's workspace in herdr. If it doesn't exist, creates:
 
-- `agent` tab: one pane per repo running `ai.command` (e.g. `claude`);
+- `agent` tab: one pane per repo running `agent.command` (`claude` or `codex` by default);
 - `run` tab: one pane per repo that has `run` in the config, already starting the project.
 
 If the workspace already exists, it just focuses it. To recreate a closed pane: `twig add-repo <id> <repo>`.
@@ -119,8 +158,8 @@ Lists active cards and each repo's branch. A `*` marks uncommitted changes.
 
 ## `twig refresh <id> [--refetch]`
 
-Regenerates the `.code-workspace` and `CLAUDE.md` of an existing card, preserving the
-"Card context" section of `CLAUDE.md` if it has been filled in (a section under the
+Regenerates the `.code-workspace` and context file of an existing card, preserving the
+"Card context" section of the context file if it has been filled in (a section under the
 old Portuguese heading `## Contexto do card` is also kept, and moved to the new heading).
 Use it after renaming a branch or changing the config.
 
@@ -128,20 +167,23 @@ Use it after renaming a branch or changing the config.
 |---|---|
 | `--refetch` | drops the cache and fetches the card data from the provider again |
 
-## `twig rm <id> [--branches]`
+## `twig rm <id> [--branches] [-f]`
 
-Removes the card's worktrees and folder. Refuses if any repo has uncommitted
-changes. Local branches are kept by default.
+Removes the card's worktrees and folder, and closes its herdr workspace. Refuses if any
+repo has uncommitted changes or if an agent is running (`working` or `blocked`) in the
+card's herdr workspace. Local branches are kept by default. Without herdr installed or
+running, the herdr steps are skipped.
 
 | Option | Description |
 |---|---|
 | `--branches` | also deletes the local branches |
+| `-f`, `--force` | skips both checks (uncommitted changes and running agent) |
 
 ## `twig prune [-n | --dry-run]`
 
 Cleans up orphaned worktree records (folder deleted by hand instead of with `twig rm`) in
 every repo in the config. Also lists folders under `<worktrees>` with no worktree inside
-and asks before deleting them, since they may hold a `CLAUDE.md` with notes.
+and asks before deleting them, since they may hold a context file (`CLAUDE.md` / `AGENTS.md`) with notes.
 
 | Option | Description |
 |---|---|
@@ -162,7 +204,7 @@ Works even with a missing or invalid config (checks that depend on it are skippe
 | VS Code | `code` on the PATH, only with `vscode.enabled = true` | error |
 | provider `az` | on the PATH, `azure-devops` extension, real ADO access (`az devops project list`) | error / warning / warning |
 | provider `gh` | on the PATH, `gh auth status` | error / warning |
-| AI | first token of `ai.command` on the PATH | error |
+| agent | first token of `agent.command` (`claude` / `codex`) on the PATH | error |
 | folders | `paths.worktrees` exists or can be created | error |
 | repos | each `[repos.x]` points to a git repo; at least one has `default = true` | error / warning |
 | orphaned worktrees | same search as `twig prune -n` | warning |
@@ -199,7 +241,7 @@ Removes what the installer put in place:
 
 - the herdr plugin (`herdr plugin unlink twig`, `~/.local/share/twig`) and the shortcut
   block between `# twig:begin` / `# twig:end` in herdr's `config.toml`;
-- the AI skill `~/.claude/skills/twig` (only if it's twig's);
+- the AI skill `~/.claude/skills/twig` or `~/.agents/skills/twig` (only if it's twig's);
 - shell completions and the `PATH` line the installer added to `~/.bashrc` / `~/.zshrc`;
 - the `twig` binary on the `PATH`.
 

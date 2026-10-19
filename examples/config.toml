@@ -7,9 +7,10 @@
 
 version = 1
 
-[ai]
-provider = "claude"
-command  = "claude"
+[agent]
+provider = "claude"               # "claude" | "codex"
+# command      = "claude"         # default: the provider's
+# context_file = "CLAUDE.md"      # default: CLAUDE.md (claude) / AGENTS.md (codex)
 
 [provider]
 default = "az"                    # "az" (Azure DevOps) | "gh" (GitHub)
@@ -25,6 +26,9 @@ open_on_new = false
 
 [herdr]
 open_on_new = false
+
+[open]
+default = "herdr"                 # "herdr" | "code": target of `twig open` without one
 
 [paths]
 worktrees = "~/.wt"

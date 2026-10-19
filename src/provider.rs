@@ -75,7 +75,15 @@ fn fetch(cfg: &Config, id: &str, gh_repo_dir: Option<&Path>) -> Option<String> {
         ProviderKind::Az => {
             sys::which("az")?;
             let mut cmd = Command::new("az");
-            cmd.args(["boards", "work-item", "show", "--id", id, "--output", "json"]);
+            cmd.args([
+                "boards",
+                "work-item",
+                "show",
+                "--id",
+                id,
+                "--output",
+                "json",
+            ]);
             if !cfg.provider.az.organization.is_empty() {
                 cmd.args(["--organization", &cfg.provider.az.organization]);
             }
@@ -85,7 +93,10 @@ fn fetch(cfg: &Config, id: &str, gh_repo_dir: Option<&Path>) -> Option<String> {
             sys::which("gh")?;
             let mut cmd = Command::new("gh");
             cmd.args([
-                "issue", "view", id, "--json",
+                "issue",
+                "view",
+                id,
+                "--json",
                 "number,title,url,body,state,labels,assignees",
             ]);
             if let Some(dir) = gh_repo_dir {
@@ -143,7 +154,11 @@ fn parse(kind: ProviderKind, raw: &str) -> Option<CardInfo> {
                     .unwrap_or_default()
             };
             let labels = names("labels", "name");
-            let kind = if labels.to_lowercase().contains("bug") { "Bug" } else { "Issue" };
+            let kind = if labels.to_lowercase().contains("bug") {
+                "Bug"
+            } else {
+                "Issue"
+            };
             CardInfo {
                 title: d["title"].as_str().unwrap_or_default().to_string(),
                 url: d["url"].as_str().unwrap_or_default().to_string(),
@@ -165,7 +180,10 @@ fn truncate(t: &str, limit: usize) -> String {
         return t.to_string();
     }
     let cut: String = t.chars().take(limit).collect();
-    let cut = cut.rsplit_once('\n').map(|(a, _)| a.to_string()).unwrap_or(cut);
+    let cut = cut
+        .rsplit_once('\n')
+        .map(|(a, _)| a.to_string())
+        .unwrap_or(cut);
     format!("{cut}\n\n_(truncated)_")
 }
 
@@ -174,9 +192,13 @@ pub fn strip_html(raw: &str, limit: usize) -> String {
         return String::new();
     }
     let re = |p: &str| Regex::new(p).unwrap();
-    let mut t = re(r"(?i)<\s*(br|/p|/div|/tr|/h[1-6])\s*/?\s*>").replace_all(raw, "\n").into_owned();
+    let mut t = re(r"(?i)<\s*(br|/p|/div|/tr|/h[1-6])\s*/?\s*>")
+        .replace_all(raw, "\n")
+        .into_owned();
     t = re(r"(?i)<\s*li[^>]*>").replace_all(&t, "\n- ").into_owned();
-    t = re(r"(?i)<\s*(td|th)[^>]*>").replace_all(&t, " | ").into_owned();
+    t = re(r"(?i)<\s*(td|th)[^>]*>")
+        .replace_all(&t, " | ")
+        .into_owned();
     t = re(r"<[^>]+>").replace_all(&t, "").into_owned();
     t = unescape_html(&t).replace('\u{a0}', " ");
     t = re(r"[ \t]+").replace_all(&t, " ").into_owned();
@@ -210,7 +232,11 @@ fn unescape_html(s: &str) -> String {
 }
 
 pub fn slugify(text: &str, maxlen: usize) -> String {
-    let plain: String = text.nfkd().filter(|c| !is_combining_mark(*c)).collect::<String>().to_lowercase();
+    let plain: String = text
+        .nfkd()
+        .filter(|c| !is_combining_mark(*c))
+        .collect::<String>()
+        .to_lowercase();
     let slug = Regex::new(r"[^a-z0-9]+").unwrap().replace_all(&plain, "-");
     let mut slug = slug.trim_matches('-').to_string();
     if slug.len() > maxlen {
@@ -228,13 +254,22 @@ mod tests {
 
     #[test]
     fn slug_strips_accents_and_cuts_at_word() {
-        assert_eq!(slugify("Aferição de Pneus: ajuste", 40), "afericao-de-pneus-ajuste");
-        assert_eq!(slugify("um titulo bem comprido que passa do limite de quarenta", 40), "um-titulo-bem-comprido-que-passa-do");
+        assert_eq!(
+            slugify("Aferição de Pneus: ajuste", 40),
+            "afericao-de-pneus-ajuste"
+        );
+        assert_eq!(
+            slugify("um titulo bem comprido que passa do limite de quarenta", 40),
+            "um-titulo-bem-comprido-que-passa-do"
+        );
     }
 
     #[test]
     fn html_becomes_text() {
-        let t = strip_html("<div>Oi&nbsp;<b>mundo</b></div><ul><li>a</li><li>b</li></ul>", 100);
+        let t = strip_html(
+            "<div>Oi&nbsp;<b>mundo</b></div><ul><li>a</li><li>b</li></ul>",
+            100,
+        );
         assert_eq!(t, "Oi mundo\n\n- a\n- b");
     }
 }

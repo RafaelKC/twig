@@ -18,9 +18,10 @@ and type-coercion pitfalls in a hand-edited file.
 ```toml
 version = 1                       # schema version, so `twig update` can migrate
 
-[ai]
-provider = "claude"               # only "claude" for now
-command  = "claude"               # what `twig herdr` runs in the agent tab
+[agent]
+provider = "claude"               # "claude" | "codex"
+# command      = "claude"         # what `twig herdr` runs in the agent tab (default: the provider's)
+# context_file = "CLAUDE.md"      # card context file (default: CLAUDE.md / AGENTS.md)
 
 [provider]
 default = "az"                    # "az" | "gh"
@@ -73,12 +74,15 @@ run     = "pnpm start"
 |---|---|---|---|
 | `version` | yes | `1` | schema version; `twig update` uses it to migrate |
 
-### `[ai]`
+### `[agent]`
 
 | Field | Default | Description |
 |---|---|---|
-| `provider` | `"claude"` | AI chosen at install. Only `claude` for now |
-| `command` | `"claude"` | command that starts the agent in herdr's `agent` tab |
+| `provider` | `"claude"` | agent chosen at install: `claude` (Claude Code) or `codex` (Codex). Anything else is rejected |
+| `command` | the provider's (`claude` / `codex`) | command that starts the agent in herdr's `agent` tab |
+| `context_file` | the provider's (`CLAUDE.md` / `AGENTS.md`) | name of the card's context file; a file name, not a path |
+
+The section used to be called `[ai]`; the old name is still accepted.
 
 ### `[provider]`
 
@@ -110,6 +114,15 @@ The two `open_on_new` settings are independent: you can open both, just one, or 
 With `open_on_new = false`, the user opens it for that run with `--herdr` or `--code`.
 `--code` errors if `vscode.enabled = false` or if `code` isn't installed.
 See [COMMANDS.md](COMMANDS.md).
+
+### `[open]`
+
+| Field | Default | Description |
+|---|---|---|
+| `default` | `"herdr"` | target of `twig open` when none is given: `"herdr"` or `"code"` |
+
+Any other value is a config error (reported by `twig doctor` and `twig config edit`).
+`"code"` with `vscode.enabled = false` is flagged by `twig doctor`.
 
 ### `[paths]`
 

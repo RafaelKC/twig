@@ -13,13 +13,14 @@ repository (e.g. back end and front end), so each card gets:
 ├── <repo-a>/                git worktree of repo A, on the card's branch
 ├── <repo-b>/                git worktree of repo B
 ├── CLAUDE.md                card context: work item data, repos, branches, rules
+│                            (AGENTS.md when agent.provider = "codex")
 ├── <id>.code-workspace      VS Code workspace (only if vscode.enabled)
 └── .ado.json | .gh.json     cache of the card data
 ```
 
 and a **herdr workspace** labeled `<id>`:
 
-- tab `agent`: one pane per repo, running the AI (`ai.command`, e.g. `claude`);
+- tab `agent`: one pane per repo, running the agent (`agent.command`, e.g. `claude` or `codex`);
 - tab `run`: one pane per repo that has `run` in the config (and `autorun` not `false`).
 
 The repos' main clones stay elsewhere, on the base branch. Never touch them from
@@ -27,7 +28,7 @@ a card.
 
 ## Before anything else
 
-1. **Inside `~/.wt/<id>/`?** Read `~/.wt/<id>/CLAUDE.md` first. It says what the
+1. **Inside `~/.wt/<id>/`?** Read `~/.wt/<id>/CLAUDE.md` (or `AGENTS.md` for Codex) first. It says what the
    card asks for, which repos and branches are in the card, and has the
    "Card context" section with notes from previous sessions.
 2. **Is `twig` available?** `command -v twig`. If not, look in
@@ -39,11 +40,13 @@ a card.
 |---|---|
 | `twig new <id> [slug]` | start a new card |
 | `twig add-repo <id> <repo,...>` | the card needs another repo; also recreates closed panes in herdr |
-| `twig herdr <id>` | open/focus the card in herdr (creates whatever is missing) |
-| `twig code [id]` | open the card in VS Code; without an id, the card of the current directory |
+| `twig open [id] [default\|herdr\|code]` | open the card in a target; no target uses `[open] default` (herdr unless configured); no id = card of the current directory. `twig open code` and `twig open 123 code` both work |
+| `twig herdr <id>` | alias of `open <id> herdr`: open/focus the card in herdr (creates whatever is missing) |
+| `twig code [id]` | alias of `open [id] code`: open the card in VS Code |
+| `twig open-card [id]` (alias `opcd`) | open the card's page in the browser (Azure DevOps only; `gh` errors with "not supported yet"); prints the URL if no opener exists |
 | `twig ls` | list active cards and each repo's branch (`*` = uncommitted changes) |
-| `twig refresh <id> [--refetch]` | regenerate `CLAUDE.md` and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
-| `twig rm <id> [--branches]` | close the card (refuses if there are uncommitted changes) |
+| `twig refresh <id> [--refetch]` | regenerate the context file (`CLAUDE.md`/`AGENTS.md`) and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
+| `twig rm <id> [--branches] [-f]` | close the card and its herdr workspace; refuses with uncommitted changes or a running agent (`working`/`blocked`); `-f/--force` bypasses both, so only use it when the user asks |
 | `twig prune [-n]` | clean up orphaned worktree records (folder deleted by hand) |
 | `twig doctor` | diagnose dependencies, login, config, and repos |
 | `twig update` | update twig, its herdr plugin and this skill to the latest release |
@@ -82,7 +85,7 @@ a card.
 
 Two pitfalls:
 
-- **`twig herdr <id>` and `--herdr` outside herdr open the herdr UI** and block the
+- **`twig herdr <id>`, `twig open` (herdr target) and `--herdr` outside herdr open the herdr UI** and block the
   terminal. If `HERDR_ENV` is not `1`, don't use them; `twig new` already creates the
   herdr workspace on its own. Tell the user to run `twig herdr <id>`.
 - **`twig config edit` opens an editor.** As an agent, edit the config file
@@ -93,8 +96,9 @@ Two pitfalls:
 - "começa o card 123" (start card 123) → `twig new 123`. If the user named repos, `--repos`.
 - "o card 123 também mexe no repo X" (card 123 also touches repo X) → `twig add-repo 123 X`.
 - "fechei sem querer o painel do repo X" (accidentally closed repo X's pane) → `twig add-repo 123 X` (recreates what's missing).
+- "abre o card 123 no browser" (open card 123's page) → `twig open-card 123`.
 - "terminei o card 123" (finished card 123) → check `twig ls` (no `*`), confirm with the user, and only then
-  `twig rm 123`. Local branches are only deleted with `--branches`, and only if the user asks.
+  `twig rm 123`. If it refuses because an agent is running, tell the user instead of using `-f`. Local branches are only deleted with `--branches`, and only if the user asks.
 - "mudei de branch" or "mexi no config" (switched branch / changed the config) → `twig refresh <id>`.
 - "dá erro de 'already registered'" ('already registered' error) → `twig prune`.
 - Something odd in the environment → `twig doctor` and read the ✖ and ! lines.
@@ -108,7 +112,7 @@ Two pitfalls:
   in the messages on both sides when the change is coupled.
 - **Dependencies and caches are per worktree** (`node_modules`, `bin/`, `obj/`...). Don't
   symlink between cards.
-- **The card's `CLAUDE.md` is not versioned.** Update the "Card context"
+- **The card's context file (`CLAUDE.md`/`AGENTS.md`) is not versioned.** Update the "Card context"
   section with decisions and loose ends; it survives `twig refresh`. The rest of the file
   is regenerated.
 
@@ -120,8 +124,10 @@ in `docs/CONFIG.md` in the twig repository. The essentials:
 ```toml
 version = 1
 
-[ai]
-command = "claude"                # what runs in the agent tab
+[agent]
+provider = "claude"               # "claude" | "codex" (context file CLAUDE.md / AGENTS.md)
+command  = ""                     # empty = the provider's default; what runs in the agent tab
+# context_file = ""               # optional override (bare file name)
 
 [provider]
 default = "az"                    # "az" | "gh"
@@ -129,6 +135,9 @@ default = "az"                    # "az" | "gh"
 [vscode]
 enabled     = true
 open_on_new = false               # open VS Code at the end of new/add-repo
+
+[open]
+default = "herdr"                # target for `twig open` without one: "herdr" | "code"
 
 [herdr]
 open_on_new = false               # focus herdr at the end of new/add-repo

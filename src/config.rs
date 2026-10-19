@@ -10,7 +10,8 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub version: u32,
-    #[serde(default)]
+    // `[ai]` is the old name of the section, still accepted
+    #[serde(default, rename = "agent", alias = "ai")]
     pub ai: Ai,
     #[serde(default)]
     pub provider: Provider,
@@ -18,6 +19,8 @@ pub struct Config {
     pub vscode: Vscode,
     #[serde(default)]
     pub herdr: Herdr,
+    #[serde(default)]
+    pub open: Open,
     #[serde(default)]
     pub paths: Paths,
     #[serde(default)]
@@ -34,13 +37,64 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ai {
-    pub provider: String,
-    pub command: String,
+    pub provider: AgentKind,
+    /// empty = the provider's default command
+    command: String,
+    /// empty = the provider's default context file
+    context_file: String,
 }
 
 impl Default for Ai {
     fn default() -> Self {
-        Self { provider: "claude".into(), command: "claude".into() }
+        Self {
+            provider: AgentKind::Claude,
+            command: String::new(),
+            context_file: String::new(),
+        }
+    }
+}
+
+impl Ai {
+    /// What `twig herdr` runs in the agent tab.
+    pub fn command(&self) -> &str {
+        if self.command.is_empty() {
+            self.provider.default_command()
+        } else {
+            &self.command
+        }
+    }
+
+    /// Name of the card's context file (CLAUDE.md, AGENTS.md, or the configured override).
+    pub fn context_file(&self) -> &str {
+        if self.context_file.is_empty() {
+            self.provider.default_context_file()
+        } else {
+            &self.context_file
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentKind {
+    #[default]
+    Claude,
+    Codex,
+}
+
+impl AgentKind {
+    pub fn default_command(self) -> &'static str {
+        match self {
+            Self::Claude => "claude",
+            Self::Codex => "codex",
+        }
+    }
+
+    pub fn default_context_file(self) -> &'static str {
+        match self {
+            Self::Claude => "CLAUDE.md",
+            Self::Codex => "AGENTS.md",
+        }
     }
 }
 
@@ -83,7 +137,10 @@ pub struct Vscode {
 
 impl Default for Vscode {
     fn default() -> Self {
-        Self { enabled: true, open_on_new: true }
+        Self {
+            enabled: true,
+            open_on_new: true,
+        }
     }
 }
 
@@ -91,6 +148,21 @@ impl Default for Vscode {
 #[serde(deny_unknown_fields, default)]
 pub struct Herdr {
     pub open_on_new: bool,
+}
+
+/// Where `twig open` goes when no target is given.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OpenTarget {
+    #[default]
+    Herdr,
+    Code,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Open {
+    pub default: OpenTarget,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,7 +175,11 @@ pub struct Paths {
 
 impl Default for Paths {
     fn default() -> Self {
-        Self { worktrees: "~/.wt".into(), repos: "~".into(), search: vec![] }
+        Self {
+            worktrees: "~/.wt".into(),
+            repos: "~".into(),
+            search: vec![],
+        }
     }
 }
 
@@ -116,7 +192,10 @@ pub struct Git {
 
 impl Default for Git {
     fn default() -> Self {
-        Self { base_branch: "main".into(), branch_prefix: HashMap::new() }
+        Self {
+            base_branch: "main".into(),
+            branch_prefix: HashMap::new(),
+        }
     }
 }
 
@@ -209,8 +288,9 @@ impl Config {
         if cfg.version != 1 {
             bail!("unsupported config version: {} (expected 1)", cfg.version);
         }
-        if cfg.ai.provider != "claude" {
-            bail!("unsupported ai.provider: {} (only \"claude\" for now)", cfg.ai.provider);
+        let cf = cfg.ai.context_file();
+        if cf.contains(['/', '\\']) {
+            bail!("agent.context_file must be a file name, not a path: {cf}");
         }
         cfg.file = file;
         Ok(cfg)
@@ -247,7 +327,11 @@ impl Config {
     }
 
     pub fn default_repos(&self) -> Vec<String> {
-        self.repos.iter().filter(|(_, r)| r.default).map(|(n, _)| n.clone()).collect()
+        self.repos
+            .iter()
+            .filter(|(_, r)| r.default)
+            .map(|(n, _)| n.clone())
+            .collect()
     }
 
     /// Folders searched, in order, for a repo without `path`.
@@ -278,7 +362,10 @@ impl Config {
                 return is_git_repo(&p).then_some(p);
             }
         }
-        self.search_roots().into_iter().map(|b| b.join(name)).find(|p| is_git_repo(p))
+        self.search_roots()
+            .into_iter()
+            .map(|b| b.join(name))
+            .find(|p| is_git_repo(p))
     }
 
     pub fn branch_prefix(&self, work_item_type: &str) -> String {
@@ -310,8 +397,59 @@ impl Config {
         fs::write(&self.file, doc.to_string())
             .with_context(|| format!("could not write {}", self.file.display()))?;
 
-        let repo = Repo { path: if in_root { String::new() } else { clone.display().to_string() }, ..Default::default() };
+        let repo = Repo {
+            path: if in_root {
+                String::new()
+            } else {
+                clone.display().to_string()
+            },
+            ..Default::default()
+        };
         self.repos.insert(name.to_string(), repo);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(ai: &str) -> Result<Config, toml::de::Error> {
+        toml::from_str(&format!("version = 1\n{ai}"))
+    }
+
+    #[test]
+    fn claude_is_the_default() {
+        let cfg = parse("").unwrap();
+        assert_eq!(cfg.ai.command(), "claude");
+        assert_eq!(cfg.ai.context_file(), "CLAUDE.md");
+    }
+
+    #[test]
+    fn codex_derives_command_and_context_file() {
+        let cfg = parse("[agent]\nprovider = \"codex\"").unwrap();
+        assert_eq!(cfg.ai.command(), "codex");
+        assert_eq!(cfg.ai.context_file(), "AGENTS.md");
+    }
+
+    #[test]
+    fn command_and_context_file_can_be_overridden() {
+        let cfg = parse("[agent]\nprovider = \"codex\"\ncommand = \"codex --full-auto\"\ncontext_file = \"NOTES.md\"").unwrap();
+        assert_eq!(cfg.ai.command(), "codex --full-auto");
+        assert_eq!(cfg.ai.context_file(), "NOTES.md");
+    }
+
+    #[test]
+    fn old_ai_section_name_still_works() {
+        let cfg = parse("[ai]\nprovider = \"claude\"\ncommand = \"claude\"").unwrap();
+        assert_eq!(cfg.ai.provider, AgentKind::Claude);
+    }
+
+    #[test]
+    fn unknown_agent_is_rejected_with_the_valid_options() {
+        let err = parse("[agent]\nprovider = \"gemini\"")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("claude") && err.contains("codex"), "{err}");
     }
 }

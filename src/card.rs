@@ -20,7 +20,9 @@ pub fn split_id(raw: &str) -> (String, Option<String>) {
 
 /// Repos actually present in the card folder (independent of the config), sorted alphabetically.
 pub fn repos_in(dir: &Path) -> Vec<String> {
-    let Ok(entries) = fs::read_dir(dir) else { return vec![] };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return vec![];
+    };
     let mut repos: Vec<String> = entries
         .flatten()
         .filter(|e| e.path().join(".git").exists())
@@ -33,13 +35,20 @@ pub fn repos_in(dir: &Path) -> Vec<String> {
 /// Card repos in config order (registered ones first, in file order), then the rest.
 pub fn repos_ordered(cfg: &Config, dir: &Path) -> Vec<String> {
     let present = repos_in(dir);
-    let mut ordered: Vec<String> = cfg.repos.keys().filter(|r| present.contains(r)).cloned().collect();
+    let mut ordered: Vec<String> = cfg
+        .repos
+        .keys()
+        .filter(|r| present.contains(r))
+        .cloned()
+        .collect();
     ordered.extend(present.into_iter().filter(|r| !cfg.repos.contains_key(r)));
     ordered
 }
 
 pub fn list_cards(cfg: &Config) -> Vec<String> {
-    let Ok(entries) = fs::read_dir(cfg.worktrees()) else { return vec![] };
+    let Ok(entries) = fs::read_dir(cfg.worktrees()) else {
+        return vec![];
+    };
     let mut ids: Vec<String> = entries
         .flatten()
         .filter(|e| e.path().is_dir())
@@ -96,7 +105,11 @@ pub fn infer(cfg: &Config) -> Current {
             }
         }
     }
-    Current::Dir(dirs.into_iter().find(|d| d.is_dir()).unwrap_or_else(|| PathBuf::from(".")))
+    Current::Dir(
+        dirs.into_iter()
+            .find(|d| d.is_dir())
+            .unwrap_or_else(|| PathBuf::from(".")),
+    )
 }
 
 /// Make sure the repo exists; a repo missing from the config gets registered (asks for the path if not found).
@@ -104,7 +117,10 @@ pub fn ensure_repo(cfg: &mut Config, name: &str) -> Result<PathBuf> {
     if let Some(p) = cfg.repo_path(name) {
         if !cfg.repos.contains_key(name) {
             cfg.register_repo(name, &p)?;
-            ui::ok(format!("repo {name} registered in the config ({})", p.display()));
+            ui::ok(format!(
+                "repo {name} registered in the config ({})",
+                p.display()
+            ));
         }
         return Ok(p);
     }
@@ -127,7 +143,10 @@ pub fn ensure_repo(cfg: &mut Config, name: &str) -> Result<PathBuf> {
         bail!("{} is not a git repo", p.display());
     }
     cfg.register_repo(name, &p)?;
-    ui::ok(format!("repo {name} registered in the config ({})", p.display()));
+    ui::ok(format!(
+        "repo {name} registered in the config ({})",
+        p.display()
+    ));
     Ok(p)
 }
 
@@ -184,11 +203,17 @@ fn resolve_branch(repo_name: &str, repo: &Path, o: &BranchOpts) -> (String, Orig
         0 => (branch_name(o.prefix, o.id, o.slug), Origin::New),
         1 => (matches[0].clone(), Origin::Remote),
         n => {
-            ui::warn(format!("[{repo_name}] {n} branches on origin with '{}':", o.id));
+            ui::warn(format!(
+                "[{repo_name}] {n} branches on origin with '{}':",
+                o.id
+            ));
             for (i, b) in matches.iter().enumerate() {
                 eprintln!("   \x1b[1m{})\x1b[0m {b}", i + 1);
             }
-            eprintln!("   \x1b[1m0)\x1b[0m create a new branch from origin/{}", o.base);
+            eprintln!(
+                "   \x1b[1m0)\x1b[0m create a new branch from origin/{}",
+                o.base
+            );
             let choice = ui::ask("   choice [1]: ");
             match choice.as_str() {
                 "0" => (branch_name(o.prefix, o.id, o.slug), Origin::New),
@@ -217,14 +242,26 @@ pub fn make_worktree(repo_name: &str, repo: &Path, dest: &Path, o: &BranchOpts) 
         ui::info(format!("[{repo_name}] local branch already existed"));
     } else if matches!(origin, Origin::Remote) {
         sys::run(sys::git(repo).args([
-            "worktree", "add", "--track", "-b", &branch, &dest_s, &format!("origin/{branch}"),
+            "worktree",
+            "add",
+            "--track",
+            "-b",
+            &branch,
+            &dest_s,
+            &format!("origin/{branch}"),
         ]))?;
         ui::info(format!("[{repo_name}] came from origin (upstream set)"));
     } else {
         // --no-track: branching from origin/<base> would make git adopt the base as upstream,
         // and a bare push/pull would target it
         sys::run(sys::git(repo).args([
-            "worktree", "add", "--no-track", "-b", &branch, &dest_s, &format!("origin/{}", o.base),
+            "worktree",
+            "add",
+            "--no-track",
+            "-b",
+            &branch,
+            &dest_s,
+            &format!("origin/{}", o.base),
         ]))?;
         sys::quiet(sys::git(repo).args(["config", &format!("branch.{branch}.remote"), "origin"]));
         sys::quiet(sys::git(repo).args([
@@ -247,7 +284,12 @@ pub fn rollback(cfg: &Config, dir: &Path, done: &[String]) {
     for repo in done {
         if let Some(main) = cfg.repo_path(repo) {
             let wt = dir.join(repo);
-            sys::quiet(sys::git(&main).args(["worktree", "remove", "--force", &wt.to_string_lossy()]));
+            sys::quiet(sys::git(&main).args([
+                "worktree",
+                "remove",
+                "--force",
+                &wt.to_string_lossy(),
+            ]));
             sys::quiet(sys::git(&main).args(["worktree", "prune"]));
             ui::info(format!("[{repo}] worktree undone"));
         }
@@ -262,7 +304,9 @@ pub fn rollback(cfg: &Config, dir: &Path, done: &[String]) {
 pub fn copy_local_files(cfg: &Config, dir: &Path) {
     let mut n = 0;
     for repo in repos_in(dir) {
-        let Some(main) = cfg.repo_path(&repo) else { continue };
+        let Some(main) = cfg.repo_path(&repo) else {
+            continue;
+        };
         let wt = dir.join(&repo);
         let mut patterns = cfg.worktree.local_files.clone();
         if let Some(r) = cfg.repo(&repo) {
@@ -271,11 +315,15 @@ pub fn copy_local_files(cfg: &Config, dir: &Path) {
         for pattern in patterns {
             let full = main.join(&pattern);
             let Ok(paths) = glob::glob(&full.to_string_lossy()) else {
-                ui::warn(format!("[{repo}] invalid pattern in local_files: {pattern}"));
+                ui::warn(format!(
+                    "[{repo}] invalid pattern in local_files: {pattern}"
+                ));
                 continue;
             };
             for src in paths.flatten().filter(|p| p.is_file()) {
-                let Ok(rel) = src.strip_prefix(&main) else { continue };
+                let Ok(rel) = src.strip_prefix(&main) else {
+                    continue;
+                };
                 let rel_s = rel.to_string_lossy().replace('\\', "/");
                 let dst = wt.join(rel);
                 if dst.exists() || sys::git_is_tracked(&wt, &rel_s) {
@@ -299,8 +347,8 @@ pub fn copy_local_files(cfg: &Config, dir: &Path) {
 /// Deterministic per-card color (same id = always the same color).
 pub fn color(id: &str) -> &'static str {
     const PALETTE: [&str; 10] = [
-        "#7d3c98", "#b03a2e", "#1f618d", "#117864", "#af601a",
-        "#2c3e50", "#196f3d", "#6c3483", "#884ea0", "#a04000",
+        "#7d3c98", "#b03a2e", "#1f618d", "#117864", "#af601a", "#2c3e50", "#196f3d", "#6c3483",
+        "#884ea0", "#a04000",
     ];
     let digits: String = id.chars().filter(char::is_ascii_digit).collect();
     let tail = &digits[digits.len().saturating_sub(18)..];
@@ -314,7 +362,10 @@ mod tests {
 
     #[test]
     fn splits_id_and_slug() {
-        assert_eq!(split_id("50306-dispositivos"), ("50306".into(), Some("dispositivos".into())));
+        assert_eq!(
+            split_id("50306-dispositivos"),
+            ("50306".into(), Some("dispositivos".into()))
+        );
         assert_eq!(split_id("50306"), ("50306".into(), None));
     }
 

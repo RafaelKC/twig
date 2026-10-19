@@ -191,6 +191,16 @@ install_claude() {
   have claude || PATH="$HOME/.local/bin:$PATH"
 }
 
+install_codex() {
+  if have npm; then
+    npm install -g @openai/codex
+  elif have brew; then
+    brew install codex
+  else
+    warn "install Codex manually: https://github.com/openai/codex"
+  fi
+}
+
 # ───────────────────────── dependencies ─────────────────────────
 
 AI=""
@@ -307,13 +317,28 @@ setup_provider() {
 
 setup_ai() {
   section "AI"
-  # only Claude Code for now; the question is here so other agents can be added
-  if have claude; then
-    if confirm "Claude Code is already installed. Use it?" y; then AI=claude && ok "using Claude Code"; fi
-  elif confirm "Claude Code not found. Install it?" y; then
-    install_claude
-    have claude && AI=claude && ok "Claude Code installed"
+  if have claude && have codex; then
+    echo "  Claude Code and Codex are both installed."
   fi
+  choice=$(ask "which agent do you want to use? (claude/codex) [claude]:" "claude")
+  case "$choice" in
+    codex)
+      if have codex; then
+        AI=codex && ok "using Codex"
+      elif confirm "Codex not found. Install it?" y; then
+        install_codex
+        have codex && AI=codex && ok "Codex installed"
+      fi
+      ;;
+    *)
+      if have claude; then
+        if confirm "Claude Code is already installed. Use it?" y; then AI=claude && ok "using Claude Code"; fi
+      elif confirm "Claude Code not found. Install it?" y; then
+        install_claude
+        have claude && AI=claude && ok "Claude Code installed"
+      fi
+      ;;
+  esac
   [ -n "$AI" ] || warn "no AI: the herdr agent tab will have nothing to run"
 }
 
@@ -415,12 +440,15 @@ install_binary() {
 }
 
 install_skill() {
-  dest="$HOME/.claude/skills/twig"
-  if [ "$AI" != claude ] && [ ! -e "$dest" ]; then return; fi
+  case "$AI" in
+    codex) dest="$HOME/.agents/skills/twig"; name="Codex" ;;
+    *) dest="$HOME/.claude/skills/twig"; name="Claude Code" ;;
+  esac
+  if [ -z "$AI" ] && [ ! -e "$dest" ]; then return; fi
   mkdir -p "$(dirname "$dest")"
   rm -rf "$dest"
   cp -R "$PKG/skills/twig" "$dest"
-  ok "Claude Code skill at $dest"
+  ok "$name skill at $dest"
 }
 
 install_herdr_plugin() {
@@ -485,9 +513,8 @@ write_config() {
 # twig config. Format: https://github.com/$REPO/blob/main/docs/CONFIG.md
 version = 1
 
-[ai]
-provider = "claude"
-command  = "claude"
+[agent]
+provider = "${AI:-claude}"
 
 [provider]
 default = "${PROVIDER:-az}"
