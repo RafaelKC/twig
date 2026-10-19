@@ -107,6 +107,12 @@ enum Cmd {
         #[arg(value_enum)]
         target: Option<Target>,
     },
+    /// Open the card's page (work item) in the default browser (Azure DevOps only for now).
+    ///
+    /// Without <ID>, the card is inferred from the current directory; outside a card, it is a
+    /// usage error. With `provider = "gh"` this is not supported yet.
+    #[command(name = "open-card", alias = "opcd")]
+    OpenCard { id: Option<String> },
     /// Open the card's herdr workspace (creates whatever is missing).
     Herdr { id: String },
     /// Open the card in VS Code (generates the .code-workspace if missing).
@@ -214,6 +220,7 @@ fn run(cli: Cli) -> Result<()> {
             };
             commands::open(&cfg, id.as_deref(), target)
         }
+        Cmd::OpenCard { id } => commands::open_card(&cfg, id.as_deref()),
         Cmd::Herdr { id } => commands::herdr_cmd(&cfg, &id),
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
         Cmd::Ls => commands::ls(&cfg),

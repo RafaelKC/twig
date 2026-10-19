@@ -12,7 +12,7 @@ Order of work (each step settles the surface the next one builds on):
 
 1. [x] [#6](https://github.com/RafaelKC/twig/issues/6) `rm` removes the herdr workspace, blocks when an agent is running, `-f/--force` bypasses the checks
 2. [x] [#1](https://github.com/RafaelKC/twig/issues/1) `twig open [id] [default|herdr|code]`; `herdr` and `code` stay as aliases; default target in the config
-3. [ ] [#7](https://github.com/RafaelKC/twig/issues/7) `twig open-card` / `opcd`, Azure DevOps only (`gh` gives a clear "not supported yet")
+3. [x] [#7](https://github.com/RafaelKC/twig/issues/7) `twig open-card` / `opcd`, Azure DevOps only (`gh` gives a clear "not supported yet")
 4. [x] [#2](https://github.com/RafaelKC/twig/issues/2) Codex next to Claude Code (`AGENTS.md` / `CLAUDE.md`); other agents are tracked in [#8](https://github.com/RafaelKC/twig/issues/8)
 
 ### Later
@@ -90,7 +90,7 @@ Current: v0.1.1 (installer, `update`, `uninstall`, `doctor`, `prune`, completion
 
 - [x] `twig rm` also removes the herdr workspace, blocks on a running agent, `-f` ([#6](https://github.com/RafaelKC/twig/issues/6))
 - [x] `twig open [id] [default|herdr|code]` ([#1](https://github.com/RafaelKC/twig/issues/1))
-- [ ] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7))
+- [x] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7))
 - [ ] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9)), `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
 - [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12)), `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
 - [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5)), handoff notes ([#16](https://github.com/RafaelKC/twig/issues/16))

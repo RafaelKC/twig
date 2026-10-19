@@ -4,7 +4,7 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-use crate::config::{Config, OpenTarget};
+use crate::config::{Config, OpenTarget, ProviderKind};
 use crate::provider::{self, CardInfo};
 use crate::{card, claude_md, herdr, sys, ui, workspace};
 
@@ -261,6 +261,35 @@ pub fn open(cfg: &Config, id: Option<&str>, target: Option<OpenTarget>) -> Resul
             },
         },
     }
+}
+
+/// `twig open-card [id]`: open the card's cached provider URL in the browser (Azure DevOps only).
+pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
+    if cfg.provider.default == ProviderKind::Gh {
+        bail!("open-card is not supported yet for provider \"gh\" (needs owner/repo#123 ids, see issue #4)");
+    }
+    let id = match id {
+        Some(id) => id.to_string(),
+        None => match card::infer(cfg) {
+            card::Current::Card(id) => id,
+            card::Current::Dir(dir) => {
+                bail!("{} is not inside a card; usage: twig open-card <id>", dir.display())
+            }
+        },
+    };
+    let repo = card::repos_ordered(cfg, &cfg.card_dir(&id)).first().and_then(|r| cfg.repo_path(r));
+    let url = provider::load(cfg, &id, repo.as_deref())
+        .map(|i| i.url)
+        .filter(|u| !u.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("no URL for card {id}: not cached and the provider returned nothing (is `az` installed and logged in?)"))?;
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    if sys::which(opener).is_some() && sys::quiet(Command::new(opener).arg(&url)) {
+        ui::ok(format!("opening #{id}: {url}"));
+    } else {
+        ui::warn(format!("could not launch `{opener}`; open this URL manually"));
+        println!("{url}");
+    }
+    Ok(())
 }
 
 pub fn herdr_cmd(cfg: &Config, id: &str) -> Result<()> {

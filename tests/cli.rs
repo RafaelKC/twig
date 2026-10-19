@@ -679,3 +679,68 @@ fn rm_works_without_herdr() {
     assert_exit(&o, 0);
     assert!(!s.path("wt/123").exists());
 }
+
+// ───────────────────────── open-card ─────────────────────────
+
+const CARD_URL: &str = "https://dev.azure.com/o/p/_workitems/edit/123";
+
+/// Card `123` with a cached ADO work item and a fake browser opener (`xdg-open` and `open`) that logs its argument.
+fn open_card_sandbox(extra: &str) -> (Sandbox, PathBuf) {
+    let s = Sandbox::new();
+    s.valid_config(extra);
+    fs::create_dir_all(s.path("wt/123/r1/.git")).unwrap();
+    fs::write(
+        s.path("wt/123/.ado.json"),
+        format!(r#"{{"fields":{{"System.Title":"T"}},"_links":{{"html":{{"href":"{CARD_URL}"}}}}}}"#),
+    )
+    .unwrap();
+    let log = s.path("opener.log");
+    for name in ["xdg-open", "open"] {
+        s.stub(name, &format!("echo \"$1\" > {}", log.display()));
+    }
+    (s, log)
+}
+
+#[test]
+fn open_card_opens_the_cached_url() {
+    let (s, log) = open_card_sandbox("");
+    assert_exit(&s.run(&["open-card", "123"]), 0);
+    assert_eq!(opened(&log), CARD_URL);
+}
+
+#[test]
+fn opcd_alias_infers_the_current_card() {
+    let (s, log) = open_card_sandbox("");
+    let mut c = s.cmd(&["opcd"]);
+    c.current_dir(s.path("wt/123/r1"));
+    assert_exit(&s.run_with(c, ""), 0);
+    assert_eq!(opened(&log), CARD_URL);
+}
+
+#[test]
+fn open_card_without_id_outside_a_card_is_a_usage_error() {
+    let (s, log) = open_card_sandbox("");
+    let o = s.run(&["open-card"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "usage: twig open-card <id>");
+    assert_eq!(opened(&log), "");
+}
+
+#[test]
+fn open_card_prints_the_url_without_an_opener() {
+    let (s, _log) = open_card_sandbox("");
+    fs::remove_file(s.bin.join("xdg-open")).unwrap();
+    fs::remove_file(s.bin.join("open")).unwrap();
+    let o = s.run(&["open-card", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, CARD_URL);
+}
+
+#[test]
+fn open_card_with_gh_provider_fails_clearly() {
+    let (s, log) = open_card_sandbox("[provider]\ndefault = \"gh\"\n");
+    let o = s.run(&["open-card", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "not supported yet for provider \"gh\"");
+    assert_eq!(opened(&log), "");
+}

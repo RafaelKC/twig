@@ -9,6 +9,7 @@
 | `twig new <id> [slug]` | creates the card: worktrees, herdr workspace and, if enabled, `.code-workspace` |
 | `twig add-repo <id> <repo,...>` | adds more repos to an existing card |
 | `twig open [id] [default\|herdr\|code]` | opens the card in the chosen target (default: `[open] default`, herdr) |
+| `twig open-card [id]` (`opcd`) | opens the card's page in the browser (Azure DevOps only for now) |
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls` | lists active cards and each repo's branch |
@@ -110,6 +111,21 @@ An unknown target is rejected. See [CONFIG.md](CONFIG.md) → `[open]`.
 twig open 52644             # default target from the config
 twig open 52644 code        # = twig code 52644
 twig open                   # current card, default target
+```
+
+## `twig open-card [id]` (alias `opcd`)
+
+Opens the card's page (the Azure DevOps work item) in the default browser, using the URL the
+provider cached for the card (fetched once from `az` if missing). Uses `xdg-open` on Linux and
+`open` on macOS; if no opener is found, it prints the URL instead.
+
+Without `<id>`, the card is inferred from the current directory; outside a card it fails with a
+usage error. With `provider = "gh"` it exits non-zero ("not supported yet") until GitHub
+`owner/repo#123` ids exist.
+
+```bash
+twig open-card 52644
+twig opcd                   # current card
 ```
 
 ## `twig herdr <id>`
