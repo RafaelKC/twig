@@ -155,13 +155,13 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `open-card [id]` (`opcd`) | abre a página do card no navegador (só Azure DevOps por enquanto) |
 | `herdr <id>` | abre/foca o card no herdr |
 | `code [id]` | abre o card no VS Code; sem id, o card atual |
-| `ls` | cards ativos e a branch de cada repo |
-| `status [id]` | por repo: branch, arquivos alterados, ahead/behind vs base e origin; workspace e agente do herdr |
+| `ls` | cards ativos e a branch de cada repo (`--json` para scripts) |
+| `status [id]` | por repo: branch, arquivos alterados, ahead/behind vs base e origin; workspace e agente do herdr (`--json` para scripts) |
 | `refresh <id>` | regenera o `CLAUDE.md`/`AGENTS.md` e o `.code-workspace` |
 | `sync <id> [--merge\|--rebase] [-n]` | busca a branch base e faz rebase/merge dela em cada repo do card |
 | `rm <id> [-f]` | remove o card e o workspace do herdr (recusa se houver alterações não commitadas ou agente rodando; `-f` ignora) |
 | `prune` | limpa registros de worktrees órfãos |
-| `doctor` | verifica dependências, logins, config e repos |
+| `doctor` | verifica dependências, logins, config e repos (`--json` para scripts) |
 | `config edit` | edita a config e valida ao salvar |
 | `update` | atualiza para a última release |
 | `uninstall` | remove o twig, seu plugin e a skill |

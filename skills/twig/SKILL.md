@@ -44,16 +44,22 @@ a card.
 | `twig herdr <id>` | alias of `open <id> herdr`: open/focus the card in herdr (creates whatever is missing) |
 | `twig code [id]` | alias of `open [id] code`: open the card in VS Code |
 | `twig open-card [id]` (alias `opcd`) | open the card's page in the browser (Azure DevOps only; `gh` errors with "not supported yet"); prints the URL if no opener exists |
-| `twig ls` | list active cards and each repo's branch (`*` = uncommitted changes) |
-| `twig status [id]` | per repo: branch, uncommitted files (`*N`), ahead/behind vs base and origin; herdr workspace and running agent. No id = all cards, compact |
+| `twig ls [--json]` | list active cards and each repo's branch (`*` = uncommitted changes) |
+| `twig status [id] [--json]` | per repo: branch, uncommitted files (`*N`), ahead/behind vs base and origin; herdr workspace and running agent. No id = all cards, compact |
 | `twig refresh <id> [--refetch]` | regenerate the context file (`CLAUDE.md`/`AGENTS.md`) and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase (default, `git.sync`) or merge it into every repo of the card; skips repos with uncommitted changes, stops on a conflict naming repo/files; `-n` = dry run |
 | `twig rm <id> [--branches] [-f]` | close the card and its herdr workspace; refuses with uncommitted changes or a running agent (`working`/`blocked`); `-f/--force` bypasses both, so only use it when the user asks |
 | `twig prune [-n]` | clean up orphaned worktree records (folder deleted by hand) |
-| `twig doctor` | diagnose dependencies, login, config, and repos |
+| `twig doctor [--json]` | diagnose dependencies, login, config, and repos |
 | `twig update` | update twig, its herdr plugin and this skill to the latest release |
 | `twig uninstall` | remove twig (asks before touching config and dependencies; don't run it unless the user asks) |
 | `twig config edit` | edit the config (interactive, see below) |
+
+`--json` (on `ls`, `status`, `doctor`) prints only a JSON document on stdout, no colors; use it
+instead of parsing the text. `ls`/`status`: `{"cards":[{"id","repos":[...]}]}` (`status` repos add
+`dirty` count, `base_ref`/`vs_base`, `origin_ref`/`vs_origin` and a per-card `herdr`
+`{workspace, agents_running}`); `doctor`: `{"ok","errors","warnings","sections":[{"name","checks":[{"level","message"}]}]}`
+(still exits 1 on errors). Schemas in `docs/COMMANDS.md`.
 
 `twig new` options:
 

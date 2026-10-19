@@ -1331,3 +1331,132 @@ fn sync_unknown_card_fails() {
     assert_exit(&o, 1);
     assert_has(&o, "card 999 not found");
 }
+
+// ───────────────────────── --json ─────────────────────────
+
+fn json_of(o: &Output) -> serde_json::Value {
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(!out.contains('\x1b'), "colors in JSON output:\n{out}");
+    serde_json::from_str(&out).unwrap_or_else(|e| panic!("stdout is not JSON ({e}):\n{out}"))
+}
+
+#[test]
+fn ls_json_lists_cards_repos_and_dirty() {
+    let s = status_sandbox("idle");
+    let o = s.run(&["ls", "--json"]);
+    assert_exit(&o, 0);
+    let v = json_of(&o);
+    assert_eq!(v["cards"].as_array().unwrap().len(), 1);
+    assert_eq!(v["cards"][0]["id"], "123");
+    assert_eq!(v["cards"][0]["repos"][0]["repo"], "r1");
+    assert_eq!(v["cards"][0]["repos"][0]["branch"], "card-123");
+    assert_eq!(v["cards"][0]["repos"][0]["dirty"], true);
+}
+
+#[test]
+fn ls_json_without_cards_is_an_empty_list() {
+    let s = Sandbox::new();
+    s.valid_config("");
+    let o = s.run(&["ls", "--json"]);
+    assert_exit(&o, 0);
+    assert_eq!(json_of(&o)["cards"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn status_json_for_one_card() {
+    let s = status_sandbox("working");
+    let o = s.run(&["status", "123", "--json"]);
+    assert_exit(&o, 0);
+    let v = json_of(&o);
+    let c = &v["cards"][0];
+    assert_eq!(c["id"], "123");
+    assert_eq!(c["herdr"]["workspace"], true);
+    assert_eq!(c["herdr"]["agents_running"], 1);
+    let r = &c["repos"][0];
+    assert_eq!(r["repo"], "r1");
+    assert_eq!(r["branch"], "card-123");
+    assert_eq!(r["dirty"], 1);
+    assert_eq!(r["base_ref"], "origin/main");
+    assert_eq!(r["vs_base"]["ahead"], 2);
+    assert_eq!(r["vs_base"]["behind"], 0);
+    assert_eq!(r["origin_ref"], "origin/card-123");
+    assert_eq!(r["vs_origin"]["ahead"], 1);
+}
+
+#[test]
+fn status_json_without_id_lists_every_card_and_without_herdr() {
+    let s = status_sandbox("idle");
+    fs::remove_file(s.bin.join("herdr")).unwrap();
+    let o = s.run(&["status", "--json"]);
+    assert_exit(&o, 0);
+    let v = json_of(&o);
+    assert_eq!(v["cards"].as_array().unwrap().len(), 1);
+    assert_eq!(v["cards"][0]["herdr"]["workspace"], false);
+    assert_eq!(v["cards"][0]["herdr"]["agents_running"], 0);
+}
+
+#[test]
+fn status_json_unknown_card_fails_with_empty_stdout() {
+    let s = Sandbox::new();
+    s.valid_config("");
+    let o = s.run(&["status", "999", "--json"]);
+    assert_exit(&o, 1);
+    assert!(o.stdout.is_empty(), "{}", text(&o));
+}
+
+#[test]
+fn doctor_json_all_good() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    let o = s.run(&["doctor", "--json"]);
+    assert_exit(&o, 0);
+    let v = json_of(&o);
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["errors"], 0);
+    let sections = v["sections"].as_array().unwrap();
+    assert_eq!(sections[0]["name"], "config");
+    assert_eq!(sections[0]["checks"][0]["level"], "ok");
+    assert!(sections
+        .iter()
+        .flat_map(|s| s["checks"].as_array().unwrap())
+        .all(|c| c["level"] != "error"));
+}
+
+#[test]
+fn doctor_json_reports_errors_and_still_exits_1() {
+    let s = Sandbox::new();
+    s.stub("az", "exit 0")
+        .stub("claude", "exit 0")
+        .stub("code", "exit 0")
+        .git_identity();
+    s.valid_config("");
+    let o = s.run(&["doctor", "--json"]);
+    assert_exit(&o, 1);
+    let v = json_of(&o);
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["errors"], 1);
+    let herdr = v["sections"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "herdr")
+        .unwrap();
+    assert_eq!(herdr["checks"][0]["level"], "error");
+    assert!(herdr["checks"][0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("herdr not found"));
+}
+
+#[test]
+fn doctor_json_with_invalid_config_is_an_error_entry() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.write_config("version = 1\n[vscode]\nactive = true\n");
+    let o = s.run(&["doctor", "--json"]);
+    assert_exit(&o, 1);
+    let v = json_of(&o);
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["sections"][0]["checks"][0]["level"], "error");
+}

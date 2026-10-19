@@ -169,23 +169,36 @@ fn print_card(s: &CardStatus, detailed: bool) {
     }
 }
 
-pub fn run(cfg: &Config, id: Option<&str>) -> Result<()> {
-    match id {
+/// Top-level `--json` shape: always `{"cards": [...]}`, even for a single card.
+#[derive(Debug, Serialize)]
+struct StatusOutput {
+    cards: Vec<CardStatus>,
+}
+
+pub fn run(cfg: &Config, id: Option<&str>, json: bool) -> Result<()> {
+    let (cards, detailed) = match id {
         Some(raw) => {
             let (id, _) = card::split_id(raw);
             card::require_card(cfg, &id)?;
-            print_card(&collect(cfg, &id), true);
+            (vec![collect(cfg, &id)], true)
         }
-        None => {
-            let ids = card::list_cards(cfg);
-            if ids.is_empty() {
-                ui::info("no active cards");
-                return Ok(());
-            }
-            for id in ids {
-                print_card(&collect(cfg, &id), false);
-            }
-        }
+        None => (
+            card::list_cards(cfg)
+                .iter()
+                .map(|id| collect(cfg, id))
+                .collect(),
+            false,
+        ),
+    };
+    if json {
+        println!("{}", serde_json::to_string_pretty(&StatusOutput { cards })?);
+        return Ok(());
+    }
+    if cards.is_empty() {
+        ui::info("no active cards");
+    }
+    for c in &cards {
+        print_card(c, detailed);
     }
     Ok(())
 }

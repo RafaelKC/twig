@@ -126,11 +126,20 @@ enum Cmd {
     Code { id: Option<String> },
     /// List active cards and each repo's branch (* = uncommitted changes).
     #[command(alias = "list")]
-    Ls,
+    Ls {
+        /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
+        #[arg(long)]
+        json: bool,
+    },
     /// Per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent.
     ///
     /// Without <ID>, every card (compact); with an id, the details of that card.
-    Status { id: Option<String> },
+    Status {
+        id: Option<String>,
+        /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
+        #[arg(long)]
+        json: bool,
+    },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
         id: String,
@@ -172,7 +181,11 @@ enum Cmd {
         dry_run: bool,
     },
     /// Check dependencies, login and config without changing anything (exits 1 on error).
-    Doctor,
+    Doctor {
+        /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
+        #[arg(long)]
+        json: bool,
+    },
     /// Manage the config file.
     Config {
         #[command(subcommand)]
@@ -219,7 +232,7 @@ fn run(cli: Cli) -> Result<()> {
             clap_complete::generate(shell, &mut Cli::command(), "twig", &mut std::io::stdout());
             return Ok(());
         }
-        Cmd::Doctor => return doctor::run(),
+        Cmd::Doctor { json } => return doctor::run(json),
         Cmd::Update { check, version } => return selfmgmt::update(check, version),
         Cmd::Uninstall { yes } => return selfmgmt::uninstall(yes),
         Cmd::Config {
@@ -230,6 +243,10 @@ fn run(cli: Cli) -> Result<()> {
 
     let mut cfg = Config::load()?;
     let update = cfg.update.clone();
+    let json = matches!(
+        cli.cmd,
+        Cmd::Ls { json: true } | Cmd::Status { json: true, .. }
+    );
     let result = match cli.cmd {
         Cmd::New {
             id,
@@ -301,8 +318,8 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::OpenCard { id } => commands::open_card(&cfg, id.as_deref()),
         Cmd::Herdr { id } => commands::herdr_cmd(&cfg, &id),
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
-        Cmd::Ls => commands::ls(&cfg),
-        Cmd::Status { id } => status::run(&cfg, id.as_deref()),
+        Cmd::Ls { json } => commands::ls(&cfg, json),
+        Cmd::Status { id, json } => status::run(&cfg, id.as_deref(), json),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
         Cmd::Rm {
             id,
@@ -324,15 +341,18 @@ fn run(cli: Cli) -> Result<()> {
         }
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
         Cmd::Completions { .. }
-        | Cmd::Doctor
+        | Cmd::Doctor { .. }
         | Cmd::Config { .. }
         | Cmd::Update { .. }
         | Cmd::Uninstall { .. } => {
             unreachable!()
         }
     };
-    // stderr-only hint after the command's own output; silent unless a TTY and a newer release
-    updatecheck::maybe_hint(&update);
+    // stderr-only hint after the command's own output; silent unless a TTY and a newer
+    // release, and never with --json
+    if !json {
+        updatecheck::maybe_hint(&update);
+    }
     result
 }
 
