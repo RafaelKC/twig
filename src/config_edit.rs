@@ -13,9 +13,8 @@ use crate::{sys, ui};
 const TEMPLATE: &str = r#"# twig config. Format documented in docs/CONFIG.md.
 version = 1
 
-[ai]
-provider = "claude"
-command  = "claude"
+[agent]
+provider = "claude"               # "claude" | "codex"
 
 [provider]
 default = "az"                    # "az" | "gh"

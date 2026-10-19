@@ -13,7 +13,7 @@ Order of work (each step settles the surface the next one builds on):
 1. [ ] [#6](https://github.com/RafaelKC/twig/issues/6) `rm` removes the herdr workspace, blocks when an agent is running, `-f/--force` bypasses the checks
 2. [ ] [#1](https://github.com/RafaelKC/twig/issues/1) `twig open [id] [default|herdr|code]`; `herdr` and `code` stay as aliases; default target in the config
 3. [ ] [#7](https://github.com/RafaelKC/twig/issues/7) `twig open-card` / `opcd`, Azure DevOps only (`gh` gives a clear "not supported yet")
-4. [ ] [#2](https://github.com/RafaelKC/twig/issues/2) Codex next to Claude Code (`AGENTS.md` / `CLAUDE.md`); other agents are tracked in [#8](https://github.com/RafaelKC/twig/issues/8)
+4. [x] [#2](https://github.com/RafaelKC/twig/issues/2) Codex next to Claude Code (`AGENTS.md` / `CLAUDE.md`); other agents are tracked in [#8](https://github.com/RafaelKC/twig/issues/8)
 
 ### Later
 

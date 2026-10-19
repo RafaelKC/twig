@@ -10,7 +10,8 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub version: u32,
-    #[serde(default)]
+    // `[ai]` is the old name of the section, still accepted
+    #[serde(default, rename = "agent", alias = "ai")]
     pub ai: Ai,
     #[serde(default)]
     pub provider: Provider,
@@ -34,13 +35,60 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ai {
-    pub provider: String,
-    pub command: String,
+    pub provider: AgentKind,
+    /// empty = the provider's default command
+    command: String,
+    /// empty = the provider's default context file
+    context_file: String,
 }
 
 impl Default for Ai {
     fn default() -> Self {
-        Self { provider: "claude".into(), command: "claude".into() }
+        Self { provider: AgentKind::Claude, command: String::new(), context_file: String::new() }
+    }
+}
+
+impl Ai {
+    /// What `twig herdr` runs in the agent tab.
+    pub fn command(&self) -> &str {
+        if self.command.is_empty() {
+            self.provider.default_command()
+        } else {
+            &self.command
+        }
+    }
+
+    /// Name of the card's context file (CLAUDE.md, AGENTS.md, or the configured override).
+    pub fn context_file(&self) -> &str {
+        if self.context_file.is_empty() {
+            self.provider.default_context_file()
+        } else {
+            &self.context_file
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentKind {
+    #[default]
+    Claude,
+    Codex,
+}
+
+impl AgentKind {
+    pub fn default_command(self) -> &'static str {
+        match self {
+            Self::Claude => "claude",
+            Self::Codex => "codex",
+        }
+    }
+
+    pub fn default_context_file(self) -> &'static str {
+        match self {
+            Self::Claude => "CLAUDE.md",
+            Self::Codex => "AGENTS.md",
+        }
     }
 }
 
@@ -209,8 +257,9 @@ impl Config {
         if cfg.version != 1 {
             bail!("unsupported config version: {} (expected 1)", cfg.version);
         }
-        if cfg.ai.provider != "claude" {
-            bail!("unsupported ai.provider: {} (only \"claude\" for now)", cfg.ai.provider);
+        let cf = cfg.ai.context_file();
+        if cf.contains(['/', '\\']) {
+            bail!("agent.context_file must be a file name, not a path: {cf}");
         }
         cfg.file = file;
         Ok(cfg)
@@ -313,5 +362,47 @@ impl Config {
         let repo = Repo { path: if in_root { String::new() } else { clone.display().to_string() }, ..Default::default() };
         self.repos.insert(name.to_string(), repo);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(ai: &str) -> Result<Config, toml::de::Error> {
+        toml::from_str(&format!("version = 1\n{ai}"))
+    }
+
+    #[test]
+    fn claude_is_the_default() {
+        let cfg = parse("").unwrap();
+        assert_eq!(cfg.ai.command(), "claude");
+        assert_eq!(cfg.ai.context_file(), "CLAUDE.md");
+    }
+
+    #[test]
+    fn codex_derives_command_and_context_file() {
+        let cfg = parse("[agent]\nprovider = \"codex\"").unwrap();
+        assert_eq!(cfg.ai.command(), "codex");
+        assert_eq!(cfg.ai.context_file(), "AGENTS.md");
+    }
+
+    #[test]
+    fn command_and_context_file_can_be_overridden() {
+        let cfg = parse("[agent]\nprovider = \"codex\"\ncommand = \"codex --full-auto\"\ncontext_file = \"NOTES.md\"").unwrap();
+        assert_eq!(cfg.ai.command(), "codex --full-auto");
+        assert_eq!(cfg.ai.context_file(), "NOTES.md");
+    }
+
+    #[test]
+    fn old_ai_section_name_still_works() {
+        let cfg = parse("[ai]\nprovider = \"claude\"\ncommand = \"claude\"").unwrap();
+        assert_eq!(cfg.ai.provider, AgentKind::Claude);
+    }
+
+    #[test]
+    fn unknown_agent_is_rejected_with_the_valid_options() {
+        let err = parse("[agent]\nprovider = \"gemini\"").unwrap_err().to_string();
+        assert!(err.contains("claude") && err.contains("codex"), "{err}");
     }
 }

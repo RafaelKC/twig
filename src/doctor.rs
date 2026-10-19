@@ -147,12 +147,12 @@ pub fn run() -> Result<()> {
         }
     }
 
-    r.section("AI");
-    let ai_bin = cfg.ai.command.split_whitespace().next().unwrap_or_default();
+    r.section("agent");
+    let ai_bin = cfg.ai.command().split_whitespace().next().unwrap_or_default();
     if ai_bin.is_empty() {
-        r.error("ai.command is empty");
+        r.error("agent.command is empty");
     } else {
-        r.require_bin(ai_bin, "ai.command");
+        r.require_bin(ai_bin, "agent.command");
     }
 
     r.section("folders");
