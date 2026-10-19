@@ -94,9 +94,11 @@ pub fn infer(cfg: &Config) -> Current {
         .collect();
     dirs.extend(std::env::current_dir().ok());
 
+    // compare resolved paths: the cwd is canonical (macOS: /private/var) but the config may not be
     let wt = cfg.worktrees();
+    let wt_real = wt.canonicalize().unwrap_or_else(|_| wt.clone());
     for d in &dirs {
-        if let Ok(rest) = d.strip_prefix(&wt) {
+        if let Some(rest) = rel_to_worktrees(d, &wt, &wt_real) {
             if let Some(id) = rest.components().next() {
                 let id = id.as_os_str().to_string_lossy().into_owned();
                 if !id.starts_with('.') && cfg.card_dir(&id).is_dir() {
@@ -110,6 +112,14 @@ pub fn infer(cfg: &Config) -> Current {
             .find(|d| d.is_dir())
             .unwrap_or_else(|| PathBuf::from(".")),
     )
+}
+
+fn rel_to_worktrees(d: &Path, wt: &Path, wt_real: &Path) -> Option<PathBuf> {
+    let real = d.canonicalize().unwrap_or_else(|_| d.to_path_buf());
+    [d, real.as_path()]
+        .iter()
+        .find_map(|p| p.strip_prefix(wt).or_else(|_| p.strip_prefix(wt_real)).ok())
+        .map(Path::to_path_buf)
 }
 
 /// Make sure the repo exists; a repo missing from the config gets registered (asks for the path if not found).
