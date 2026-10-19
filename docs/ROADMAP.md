@@ -24,6 +24,7 @@ Not scheduled yet; grouped by theme.
 - **Automation:** [#5](https://github.com/RafaelKC/twig/issues/5) run a skill after creating a workspace; [#15](https://github.com/RafaelKC/twig/issues/15) lifecycle hooks; [#14](https://github.com/RafaelKC/twig/issues/14) card templates
 - **Day-to-day commands:** [#9](https://github.com/RafaelKC/twig/issues/9) `status`; [#10](https://github.com/RafaelKC/twig/issues/10) `clean` (merged/closed cards); [#12](https://github.com/RafaelKC/twig/issues/12) `pr`; [#13](https://github.com/RafaelKC/twig/issues/13) `sync`; [#11](https://github.com/RafaelKC/twig/issues/11) `--json`
 - **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
+- **Updates:** [#20](https://github.com/RafaelKC/twig/issues/20) version check on every command with an update hint
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `config get/set`, `.twig.toml`; [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
 
 Current: v0.1.1 (installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
