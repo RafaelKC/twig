@@ -66,6 +66,14 @@ default = true
 run     = "pnpm start"
 ```
 
+## Changing it from the command line
+
+`twig config get <key>` and `twig config set <key> <value>` read and write one value by dotted
+key (`git.base_branch`, `repos.my-back.run`), validated with the same rules as `twig config edit`
+and keeping comments and formatting. Details: [COMMANDS.md](COMMANDS.md#twig-config-get-key--twig-config-set-key-value).
+Per-repo `.twig.toml`, per-card overrides and env overrides are not implemented yet
+([#19](https://github.com/RafaelKC/twig/issues/19)).
+
 ## Fields
 
 ### Root

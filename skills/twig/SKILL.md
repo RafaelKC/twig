@@ -54,6 +54,7 @@ a card.
 | `twig update` | update twig, its herdr plugin and this skill to the latest release |
 | `twig uninstall` | remove twig (asks before touching config and dependencies; don't run it unless the user asks) |
 | `twig config edit` | edit the config (interactive, see below) |
+| `twig config get <key>` / `twig config set <key> <value>` | read / change one config value by dotted key (`git.base_branch`, `repos.my-back.run`); validated, comments kept; arrays as `a,b` or `[a,b]` |
 
 `--json` (on `ls`, `status`, `doctor`) prints only a JSON document on stdout, no colors; use it
 instead of parsing the text. `ls`/`status`: `{"cards":[{"id","repos":[...]}]}` (`status` repos add
@@ -96,8 +97,9 @@ Two pitfalls:
 - **`twig herdr <id>`, `twig open` (herdr target) and `--herdr` outside herdr open the herdr UI** and block the
   terminal. If `HERDR_ENV` is not `1`, don't use them; `twig new` already creates the
   herdr workspace on its own. Tell the user to run `twig herdr <id>`.
-- **`twig config edit` opens an editor.** As an agent, edit the config file
-  directly and validate with `twig doctor`.
+- **`twig config edit` opens an editor.** As an agent, prefer `twig config set <key> <value>`
+  (validated, comments preserved, file untouched if the value is invalid) and `twig config get <key>`
+  to read. For larger changes, edit the config file directly and validate with `twig doctor`.
 
 ## Choosing the right command
 

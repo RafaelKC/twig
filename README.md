@@ -162,6 +162,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `prune` | clean orphaned worktree records |
 | `doctor` | check dependencies, logins, config and repos (`--json` for scripts) |
 | `config edit` | edit the config and validate it on save |
+| `config get <key>` / `config set <key> <value>` | read / write one value by dotted key (`git.base_branch`), validated, comments kept |
 | `update` | update to the latest release |
 | `uninstall` | remove twig, its plugin and skill |
 | `completions <shell>` | shell completion script |

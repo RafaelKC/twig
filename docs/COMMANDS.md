@@ -20,6 +20,7 @@
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor [--json]` | checks dependencies, login and config without changing anything |
 | `twig config edit` | opens the config in an editor and validates it on save |
+| `twig config get <key>` / `twig config set <key> <value>` | reads / writes one config value by dotted key, validated, comments preserved |
 | `twig update [--check] [--version vX.Y.Z]` | updates twig, its herdr plugin and skill to the latest release |
 | `twig uninstall [--yes]` | removes twig, its herdr plugin, skill and completions |
 | `twig completions <shell>` | generates the completion script (bash, zsh, fish, powershell, elvish) |
@@ -327,6 +328,44 @@ real file.
 - When the editor closes, it validates. Invalid → shows the error and asks `reopen to fix it? [Y/n]`.
   Without a terminal, an empty answer counts as "no", to avoid looping.
 - Exits with 1 if the file is left invalid.
+
+## `twig config get <key>` / `twig config set <key> <value>`
+
+Reads or writes one value by dotted key: `git.base_branch`, `open.default`,
+`repos.my-backend.run`. Non-interactive, so it is the way for scripts and agents to change the
+config (instead of editing the file by hand).
+
+`get`:
+
+- Scalars (string, number, bool) print bare, with no quotes. Arrays and tables print as TOML.
+- Unknown key: error and exit 1.
+- Only needs the file to be valid TOML, so it also works while a value is invalid.
+
+`set`:
+
+- Edits the file in place with comments, blank lines and key order preserved (the trailing
+  comment of a replaced value stays). Missing tables (e.g. a new `[repos.x]`) are created.
+- Validates the result with the same checks as `config edit`. Invalid (unknown key, wrong
+  type, value not allowed) → error naming the key and the valid options, exit 1, **file
+  untouched**.
+- The file only has to be valid TOML: you can fix an invalid value with `set`, as long as the
+  result is valid. The config must already exist (`twig config edit` creates it).
+- Value types are inferred: `true`/`false` → bool, integers → number, anything else → string
+  (quotes optional). If that reading is not valid for the field, it falls back to a string, then
+  to a list (so `short 123` is the string `"123"` and `local_files .env` is `[".env"]`).
+- Arrays: `a,b,c` or `[a, b, c]`; quoted TOML (`'["a b", "c"]'`) also works. `[]` empties it.
+- Keys are split on `.`, so repo names containing a dot are not addressable (use `config edit`).
+
+```bash
+twig config set git.base_branch develop
+twig config set open.default code
+twig config set repos.my-backend.run "dotnet watch run"
+twig config set repos.my-backend.local_files ".env,.env.local"
+twig config get repos.my-backend
+```
+
+Not part of this command (still open on [#19](https://github.com/RafaelKC/twig/issues/19)):
+per-repo `.twig.toml`, per-card overrides and environment variable overrides.
 
 ## `twig update [--check] [--version vX.Y.Z]`
 

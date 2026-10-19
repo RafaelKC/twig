@@ -3,6 +3,7 @@ mod claude_md;
 mod commands;
 mod config;
 mod config_edit;
+mod config_kv;
 mod doctor;
 mod herdr;
 mod provider;
@@ -223,6 +224,18 @@ enum Target {
 enum ConfigCmd {
     /// Open the config in $VISUAL/$EDITOR (creates it from the template if missing) and validate on save.
     Edit,
+    /// Print one value by dotted key (e.g. git.base_branch, repos.my-back.run); tables and arrays print as TOML.
+    Get {
+        /// Dotted key, e.g. `open.default` or `repos.my-back.run`.
+        key: String,
+    },
+    /// Set one value by dotted key, validated, keeping comments and formatting (bool/int/string inferred; arrays as `a,b` or `[a,b]`).
+    Set {
+        /// Dotted key, e.g. `git.base_branch` or `repos.my-back.run`.
+        key: String,
+        /// New value.
+        value: String,
+    },
 }
 
 fn run(cli: Cli) -> Result<()> {
@@ -238,6 +251,12 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Config {
             cmd: ConfigCmd::Edit,
         } => return config_edit::edit(),
+        Cmd::Config {
+            cmd: ConfigCmd::Get { key },
+        } => return config_kv::get(&key),
+        Cmd::Config {
+            cmd: ConfigCmd::Set { key, value },
+        } => return config_kv::set(&key, &value),
         _ => {}
     }
 

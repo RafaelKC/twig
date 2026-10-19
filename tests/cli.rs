@@ -593,6 +593,145 @@ fn completions_list_the_open_targets() {
     );
 }
 
+// ───────────────────────── config get / set ─────────────────────────
+
+const COMMENTED: &str = "# my config\nversion = 1\n\n[git]\nbase_branch = \"main\" # trunk\nbranch_prefix = { Bug = \"fix\", default = \"feat\" }\n\n# the repos\n[repos.my-back]\nrun = \"dotnet run\"\n";
+
+fn stdout(o: &Output) -> String {
+    String::from_utf8_lossy(&o.stdout).into_owned()
+}
+
+#[test]
+fn config_get_scalar_table_and_missing() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    let o = s.run(&["config", "get", "git.base_branch"]);
+    assert_exit(&o, 0);
+    assert_eq!(stdout(&o), "main\n");
+    assert_eq!(stdout(&s.run(&["config", "get", "version"])), "1\n");
+    let o = s.run(&["config", "get", "repos.my-back"]);
+    assert_exit(&o, 0);
+    assert_eq!(stdout(&o), "run = \"dotnet run\"\n");
+    let o = s.run(&["config", "get", "git.branch_prefix"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "Bug = \"fix\"");
+    let o = s.run(&["config", "get", "git.nope"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "key not found: git.nope");
+}
+
+#[test]
+fn config_set_preserves_comments() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    let o = s.run(&["config", "set", "git.base_branch", "develop"]);
+    assert_exit(&o, 0);
+    assert_eq!(
+        fs::read_to_string(&s.config).unwrap(),
+        COMMENTED.replace("\"main\" # trunk", "\"develop\" # trunk")
+    );
+    let o = s.run(&["config", "get", "git.base_branch"]);
+    assert_eq!(stdout(&o), "develop\n");
+}
+
+#[test]
+fn config_set_invalid_value_is_rejected_and_file_untouched() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    let o = s.run(&["config", "set", "open.default", "banana"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "open.default");
+    assert_has(&o, "herdr");
+    let o2 = s.run(&["config", "set", "git.bogus", "1"]);
+    assert_exit(&o2, 1);
+    assert_has(&o2, "bogus");
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), COMMENTED);
+    // no temp file left behind
+    assert_eq!(fs::read_dir(s.config.parent().unwrap()).unwrap().count(), 1);
+}
+
+#[test]
+fn config_set_infers_types_and_arrays() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    assert_exit(&s.run(&["config", "set", "update.check", "false"]), 0);
+    assert_exit(
+        &s.run(&["config", "set", "update.check_interval_hours", "6"]),
+        0,
+    );
+    assert_exit(
+        &s.run(&["config", "set", "worktree.local_files", ".env,.env.local"]),
+        0,
+    );
+    assert_exit(
+        &s.run(&[
+            "config",
+            "set",
+            "repos.my-back.debug",
+            "[Debug: Back, Other]",
+        ]),
+        0,
+    );
+    let after = fs::read_to_string(&s.config).unwrap();
+    assert!(after.contains("check = false"), "{after}");
+    assert!(after.contains("check_interval_hours = 6"), "{after}");
+    let o = s.run(&["config", "get", "worktree.local_files"]);
+    assert_eq!(stdout(&o), "[\".env\", \".env.local\"]\n");
+    let o = s.run(&["config", "get", "repos.my-back.debug"]);
+    assert_eq!(stdout(&o), "[\"Debug: Back\", \"Other\"]\n");
+    // a lone scalar for an array field becomes a one-element list
+    assert_exit(
+        &s.run(&["config", "set", "repos.my-back.local_files", ".env"]),
+        0,
+    );
+    let o = s.run(&["config", "get", "repos.my-back.local_files"]);
+    assert_eq!(stdout(&o), "[\".env\"]\n");
+    // a number for a string field stays a string
+    assert_exit(&s.run(&["config", "set", "repos.my-back.short", "42"]), 0);
+    let o = s.run(&["config", "get", "repos.my-back.short"]);
+    assert_eq!(stdout(&o), "42\n");
+}
+
+#[test]
+fn config_set_creates_nested_repo_key() {
+    let s = Sandbox::new();
+    s.write_config(COMMENTED);
+    let o = s.run(&["config", "set", "repos.new-front.run", "pnpm dev"]);
+    assert_exit(&o, 0);
+    let o = s.run(&["config", "get", "repos.new-front.run"]);
+    assert_eq!(stdout(&o), "pnpm dev\n");
+    let after = fs::read_to_string(&s.config).unwrap();
+    assert!(after.starts_with("# my config\n"), "{after}");
+    assert!(after.contains("[repos.new-front]"), "{after}");
+}
+
+#[test]
+fn config_set_can_fix_an_invalid_config() {
+    let s = Sandbox::new();
+    let bad = "version = 1\n[open]\ndefault = \"nope\"\n";
+    s.write_config(bad);
+    assert_exit(&s.run(&["config", "get", "open.default"]), 0);
+    // unrelated key: the result is still invalid, so it is rejected
+    assert_exit(&s.run(&["config", "set", "git.base_branch", "x"]), 1);
+    assert_eq!(fs::read_to_string(&s.config).unwrap(), bad);
+    // fixing the offending key works
+    assert_exit(&s.run(&["config", "set", "open.default", "code"]), 0);
+    let o = s.run(&["config", "get", "open.default"]);
+    assert_eq!(stdout(&o), "code\n");
+}
+
+#[test]
+fn completions_list_the_config_subcommands() {
+    let s = Sandbox::new();
+    let o = s.run(&["completions", "bash"]);
+    assert_exit(&o, 0);
+    let out = text(&o);
+    assert!(
+        out.contains("opts=\"-h --help edit get set help\""),
+        "{out}"
+    );
+}
+
 // ───────────────────────── update / uninstall ─────────────────────────
 
 /// `curl` stub: answers the GitHub "latest release" API with `tag` and serves an

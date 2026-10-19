@@ -163,6 +163,7 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `prune` | limpa registros de worktrees órfãos |
 | `doctor` | verifica dependências, logins, config e repos (`--json` para scripts) |
 | `config edit` | edita a config e valida ao salvar |
+| `config get <chave>` / `config set <chave> <valor>` | lê / grava um valor por chave com pontos (`git.base_branch`), validado, preservando comentários |
 | `update` | atualiza para a última release |
 | `uninstall` | remove o twig, seu plugin e a skill |
 | `completions <shell>` | script de completion do shell |
