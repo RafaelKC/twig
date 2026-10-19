@@ -441,7 +441,7 @@ install_binary() {
 
 install_skill() {
   case "$AI" in
-    codex) dest="$HOME/.codex/skills/twig"; name="Codex" ;;
+    codex) dest="$HOME/.agents/skills/twig"; name="Codex" ;;
     *) dest="$HOME/.claude/skills/twig"; name="Claude Code" ;;
   esac
   if [ -z "$AI" ] && [ ! -e "$dest" ]; then return; fi

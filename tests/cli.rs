@@ -408,6 +408,15 @@ fn open_code_target_opens_vscode() {
 }
 
 #[test]
+fn open_lone_target_infers_the_card() {
+    let (s, code_log, herdr_log) = open_sandbox("");
+    let cwd = s.path("wt/123/r1");
+    assert_exit(&run_open(&s, &["open", "code"], Some(cwd)), 0);
+    assert_eq!(opened(&code_log), workspace_file(&s));
+    assert_eq!(herdr_calls(&herdr_log), "");
+}
+
+#[test]
 fn open_without_target_defaults_to_herdr() {
     let (s, code_log, herdr_log) = open_sandbox("");
     assert_exit(&run_open(&s, &["open", "123"], None), 0);

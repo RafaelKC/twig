@@ -99,7 +99,8 @@ enum Cmd {
     },
     /// Open a card in herdr or VS Code (target defaults to `[open] default` in the config).
     ///
-    /// Without <ID>, the card is inferred like `twig code` does. `twig herdr` and `twig code`
+    /// Without <ID>, the card is inferred like `twig code` does; a lone target (`twig open code`)
+    /// is read as the target. `twig herdr` and `twig code`
     /// are aliases of `twig open <id> herdr` / `twig open [id] code`.
     Open {
         id: Option<String>,
@@ -213,6 +214,11 @@ fn run(cli: Cli) -> Result<()> {
             commands::AddRepoArgs { id, repos, branch, base, fix, install, no_setup, herdr, code },
         ),
         Cmd::Open { id, target } => {
+            // `twig open code`: a lone target name is the target, not a card id
+            let (id, target) = match (id.as_deref(), target) {
+                (Some(t), None) if <Target as clap::ValueEnum>::from_str(t, true).is_ok() => (None, <Target as clap::ValueEnum>::from_str(t, true).ok()),
+                _ => (id, target),
+            };
             let target = match target {
                 None | Some(Target::Default) => None,
                 Some(Target::Herdr) => Some(OpenTarget::Herdr),

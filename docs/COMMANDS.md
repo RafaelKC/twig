@@ -111,6 +111,7 @@ An unknown target is rejected. See [CONFIG.md](CONFIG.md) → `[open]`.
 twig open 52644             # default target from the config
 twig open 52644 code        # = twig code 52644
 twig open                   # current card, default target
+twig open code              # current card, in VS Code (a lone target is not read as an id)
 ```
 
 ## `twig open-card [id]` (alias `opcd`)
@@ -240,7 +241,7 @@ Removes what the installer put in place:
 
 - the herdr plugin (`herdr plugin unlink twig`, `~/.local/share/twig`) and the shortcut
   block between `# twig:begin` / `# twig:end` in herdr's `config.toml`;
-- the AI skill `~/.claude/skills/twig` (only if it's twig's);
+- the AI skill `~/.claude/skills/twig` or `~/.agents/skills/twig` (only if it's twig's);
 - shell completions and the `PATH` line the installer added to `~/.bashrc` / `~/.zshrc`;
 - the `twig` binary on the `PATH`.
 

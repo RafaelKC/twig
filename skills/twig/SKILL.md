@@ -40,7 +40,7 @@ a card.
 |---|---|
 | `twig new <id> [slug]` | start a new card |
 | `twig add-repo <id> <repo,...>` | the card needs another repo; also recreates closed panes in herdr |
-| `twig open [id] [default\|herdr\|code]` | open the card in a target; no target uses `[open] default` (herdr unless configured); no id = card of the current directory. The id comes first: `twig open 123 code` |
+| `twig open [id] [default\|herdr\|code]` | open the card in a target; no target uses `[open] default` (herdr unless configured); no id = card of the current directory. `twig open code` and `twig open 123 code` both work |
 | `twig herdr <id>` | alias of `open <id> herdr`: open/focus the card in herdr (creates whatever is missing) |
 | `twig code [id]` | alias of `open [id] code`: open the card in VS Code |
 | `twig open-card [id]` (alias `opcd`) | open the card's page in the browser (Azure DevOps only; `gh` errors with "not supported yet"); prints the URL if no opener exists |
