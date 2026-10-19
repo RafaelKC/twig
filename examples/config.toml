@@ -38,6 +38,7 @@ search    = ["~/src"]               # other places to look for a repo
 [git]
 base_branch   = "main"
 branch_prefix = { Bug = "fix", default = "feat" }
+sync          = "rebase"            # "rebase" | "merge": what `twig sync` does with the base branch
 
 [worktree]
 # copied into every repo of the card

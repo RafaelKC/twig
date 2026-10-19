@@ -14,6 +14,7 @@
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls` | lists active cards and each repo's branch |
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
+| `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
 | `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor` | checks dependencies, login and config without changing anything |
@@ -178,6 +179,24 @@ running, the herdr steps are skipped.
 |---|---|
 | `--branches` | also deletes the local branches |
 | `-f`, `--force` | skips both checks (uncommitted changes and running agent) |
+
+## `twig sync <id> [--merge | --rebase] [-n | --dry-run]`
+
+Runs `git fetch origin <base>` in each repo of the card (`<base>` is `git.base_branch`) and brings
+`origin/<base>` into the card branch, by rebase or merge.
+
+- Repos with uncommitted changes (or a detached HEAD) are skipped and reported.
+- A conflict stops the whole run, names the repo and the conflicting files, and leaves that
+  worktree mid-rebase/merge for you to resolve (or abort with `git rebase --abort` / `git merge --abort`).
+- A repo whose fetch fails is reported, the others continue, and the command exits 1 at the end.
+
+| Option | Description |
+|---|---|
+| `--merge` | merge instead of rebasing |
+| `--rebase` | rebase (overrides `git.sync = "merge"`) |
+| `-n`, `--dry-run` | fetches, then only shows how many commits each repo would take; changes no worktree |
+
+Without `--merge`/`--rebase`, the strategy is `git.sync` from the config (`"rebase"` by default).
 
 ## `twig prune [-n | --dry-run]`
 

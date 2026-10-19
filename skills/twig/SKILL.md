@@ -46,6 +46,7 @@ a card.
 | `twig open-card [id]` (alias `opcd`) | open the card's page in the browser (Azure DevOps only; `gh` errors with "not supported yet"); prints the URL if no opener exists |
 | `twig ls` | list active cards and each repo's branch (`*` = uncommitted changes) |
 | `twig refresh <id> [--refetch]` | regenerate the context file (`CLAUDE.md`/`AGENTS.md`) and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
+| `twig sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase (default, `git.sync`) or merge it into every repo of the card; skips repos with uncommitted changes, stops on a conflict naming repo/files; `-n` = dry run |
 | `twig rm <id> [--branches] [-f]` | close the card and its herdr workspace; refuses with uncommitted changes or a running agent (`working`/`blocked`); `-f/--force` bypasses both, so only use it when the user asks |
 | `twig prune [-n]` | clean up orphaned worktree records (folder deleted by hand) |
 | `twig doctor` | diagnose dependencies, login, config, and repos |
