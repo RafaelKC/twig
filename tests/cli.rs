@@ -941,3 +941,210 @@ fn status_unknown_card_is_an_error() {
     let o = s.run(&["status", "999"]);
     assert_exit(&o, 1);
 }
+
+// ───────────────────── new / add-repo / prune (local git remotes) ─────────────────────
+
+fn git_in(dir: &Path, args: &[&str]) -> String {
+    let o = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@t")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@t")
+        .output()
+        .unwrap();
+    assert!(
+        o.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    String::from_utf8_lossy(&o.stdout).trim().to_string()
+}
+
+/// Bare `origin/<name>.git` with a `main` branch, cloned to `repos/<name>`.
+fn remote_repo(s: &Sandbox, name: &str) -> PathBuf {
+    let origin = s.path(&format!("origin/{name}.git"));
+    fs::create_dir_all(&origin).unwrap();
+    git_in(&origin, &["init", "-q", "--bare", "-b", "main"]);
+    let clone = s.path(&format!("repos/{name}"));
+    fs::create_dir_all(&clone).unwrap();
+    git_in(&clone, &["init", "-q", "-b", "main"]);
+    git_in(
+        &clone,
+        &["remote", "add", "origin", &origin.to_string_lossy()],
+    );
+    git_in(&clone, &["commit", "-q", "--allow-empty", "-m", "init"]);
+    git_in(&clone, &["push", "-q", "origin", "main"]);
+    origin
+}
+
+/// Sandbox with repos `a` (default) and `b` (not default), each with a local bare origin.
+fn new_sandbox() -> Sandbox {
+    let s = Sandbox::new();
+    s.all_tools();
+    remote_repo(&s, "a");
+    remote_repo(&s, "b");
+    s.write_config(&format!(
+        "version = 1\n\n[paths]\nworktrees = \"{wt}\"\nrepos = \"{repos}\"\n\n[repos.a]\ndefault = true\n\n[repos.b]\n",
+        wt = s.path("wt").display(),
+        repos = s.path("repos").display(),
+    ));
+    s
+}
+
+fn branch_of(wt: PathBuf) -> String {
+    git_in(&wt, &["rev-parse", "--abbrev-ref", "HEAD"])
+}
+
+#[test]
+fn new_creates_worktree_branch_from_base_and_context_file() {
+    let s = new_sandbox();
+    let o = s.run(&["new", "7", "my-slug", "--no-ado"]);
+    assert_exit(&o, 0);
+    let wt = s.path("wt/7/a");
+    assert!(wt.join(".git").exists());
+    assert_eq!(branch_of(wt.clone()), "feat/7-my-slug");
+    // branched from origin/main
+    assert_eq!(
+        git_in(&wt, &["rev-parse", "HEAD"]),
+        git_in(&wt, &["rev-parse", "origin/main"])
+    );
+    assert!(!s.path("wt/7/b").exists(), "only default repos");
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("Card #7"), "{ctx}");
+    assert!(ctx.contains("feat/7-my-slug"), "{ctx}");
+}
+
+#[test]
+fn new_uses_the_base_and_fix_prefix_flags() {
+    let s = new_sandbox();
+    let a = s.path("repos/a");
+    git_in(&a, &["checkout", "-q", "-b", "dev"]);
+    git_in(&a, &["commit", "-q", "--allow-empty", "-m", "on dev"]);
+    git_in(&a, &["push", "-q", "origin", "dev"]);
+    git_in(&a, &["checkout", "-q", "main"]);
+    let o = s.run(&["new", "8", "x", "--no-ado", "--base", "dev", "--fix"]);
+    assert_exit(&o, 0);
+    let wt = s.path("wt/8/a");
+    assert_eq!(branch_of(wt.clone()), "fix/8-x");
+    assert_eq!(
+        git_in(&wt, &["rev-parse", "HEAD"]),
+        git_in(&wt, &["rev-parse", "origin/dev"])
+    );
+}
+
+#[test]
+fn new_prefers_an_origin_branch_with_the_id() {
+    let s = new_sandbox();
+    let a = s.path("repos/a");
+    git_in(&a, &["checkout", "-q", "-b", "feature/9-existing"]);
+    git_in(&a, &["commit", "-q", "--allow-empty", "-m", "remote work"]);
+    git_in(&a, &["push", "-q", "origin", "feature/9-existing"]);
+    git_in(&a, &["checkout", "-q", "main"]);
+    git_in(&a, &["branch", "-q", "-D", "feature/9-existing"]);
+    let o = s.run(&["new", "9", "ignored", "--no-ado"]);
+    assert_exit(&o, 0);
+    let wt = s.path("wt/9/a");
+    assert_eq!(branch_of(wt.clone()), "feature/9-existing");
+    assert_eq!(
+        git_in(&wt, &["rev-parse", "--abbrev-ref", "@{upstream}"]),
+        "origin/feature/9-existing"
+    );
+}
+
+#[test]
+fn new_branch_flag_forces_the_branch() {
+    let s = new_sandbox();
+    let o = s.run(&["new", "10", "--no-ado", "--branch", "custom/thing"]);
+    assert_exit(&o, 0);
+    assert_eq!(branch_of(s.path("wt/10/a")), "custom/thing");
+}
+
+#[test]
+fn new_refuses_an_existing_card() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    let o = s.run(&["new", "7", "s", "--no-ado"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "already exists");
+}
+
+#[test]
+fn add_repo_adds_a_repo_to_the_card() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    let o = s.run(&["add-repo", "7", "b", "--branch", "feat/7-b"]);
+    assert_exit(&o, 0);
+    assert!(s.path("wt/7/b/.git").exists());
+    assert_eq!(branch_of(s.path("wt/7/b")), "feat/7-b");
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("`b`"), "{ctx}");
+    // safe to re-run
+    let again = s.run(&["add-repo", "7", "b"]);
+    assert_exit(&again, 0);
+    assert_has(&again, "already in the card");
+}
+
+#[test]
+fn add_repo_to_a_missing_card_fails() {
+    let s = new_sandbox();
+    let o = s.run(&["add-repo", "404", "b"]);
+    assert_exit(&o, 1);
+}
+
+#[test]
+fn rm_refuses_a_dirty_worktree_and_force_removes_it() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    fs::write(s.path("wt/7/a/dirty.txt"), "x").unwrap();
+    let o = s.run(&["rm", "7"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "uncommitted changes");
+    assert!(s.path("wt/7/a").exists());
+    let o = s.run(&["rm", "--force", "--branches", "7"]);
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/7").exists());
+    let branches = git_in(&s.path("repos/a"), &["branch", "--list", "feat/7-s"]);
+    assert!(branches.is_empty(), "branch should be deleted: {branches}");
+}
+
+#[test]
+fn rm_keeps_branches_by_default() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    assert_exit(&s.run(&["rm", "7"]), 0);
+    assert!(!s.path("wt/7").exists());
+    let branches = git_in(&s.path("repos/a"), &["branch", "--list", "feat/7-s"]);
+    assert!(branches.contains("feat/7-s"), "{branches}");
+}
+
+#[test]
+fn prune_cleans_orphaned_worktree_records() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    // the worktree folder disappears behind git's back
+    fs::remove_dir_all(s.path("wt/7/a")).unwrap();
+    let main = s.path("repos/a");
+    assert!(git_in(&main, &["worktree", "list", "--porcelain"]).contains("wt/7/a"));
+
+    let dry = s.run(&["prune", "--dry-run"]);
+    assert_exit(&dry, 0);
+    assert!(git_in(&main, &["worktree", "list", "--porcelain"]).contains("wt/7/a"));
+
+    let o = s.run_with(s.cmd(&["prune"]), "n\n");
+    assert_exit(&o, 0);
+    assert!(!git_in(&main, &["worktree", "list", "--porcelain"]).contains("wt/7/a"));
+    // the now-empty card folder was only listed; answering "n" keeps it
+    assert!(s.path("wt/7").exists());
+}
+
+#[test]
+fn prune_removes_empty_card_folders_when_confirmed() {
+    let s = new_sandbox();
+    fs::create_dir_all(s.path("wt/55")).unwrap();
+    let o = s.run_with(s.cmd(&["prune"]), "y\n");
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/55").exists());
+}
