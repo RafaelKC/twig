@@ -2,6 +2,32 @@
 
 What's done and what's left for `twig` to be a tool any team can install.
 
+Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
+
+## Releases
+
+### Next: v0.2.0 — card lifecycle and agents
+
+Order of work (each step settles the surface the next one builds on):
+
+1. [ ] [#6](https://github.com/RafaelKC/twig/issues/6) `rm` removes the herdr workspace, blocks when an agent is running, `-f/--force` bypasses the checks
+2. [ ] [#1](https://github.com/RafaelKC/twig/issues/1) `twig open [id] [default|herdr|code]`; `herdr` and `code` stay as aliases; default target in the config
+3. [ ] [#7](https://github.com/RafaelKC/twig/issues/7) `twig open-card` / `opcd`, Azure DevOps only (`gh` gives a clear "not supported yet")
+4. [ ] [#2](https://github.com/RafaelKC/twig/issues/2) Codex next to Claude Code (`AGENTS.md` / `CLAUDE.md`); other agents are tracked in [#8](https://github.com/RafaelKC/twig/issues/8)
+
+### Later
+
+Not scheduled yet; grouped by theme.
+
+- **Ports and run:** [#3](https://github.com/RafaelKC/twig/issues/3) per-card dev server ports (card A front on 4200, card B on 4201)
+- **GitHub provider:** [#4](https://github.com/RafaelKC/twig/issues/4) `owner/repo#123` ids (unblocks `open-card` for `gh`)
+- **Automation:** [#5](https://github.com/RafaelKC/twig/issues/5) run a skill after creating a workspace; [#15](https://github.com/RafaelKC/twig/issues/15) lifecycle hooks; [#14](https://github.com/RafaelKC/twig/issues/14) card templates
+- **Day-to-day commands:** [#9](https://github.com/RafaelKC/twig/issues/9) `status`; [#10](https://github.com/RafaelKC/twig/issues/10) `clean` (merged/closed cards); [#12](https://github.com/RafaelKC/twig/issues/12) `pr`; [#13](https://github.com/RafaelKC/twig/issues/13) `sync`; [#11](https://github.com/RafaelKC/twig/issues/11) `--json`
+- **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
+- **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `config get/set`, `.twig.toml`; [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
+
+Current: v0.1.1 (installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
+
 ## Product and name
 
 - [ ] Pick a final name for the CLI (`twig` is provisional)
@@ -12,8 +38,9 @@ What's done and what's left for `twig` to be a tool any team can install.
 
 - [x] Support the `az` CLI (Azure DevOps) **and** the `gh` CLI (GitHub)
   - [x] Single provider interface: title, type, state, assignee, tags, description, acceptance criteria and link, cached per card
-  - [ ] The branch's PR (status, link) through the provider
-  - [ ] GitHub `owner/repo#123` ids (today the issue is looked up in the first repo of the card)
+  - [ ] The branch's PR (status, link) through the provider ([#12](https://github.com/RafaelKC/twig/issues/12))
+  - [ ] GitHub `owner/repo#123` ids (today the issue is looked up in the first repo of the card) ([#4](https://github.com/RafaelKC/twig/issues/4))
+- [ ] More providers: Jira, Linear, GitLab ([#17](https://github.com/RafaelKC/twig/issues/17))
 - [x] At install, ask which CLI to use (az and/or gh)
 - [x] If the chosen CLI isn't installed, install it (brew/apt/dnf/pacman)
 - [x] If not logged in, run the login (`az login` / `gh auth login`) and set the default ADO organization
@@ -39,10 +66,13 @@ What's done and what's left for `twig` to be a tool any team can install.
 - [x] Config file (`~/.config/twig/config.toml`, or `TWIG_CONFIG`)
   - [x] Folders, repos, labels, provider, base branch, branch prefixes, run/install commands, local files, debug configs
   - [x] Repos passed with `--repos` that aren't in the config get registered automatically
-  - [ ] Per-repo override (versioned `.twig.toml` in the repo) and per-card override
-  - [ ] Environment variable overrides and their precedence
+  - [ ] Per-repo override (versioned `.twig.toml` in the repo) and per-card override ([#19](https://github.com/RafaelKC/twig/issues/19))
+  - [ ] Environment variable overrides and their precedence ([#19](https://github.com/RafaelKC/twig/issues/19))
 - [x] `twig config edit`
-- [ ] `twig config get/set`
+- [ ] `twig config get/set` ([#19](https://github.com/RafaelKC/twig/issues/19))
+- [ ] `[open] default` target for `twig open` ([#1](https://github.com/RafaelKC/twig/issues/1))
+- [ ] Card templates ([#14](https://github.com/RafaelKC/twig/issues/14)) and lifecycle hooks ([#15](https://github.com/RafaelKC/twig/issues/15))
+- [ ] Agent choice: Codex ([#2](https://github.com/RafaelKC/twig/issues/2)), more agents ([#8](https://github.com/RafaelKC/twig/issues/8))
 
 ## Run and ports per project type
 
@@ -51,9 +81,18 @@ What's done and what's left for `twig` to be a tool any team can install.
   - [ ] Angular (`angular.json` / `ng serve --port` / `environment.ts`)
   - [ ] Generic Node (`package.json` scripts, `PORT`)
   - [ ] Others: Vite, Next, Python, Go…
-- [ ] Per-card ports, so two cards can run at the same time
+- [ ] Per-card ports, so two cards can run at the same time ([#3](https://github.com/RafaelKC/twig/issues/3))
 - [ ] Users can write their own strategy (script/plugin in the config folder, with a contract: `detect`, `run_cmd`, `apply_port`, `default_port_base`)
 - [ ] Wire front ↔ back automatically (front pointing at the same card's back-end port)
+
+## Commands (ideas, see issues)
+
+- [ ] `twig rm` also removes the herdr workspace, blocks on a running agent, `-f` ([#6](https://github.com/RafaelKC/twig/issues/6))
+- [ ] `twig open [id] [default|herdr|code]` ([#1](https://github.com/RafaelKC/twig/issues/1))
+- [ ] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7))
+- [ ] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9)), `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
+- [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12)), `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
+- [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5)), handoff notes ([#16](https://github.com/RafaelKC/twig/issues/16))
 
 ## herdr integration (plugin)
 
@@ -61,7 +100,7 @@ What's done and what's left for `twig` to be a tool any team can install.
 - [ ] "Open card in ADO/GitHub" action (browser)
 - [ ] "Open card's PR" action (or warn if it doesn't exist)
 - [ ] "Open running front end" action (`localhost:<card port>`)
-- [ ] "Close card" action: `twig rm` + `herdr workspace close` (manual today)
+- [ ] "Close card" action (after [#6](https://github.com/RafaelKC/twig/issues/6) `rm` also closes the workspace; the action itself is still missing): `twig rm` + `herdr workspace close` (manual today)
 - [ ] Link handler: Ctrl+click on a card/PR URL → `twig herdr <id>`
 - [ ] Popup picker (fzf) of cards in `~/.wt` + cards assigned to me → opens/creates the workspace
 - [ ] Card status in the sidebar via `workspace report-metadata` (card state, PR status/build, app running) with caching
@@ -111,7 +150,7 @@ herdr's native Windows support, which is still in beta, so this waits until it's
 ## Quality
 
 - [x] Integration tests for `doctor`, `config edit`, `code` and the herdr plugin (fake tools on a controlled `PATH`)
-- [ ] Integration tests for `new` / `add-repo` / `rm` / `prune` against local git remotes
-- [ ] CI on pull requests: `cargo fmt --check`, `cargo clippy`, `cargo test`, `shellcheck install.sh` (today tests only run on release tags)
+- [ ] Integration tests for `new` / `add-repo` / `rm` / `prune` against local git remotes ([#18](https://github.com/RafaelKC/twig/issues/18))
+- [ ] CI on pull requests: `cargo fmt --check`, `cargo clippy`, `cargo test`, `shellcheck install.sh` (today tests only run on release tags) ([#18](https://github.com/RafaelKC/twig/issues/18))
 - [x] Translate runtime messages and the generated `CLAUDE.md` to English (or make them localizable)
 - [ ] Test on macOS (today used on Linux/WSL)
