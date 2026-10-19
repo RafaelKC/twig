@@ -711,6 +711,10 @@ fn rm_sandbox(agent_status: &str) -> (Sandbox, PathBuf) {
         assert!(Command::new("git")
             .args(args)
             .current_dir(dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t")
             .status()
             .unwrap()
             .success());
