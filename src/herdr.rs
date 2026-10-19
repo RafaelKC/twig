@@ -68,6 +68,46 @@ pub fn find_workspace(id: &str) -> Result<Option<String>> {
         .and_then(|w| w["workspace_id"].as_str().map(String::from)))
 }
 
+/// Panes whose agent is busy: `working` or `blocked` (waiting on the user).
+fn busy_panes(panes: &Value) -> Vec<String> {
+    panes
+        .pointer("/result/panes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|p| matches!(p["agent_status"].as_str(), Some("working" | "blocked")))
+        .filter_map(|p| p["pane_id"].as_str().map(String::from))
+        .collect()
+}
+
+/// Panes with a running agent in the card's workspace. Empty when herdr isn't installed,
+/// isn't running or has no workspace for the card (it never starts the server).
+pub fn running_agents(id: &str) -> Vec<String> {
+    if sys::which("herdr").is_none() || !server_up() {
+        return Vec::new();
+    }
+    let Ok(Some(ws)) = find_workspace(id) else { return Vec::new() };
+    herdr(&["pane", "list", "--workspace", &ws]).map(|v| busy_panes(&v)).unwrap_or_default()
+}
+
+/// Close the card's herdr workspace, if there is one. Failures are only warnings.
+pub fn close_workspace(id: &str) {
+    if sys::which("herdr").is_none() || !server_up() {
+        return;
+    }
+    match find_workspace(id) {
+        Ok(Some(ws)) => {
+            if sys::quiet(Command::new("herdr").args(["workspace", "close", &ws])) {
+                ui::ok(format!("herdr workspace #{id} closed"));
+            } else {
+                ui::warn(format!("could not close the herdr workspace #{id}"));
+            }
+        }
+        Ok(None) => {}
+        Err(e) => ui::warn(format!("herdr: {e:#}")),
+    }
+}
+
 fn find_tab(ws: &str, label: &str) -> Result<Option<String>> {
     let v = herdr(&["tab", "list", "--workspace", ws])?;
     Ok(v.pointer("/result/tabs")
@@ -168,4 +208,27 @@ pub fn open(ws: &str) -> Result<()> {
         sys::run(&mut Command::new("herdr"))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn busy_panes_picks_working_and_blocked_agents() {
+        let v = json!({"result": {"panes": [
+            {"pane_id": "w1:p1", "agent_status": "working"},
+            {"pane_id": "w1:p2", "agent_status": "idle"},
+            {"pane_id": "w1:p3", "agent_status": "blocked"},
+            {"pane_id": "w1:p4"},
+        ]}});
+        assert_eq!(busy_panes(&v), ["w1:p1", "w1:p3"]);
+    }
+
+    #[test]
+    fn busy_panes_tolerates_unexpected_shapes() {
+        assert!(busy_panes(&json!({})).is_empty());
+        assert!(busy_panes(&json!({"result": {"panes": []}})).is_empty());
+    }
 }

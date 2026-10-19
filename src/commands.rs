@@ -325,15 +325,23 @@ pub fn refresh(cfg: &Config, id: &str, refetch: bool) -> Result<()> {
     regenerate(cfg, id, info.as_ref())
 }
 
-pub fn rm(cfg: &Config, id: &str, branches: bool) -> Result<()> {
+pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
     let dir = card::require_card(cfg, id)?;
     let repos = card::repos_in(&dir);
 
-    for repo in &repos {
-        if sys::git_is_dirty(&dir.join(repo)) {
-            bail!("[{repo}] has uncommitted changes, resolve them first");
+    if !force {
+        for repo in &repos {
+            if sys::git_is_dirty(&dir.join(repo)) {
+                bail!("[{repo}] has uncommitted changes, resolve them first (or use --force)");
+            }
+        }
+        let busy = herdr::running_agents(id);
+        if !busy.is_empty() {
+            bail!("an agent is running in the herdr workspace #{id} ({}), stop it first (or use --force)", busy.join(", "));
         }
     }
+
+    herdr::close_workspace(id);
 
     for repo in &repos {
         let wt = dir.join(repo);

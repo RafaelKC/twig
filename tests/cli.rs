@@ -445,3 +445,77 @@ fn uninstall_removes_twigs_pieces() {
     let herdr_calls = fs::read_to_string(&herdr_log).unwrap();
     assert!(herdr_calls.contains("plugin unlink twig"), "{herdr_calls}");
 }
+
+// ───────────────────────── rm ─────────────────────────
+
+/// Sandbox with card `123` (a real worktree of `r1`) and a fake `herdr` that logs its calls.
+/// `agent_status` is what its single pane reports.
+fn rm_sandbox(agent_status: &str) -> (Sandbox, PathBuf) {
+    let s = Sandbox::new();
+    s.git_identity();
+    s.valid_config("");
+    let main = s.path("repos/r1");
+    let git = |args: &[&str], dir: &Path| {
+        assert!(Command::new("git").args(args).current_dir(dir).status().unwrap().success());
+    };
+    git(&["commit", "-q", "--allow-empty", "-m", "init"], &main);
+    fs::create_dir_all(s.path("wt/123")).unwrap();
+    git(&["worktree", "add", "-q", "-b", "card-123", &s.path("wt/123/r1").to_string_lossy()], &main);
+    let log = s.path("herdr.log");
+    let body = format!(
+        r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[{{"label":"123","workspace_id":"w1"}}]}}}}' ;;
+  "pane list") echo '{{"result":{{"panes":[{{"pane_id":"w1:p1","agent_status":"{agent_status}"}}]}}}}' ;;
+esac"#,
+        log = log.display()
+    );
+    s.stub("herdr", &body);
+    (s, log)
+}
+
+fn herdr_calls(log: &Path) -> String {
+    fs::read_to_string(log).unwrap_or_default()
+}
+
+#[test]
+fn rm_removes_card_and_closes_herdr_workspace() {
+    let (s, log) = rm_sandbox("idle");
+    let o = s.run(&["rm", "123"]);
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/123").exists());
+    assert!(herdr_calls(&log).contains("workspace close w1"), "{}", herdr_calls(&log));
+}
+
+#[test]
+fn rm_blocks_when_agent_is_running() {
+    let (s, log) = rm_sandbox("working");
+    let o = s.run(&["rm", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "an agent is running");
+    assert!(s.path("wt/123/r1").exists());
+    assert!(!herdr_calls(&log).contains("workspace close"));
+}
+
+#[test]
+fn rm_force_ignores_running_agent_and_dirty_worktree() {
+    let (s, log) = rm_sandbox("working");
+    fs::write(s.path("wt/123/r1/dirty.txt"), "x").unwrap();
+    let blocked = s.run(&["rm", "123"]);
+    assert_exit(&blocked, 1);
+    assert!(s.path("wt/123").exists());
+
+    let o = s.run(&["rm", "-f", "123"]);
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/123").exists());
+    assert!(herdr_calls(&log).contains("workspace close w1"));
+}
+
+#[test]
+fn rm_works_without_herdr() {
+    let (s, _log) = rm_sandbox("idle");
+    fs::remove_file(s.bin.join("herdr")).unwrap();
+    let o = s.run(&["rm", "123"]);
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/123").exists());
+}

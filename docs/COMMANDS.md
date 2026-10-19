@@ -12,7 +12,7 @@
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls` | lists active cards and each repo's branch |
 | `twig refresh <id>` | regenerates `.code-workspace` and `CLAUDE.md` |
-| `twig rm <id>` | removes the card's worktrees and folder |
+| `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor` | checks dependencies, login and config without changing anything |
 | `twig config edit` | opens the config in an editor and validates it on save |
@@ -128,14 +128,17 @@ Use it after renaming a branch or changing the config.
 |---|---|
 | `--refetch` | drops the cache and fetches the card data from the provider again |
 
-## `twig rm <id> [--branches]`
+## `twig rm <id> [--branches] [-f]`
 
-Removes the card's worktrees and folder. Refuses if any repo has uncommitted
-changes. Local branches are kept by default.
+Removes the card's worktrees and folder, and closes its herdr workspace. Refuses if any
+repo has uncommitted changes or if an agent is running (`working` or `blocked`) in the
+card's herdr workspace. Local branches are kept by default. Without herdr installed or
+running, the herdr steps are skipped.
 
 | Option | Description |
 |---|---|
 | `--branches` | also deletes the local branches |
+| `-f`, `--force` | skips both checks (uncommitted changes and running agent) |
 
 ## `twig prune [-n | --dry-run]`
 

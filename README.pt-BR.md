@@ -152,7 +152,7 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `code [id]` | abre o card no VS Code; sem id, o card atual |
 | `ls` | cards ativos e a branch de cada repo |
 | `refresh <id>` | regenera o `CLAUDE.md` e o `.code-workspace` |
-| `rm <id>` | remove o card (recusa se houver alterações não commitadas) |
+| `rm <id> [-f]` | remove o card e o workspace do herdr (recusa se houver alterações não commitadas ou agente rodando; `-f` ignora) |
 | `prune` | limpa registros de worktrees órfãos |
 | `doctor` | verifica dependências, logins, config e repos |
 | `config edit` | edita a config e valida ao salvar |
