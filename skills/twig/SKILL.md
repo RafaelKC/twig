@@ -47,6 +47,7 @@ a card.
 | `twig ls` | list active cards and each repo's branch (`*` = uncommitted changes) |
 | `twig status [id]` | per repo: branch, uncommitted files (`*N`), ahead/behind vs base and origin; herdr workspace and running agent. No id = all cards, compact |
 | `twig refresh <id> [--refetch]` | regenerate the context file (`CLAUDE.md`/`AGENTS.md`) and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
+| `twig sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase (default, `git.sync`) or merge it into every repo of the card; skips repos with uncommitted changes, stops on a conflict naming repo/files; `-n` = dry run |
 | `twig rm <id> [--branches] [-f]` | close the card and its herdr workspace; refuses with uncommitted changes or a running agent (`working`/`blocked`); `-f/--force` bypasses both, so only use it when the user asks |
 | `twig prune [-n]` | clean up orphaned worktree records (folder deleted by hand) |
 | `twig doctor` | diagnose dependencies, login, config, and repos |

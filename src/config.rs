@@ -207,6 +207,17 @@ impl Default for Paths {
 pub struct Git {
     pub base_branch: String,
     pub branch_prefix: HashMap<String, String>,
+    /// How `twig sync` brings the base branch in.
+    pub sync: SyncMode,
+}
+
+/// `twig sync` strategy.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SyncMode {
+    #[default]
+    Rebase,
+    Merge,
 }
 
 impl Default for Git {
@@ -214,6 +225,7 @@ impl Default for Git {
         Self {
             base_branch: "main".into(),
             branch_prefix: HashMap::new(),
+            sync: SyncMode::default(),
         }
     }
 }
@@ -462,6 +474,17 @@ mod tests {
     fn old_ai_section_name_still_works() {
         let cfg = parse("[ai]\nprovider = \"claude\"\ncommand = \"claude\"").unwrap();
         assert_eq!(cfg.ai.provider, AgentKind::Claude);
+    }
+
+    #[test]
+    fn git_sync_defaults_to_rebase_and_is_validated() {
+        assert_eq!(parse("").unwrap().git.sync, SyncMode::Rebase);
+        assert_eq!(
+            parse("[git]\nsync = \"merge\"").unwrap().git.sync,
+            SyncMode::Merge
+        );
+        let err = parse("[git]\nsync = \"squash\"").unwrap_err().to_string();
+        assert!(err.contains("rebase") && err.contains("merge"), "{err}");
     }
 
     #[test]

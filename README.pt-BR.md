@@ -158,6 +158,7 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `ls` | cards ativos e a branch de cada repo |
 | `status [id]` | por repo: branch, arquivos alterados, ahead/behind vs base e origin; workspace e agente do herdr |
 | `refresh <id>` | regenera o `CLAUDE.md`/`AGENTS.md` e o `.code-workspace` |
+| `sync <id> [--merge\|--rebase] [-n]` | busca a branch base e faz rebase/merge dela em cada repo do card |
 | `rm <id> [-f]` | remove o card e o workspace do herdr (recusa se houver alterações não commitadas ou agente rodando; `-f` ignora) |
 | `prune` | limpa registros de worktrees órfãos |
 | `doctor` | verifica dependências, logins, config e repos |

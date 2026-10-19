@@ -153,6 +153,7 @@ it from the environment. `twig doctor` reports the setting.
 |---|---|---|
 | `base_branch` | `"main"` | branch new branches are created from |
 | `branch_prefix` | `{ default = "feat" }` | new branch prefix per work item type; `default` for the rest |
+| `sync` | `"rebase"` | how `twig sync` brings the base branch in: `"rebase"` or `"merge"` (overridden by `--rebase`/`--merge`) |
 
 ### `[worktree]`
 

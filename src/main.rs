@@ -8,6 +8,7 @@ mod herdr;
 mod provider;
 mod selfmgmt;
 mod status;
+mod sync;
 mod sys;
 mod ui;
 mod updatecheck;
@@ -136,6 +137,22 @@ enum Cmd {
         /// Drop the cache and fetch the card data from the provider again.
         #[arg(long)]
         refetch: bool,
+    },
+    /// Fetch the base branch and rebase/merge it into every repo of the card.
+    ///
+    /// Repos with uncommitted changes are skipped and reported; a conflict stops the run
+    /// and names the repo and files. Default strategy: `[git] sync` (rebase).
+    Sync {
+        id: String,
+        /// Merge the base branch instead of rebasing.
+        #[arg(long, conflicts_with = "rebase")]
+        merge: bool,
+        /// Rebase onto the base branch (overrides `[git] sync = "merge"`).
+        #[arg(long)]
+        rebase: bool,
+        /// Fetch and show what would happen, without changing any worktree.
+        #[arg(short = 'n', long)]
+        dry_run: bool,
     },
     /// Remove the card's worktrees, folder and herdr workspace (refuses with uncommitted changes or a running agent).
     #[command(alias = "remove")]
@@ -292,6 +309,19 @@ fn run(cli: Cli) -> Result<()> {
             branches,
             force,
         } => commands::rm(&cfg, &id, branches, force),
+        Cmd::Sync {
+            id,
+            merge,
+            rebase,
+            dry_run,
+        } => {
+            let mode = match (merge, rebase) {
+                (true, _) => Some(config::SyncMode::Merge),
+                (_, true) => Some(config::SyncMode::Rebase),
+                _ => None,
+            };
+            sync::run(&cfg, &id, mode, dry_run)
+        }
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
         Cmd::Completions { .. }
         | Cmd::Doctor

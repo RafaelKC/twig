@@ -1148,3 +1148,186 @@ fn prune_removes_empty_card_folders_when_confirmed() {
     assert_exit(&o, 0);
     assert!(!s.path("wt/55").exists());
 }
+
+// ───────────────────────── sync ─────────────────────────
+
+/// Commit `file` = `content` on `dir`'s current branch.
+fn commit_file(dir: &Path, file: &str, content: &str, msg: &str) {
+    fs::write(dir.join(file), content).unwrap();
+    git_in(dir, &["add", file]);
+    git_in(dir, &["commit", "-q", "-m", msg]);
+}
+
+/// Card `123` with a worktree of `r1` on `card-123` (one own commit, `mine.txt`), cloned from
+/// a bare origin whose `main` has one commit (`base.txt`). `config_extra` goes in the config.
+fn sync_sandbox(config_extra: &str) -> (Sandbox, PathBuf) {
+    let s = Sandbox::new();
+    s.git_identity();
+    s.valid_config(config_extra);
+    let origin = s.path("origin.git");
+    fs::create_dir_all(&origin).unwrap();
+    git_in(&origin, &["init", "-q", "--bare", "-b", "main"]);
+    // valid_config already ran `git init` in repos/r1; replace it with a clone of origin
+    let main = s.path("repos/r1");
+    fs::remove_dir_all(&main).unwrap();
+    git_in(
+        &s.home,
+        &[
+            "clone",
+            "-q",
+            &origin.to_string_lossy(),
+            &main.to_string_lossy(),
+        ],
+    );
+    git_in(&main, &["checkout", "-q", "-B", "main"]);
+    commit_file(&main, "base.txt", "base\n", "base");
+    git_in(&main, &["push", "-q", "origin", "main"]);
+    fs::create_dir_all(s.path("wt/123")).unwrap();
+    let wt = s.path("wt/123/r1");
+    git_in(
+        &main,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "card-123",
+            &wt.to_string_lossy(),
+        ],
+    );
+    commit_file(&wt, "mine.txt", "mine\n", "card work");
+    (s, wt)
+}
+
+/// Push a new commit to origin's main from a throwaway clone.
+fn advance_base(s: &Sandbox, file: &str, content: &str) {
+    let other = s.path("other");
+    if !other.exists() {
+        git_in(
+            &s.home,
+            &[
+                "clone",
+                "-q",
+                &s.path("origin.git").to_string_lossy(),
+                &other.to_string_lossy(),
+            ],
+        );
+    }
+    commit_file(&other, file, content, "advance base");
+    git_in(&other, &["push", "-q", "origin", "main"]);
+}
+
+fn log_subjects(dir: &Path) -> String {
+    git_in(dir, &["log", "--format=%s"])
+}
+
+fn has_merges(dir: &Path) -> bool {
+    !git_in(dir, &["rev-list", "--merges", "HEAD"])
+        .trim()
+        .is_empty()
+}
+
+#[test]
+fn sync_rebases_the_card_branch_onto_the_base() {
+    let (s, wt) = sync_sandbox("");
+    advance_base(&s, "new.txt", "new\n");
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 0);
+    assert!(wt.join("new.txt").exists(), "{}", text(&o));
+    assert_eq!(
+        log_subjects(&wt).lines().collect::<Vec<_>>(),
+        ["card work", "advance base", "base"]
+    );
+    assert!(!has_merges(&wt));
+}
+
+#[test]
+fn sync_merge_flag_creates_a_merge_commit() {
+    let (s, wt) = sync_sandbox("");
+    advance_base(&s, "new.txt", "new\n");
+    let o = s.run(&["sync", "123", "--merge"]);
+    assert_exit(&o, 0);
+    assert!(wt.join("new.txt").exists());
+    assert!(has_merges(&wt));
+}
+
+#[test]
+fn sync_uses_the_configured_strategy_and_rebase_overrides_it() {
+    let (s, wt) = sync_sandbox("[git]\nsync = \"merge\"\n");
+    advance_base(&s, "new.txt", "new\n");
+    assert_exit(&s.run(&["sync", "123"]), 0);
+    assert!(has_merges(&wt));
+
+    let (s, wt) = sync_sandbox("[git]\nsync = \"merge\"\n");
+    advance_base(&s, "new.txt", "new\n");
+    assert_exit(&s.run(&["sync", "123", "--rebase"]), 0);
+    assert!(!has_merges(&wt));
+}
+
+#[test]
+fn sync_rejects_an_invalid_strategy_in_the_config() {
+    let (s, _wt) = sync_sandbox("[git]\nsync = \"squash\"\n");
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "squash");
+}
+
+#[test]
+fn sync_merge_and_rebase_are_mutually_exclusive() {
+    let (s, _wt) = sync_sandbox("");
+    let o = s.run(&["sync", "123", "--merge", "--rebase"]);
+    assert_exit(&o, 2);
+}
+
+#[test]
+fn sync_dry_run_changes_nothing() {
+    let (s, wt) = sync_sandbox("");
+    advance_base(&s, "new.txt", "new\n");
+    let head = git_in(&wt, &["rev-parse", "HEAD"]);
+    let o = s.run(&["sync", "123", "--dry-run"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "would rebase 1 commit(s)");
+    assert_eq!(git_in(&wt, &["rev-parse", "HEAD"]), head);
+    assert!(!wt.join("new.txt").exists());
+}
+
+#[test]
+fn sync_reports_when_already_up_to_date() {
+    let (s, _wt) = sync_sandbox("");
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "up to date");
+}
+
+#[test]
+fn sync_skips_repos_with_uncommitted_changes() {
+    let (s, wt) = sync_sandbox("");
+    advance_base(&s, "new.txt", "new\n");
+    fs::write(wt.join("mine.txt"), "edited\n").unwrap();
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "r1: uncommitted changes, skipped");
+    assert!(!wt.join("new.txt").exists());
+    assert_eq!(fs::read_to_string(wt.join("mine.txt")).unwrap(), "edited\n");
+}
+
+#[test]
+fn sync_stops_on_conflict_naming_repo_and_files() {
+    let (s, wt) = sync_sandbox("");
+    // the card edits base.txt too, and so does the base
+    commit_file(&wt, "base.txt", "card side\n", "card edits base");
+    advance_base(&s, "base.txt", "base side\n");
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "r1: conflict in rebase");
+    assert_has(&o, "base.txt");
+    assert_has(&o, "--abort");
+}
+
+#[test]
+fn sync_unknown_card_fails() {
+    let (s, _wt) = sync_sandbox("");
+    let o = s.run(&["sync", "999"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "card 999 not found");
+}
