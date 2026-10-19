@@ -864,7 +864,7 @@ fn open_card_with_gh_provider_fails_clearly() {
 
 // ───────────────────────── status ─────────────────────────
 
-fn git_in(dir: &Path, args: &[&str]) {
+fn git_quiet(dir: &Path, args: &[&str]) {
     assert!(
         Command::new("git")
             .args(args)
@@ -886,18 +886,18 @@ fn status_sandbox(agent_status: &str) -> Sandbox {
     let (s, _log) = rm_sandbox(agent_status);
     let main = s.path("repos/r1");
     let wt = s.path("wt/123/r1");
-    git_in(&main, &["branch", "-M", "main"]);
+    git_quiet(&main, &["branch", "-M", "main"]);
     let remote = s.path("remote.git");
     fs::create_dir_all(&remote).unwrap();
-    git_in(&remote, &["init", "-q", "--bare"]);
-    git_in(
+    git_quiet(&remote, &["init", "-q", "--bare"]);
+    git_quiet(
         &main,
         &["remote", "add", "origin", &remote.to_string_lossy()],
     );
-    git_in(&main, &["push", "-q", "origin", "main"]);
-    git_in(&wt, &["commit", "-q", "--allow-empty", "-m", "one"]);
-    git_in(&wt, &["push", "-q", "-u", "origin", "card-123"]);
-    git_in(&wt, &["commit", "-q", "--allow-empty", "-m", "two"]);
+    git_quiet(&main, &["push", "-q", "origin", "main"]);
+    git_quiet(&wt, &["commit", "-q", "--allow-empty", "-m", "one"]);
+    git_quiet(&wt, &["push", "-q", "-u", "origin", "card-123"]);
+    git_quiet(&wt, &["commit", "-q", "--allow-empty", "-m", "two"]);
     fs::write(wt.join("dirty.txt"), "x").unwrap();
     s
 }
