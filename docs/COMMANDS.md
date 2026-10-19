@@ -11,7 +11,7 @@
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls` | lists active cards and each repo's branch |
-| `twig refresh <id>` | regenerates `.code-workspace` and `CLAUDE.md` |
+| `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
 | `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor` | checks dependencies, login and config without changing anything |
@@ -35,7 +35,7 @@ You can open both, just one, or neither. See [CONFIG.md](CONFIG.md) → `[vscode
 
 ## `twig new <id> [slug] [options]`
 
-Creates the `<worktrees>/<id>/` folder with one worktree per repo, the card's `CLAUDE.md`,
+Creates the `<worktrees>/<id>/` folder with one worktree per repo, the card's context file (`CLAUDE.md`, or `AGENTS.md` with `agent.provider = "codex"`),
 the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 **Arguments**
@@ -69,7 +69,7 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 - Fetches the card's title, type, state, tags, assignee, area, description, acceptance
   criteria and URL from the provider and caches them in the card folder.
-- Generates the card's `CLAUDE.md`: repos and branches, card data and instructions for the agent.
+- Generates the card's context file (`CLAUDE.md`, or `AGENTS.md` with `agent.provider = "codex"`): repos and branches, card data and instructions for the agent.
 - Copies each repo's `local_files` from the main clone into the worktree.
 - A repo that isn't in the config gets registered (see [CONFIG.md](CONFIG.md) → Repos).
 - If something fails midway, rolls back the worktrees already created.
@@ -79,7 +79,7 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 Adds more repos to an existing card. Safe to run again:
 
 - Repo without a worktree in the card → creates it, with the same branch rule as `twig new`.
-- Regenerates `.code-workspace` (if VS Code is enabled) and `CLAUDE.md`.
+- Regenerates `.code-workspace` (if VS Code is enabled) and the context file.
 - herdr: creates missing panes, including ones the user closed.
 
 | Option | Description |
@@ -94,7 +94,7 @@ Adds more repos to an existing card. Safe to run again:
 
 Opens the card's workspace in herdr. If it doesn't exist, creates:
 
-- `agent` tab: one pane per repo running `ai.command` (e.g. `claude`);
+- `agent` tab: one pane per repo running `agent.command` (`claude` or `codex` by default);
 - `run` tab: one pane per repo that has `run` in the config, already starting the project.
 
 If the workspace already exists, it just focuses it. To recreate a closed pane: `twig add-repo <id> <repo>`.
@@ -119,8 +119,8 @@ Lists active cards and each repo's branch. A `*` marks uncommitted changes.
 
 ## `twig refresh <id> [--refetch]`
 
-Regenerates the `.code-workspace` and `CLAUDE.md` of an existing card, preserving the
-"Card context" section of `CLAUDE.md` if it has been filled in (a section under the
+Regenerates the `.code-workspace` and context file of an existing card, preserving the
+"Card context" section of the context file if it has been filled in (a section under the
 old Portuguese heading `## Contexto do card` is also kept, and moved to the new heading).
 Use it after renaming a branch or changing the config.
 
@@ -144,7 +144,7 @@ running, the herdr steps are skipped.
 
 Cleans up orphaned worktree records (folder deleted by hand instead of with `twig rm`) in
 every repo in the config. Also lists folders under `<worktrees>` with no worktree inside
-and asks before deleting them, since they may hold a `CLAUDE.md` with notes.
+and asks before deleting them, since they may hold a context file (`CLAUDE.md` / `AGENTS.md`) with notes.
 
 | Option | Description |
 |---|---|
@@ -165,7 +165,7 @@ Works even with a missing or invalid config (checks that depend on it are skippe
 | VS Code | `code` on the PATH, only with `vscode.enabled = true` | error |
 | provider `az` | on the PATH, `azure-devops` extension, real ADO access (`az devops project list`) | error / warning / warning |
 | provider `gh` | on the PATH, `gh auth status` | error / warning |
-| AI | first token of `ai.command` on the PATH | error |
+| agent | first token of `agent.command` (`claude` / `codex`) on the PATH | error |
 | folders | `paths.worktrees` exists or can be created | error |
 | repos | each `[repos.x]` points to a git repo; at least one has `default = true` | error / warning |
 | orphaned worktrees | same search as `twig prune -n` | warning |

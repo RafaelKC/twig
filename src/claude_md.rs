@@ -1,4 +1,4 @@
-//! The card folder's CLAUDE.md.
+//! The card folder's context file for the agent (CLAUDE.md, AGENTS.md...).
 
 use std::fs;
 
@@ -14,7 +14,7 @@ const CONTEXT_PLACEHOLDER: &str = "_(to fill in)_";
 const LEGACY_CONTEXT_HEADING: &str = "## Contexto do card";
 const LEGACY_CONTEXT_PLACEHOLDER: &str = "_(a preencher)_";
 
-/// The "Card context" section of an existing CLAUDE.md, if it has been filled in.
+/// The "Card context" section of an existing context file, if it has been filled in.
 /// Accepts the legacy Portuguese heading too, rewriting it to the current one (body untouched).
 fn kept_context(old: &str) -> Option<String> {
     let (start, heading) = [CONTEXT_HEADING, LEGACY_CONTEXT_HEADING]
@@ -30,7 +30,7 @@ fn kept_context(old: &str) -> Option<String> {
 
 pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Result<()> {
     let dir = cfg.card_dir(id);
-    let path = dir.join("CLAUDE.md");
+    let path = dir.join(cfg.ai.context_file());
     let repos = card::repos_ordered(cfg, &dir);
 
     // keep the "Card context" section if it has already been filled in
@@ -152,7 +152,7 @@ change is coupled, mention the card (`#{id}`) in the messages for traceability.\
     );
 
     fs::write(&path, body)?;
-    ui::ok(format!("CLAUDE.md generated in {}", dir.display()));
+    ui::ok(format!("{} generated in {}", cfg.ai.context_file(), dir.display()));
     Ok(())
 }
 
@@ -183,5 +183,43 @@ mod tests {
     #[test]
     fn no_context_section_keeps_nothing() {
         assert_eq!(kept_context("# Card #1\n\n## Where you are\n"), None);
+    }
+
+    fn write_card(agent_section: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let wt = tmp.path().join("wt");
+        let text = format!(
+            "version = 1\n{agent_section}\n[paths]\nworktrees = \"{}\"\n",
+            wt.display()
+        );
+        let file = tmp.path().join("config.toml");
+        fs::write(&file, text).unwrap();
+        let cfg = Config::load_from(&file).unwrap();
+        fs::create_dir_all(cfg.card_dir("7")).unwrap();
+        write(&cfg, "7", "slug", None).unwrap();
+        let dir = cfg.card_dir("7");
+        (tmp, dir)
+    }
+
+    #[test]
+    fn claude_writes_claude_md() {
+        let (_tmp, dir) = write_card("");
+        assert!(dir.join("CLAUDE.md").is_file());
+        assert!(!dir.join("AGENTS.md").exists());
+    }
+
+    #[test]
+    fn codex_writes_agents_md_without_claude_wording() {
+        let (_tmp, dir) = write_card("[agent]\nprovider = \"codex\"\n");
+        let body = fs::read_to_string(dir.join("AGENTS.md")).unwrap();
+        assert!(!dir.join("CLAUDE.md").exists());
+        assert!(body.contains("# Card #7"));
+        assert!(!body.to_lowercase().contains("claude"));
+    }
+
+    #[test]
+    fn context_file_override_is_used() {
+        let (_tmp, dir) = write_card("[agent]\nprovider = \"codex\"\ncontext_file = \"NOTES.md\"\n");
+        assert!(dir.join("NOTES.md").is_file());
     }
 }

@@ -189,7 +189,7 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
     };
 
     for (i, repo) in repos.iter().enumerate() {
-        ensure_panel(cfg, &ws, "agent", repo, &cfg.ai.command, &dir.join(repo), fresh && i == 0)?;
+        ensure_panel(cfg, &ws, "agent", repo, cfg.ai.command(), &dir.join(repo), fresh && i == 0)?;
     }
     for repo in &repos {
         let Some(r) = cfg.repo(repo) else { continue };

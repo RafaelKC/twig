@@ -214,10 +214,12 @@ pub fn uninstall(yes: bool) -> Result<()> {
     remove_path(&data_dir()?, "twig data (herdr plugin)");
 
     // AI skill: only ours
-    let skill = home()?.join(".claude/skills/twig");
-    let ours = fs::read_to_string(skill.join("SKILL.md")).map(|s| s.contains("name: twig")).unwrap_or(false);
-    if ours || skill.is_symlink() {
-        remove_path(&skill, "skill");
+    for dir in [".claude/skills/twig", ".codex/skills/twig"] {
+        let skill = home()?.join(dir);
+        let ours = fs::read_to_string(skill.join("SKILL.md")).map(|s| s.contains("name: twig")).unwrap_or(false);
+        if ours || skill.is_symlink() {
+            remove_path(&skill, "skill");
+        }
     }
 
     for f in completion_files()? {

@@ -39,7 +39,7 @@ DevOps ou uma issue do GitHub) o seu próprio sandbox:
 ~/.wt/52644/
 ├── api/                    git worktree na branch do card
 ├── web/                    git worktree na branch do card
-├── CLAUDE.md               título, descrição, critérios de aceite, repos e regras do card
+├── CLAUDE.md               (AGENTS.md no Codex) título, descrição, critérios de aceite, repos e regras do card
 ├── 52644.code-workspace    workspace do VS Code, colorido por card, com tasks de run e um compound de debug
 └── .ado.json               work item em cache
 ```
@@ -52,7 +52,7 @@ Seus clones principais ficam na `main`. Dois cards nunca pisam um no outro.
   escolhida por você: uma branch existente no `origin` com o id no nome, ou uma nova
   `feat/<id>-<slug>` (ou `fix/` para bugs), com o slug vindo do título do card.
 - **Contexto do card para o agente.** Título, estado, descrição e critérios de aceite são
-  puxados do Azure DevOps (`az`) ou do GitHub (`gh`) para o `CLAUDE.md` do card, junto com uma
+  puxados do Azure DevOps (`az`) ou do GitHub (`gh`) para o `CLAUDE.md` do card (`AGENTS.md` no Codex), junto com uma
   seção de "contexto do card" que sobrevive à regeneração.
 - **Workspace no herdr.** Uma aba `agent` com um agente de IA por repo e uma aba `run` que
   inicia cada projeto. Fechou um painel sem querer? `twig add-repo` traz de volta.
@@ -146,12 +146,12 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 
 | Comando | O que faz |
 |---|---|
-| `new <id> [slug]` | worktrees, `CLAUDE.md`, workspace do herdr e, se habilitado, o do VS Code |
+| `new <id> [slug]` | worktrees, `CLAUDE.md`/`AGENTS.md`, workspace do herdr e, se habilitado, o do VS Code |
 | `add-repo <id> <repo,...>` | adiciona repos a um card; recria painéis do herdr que faltam |
 | `herdr <id>` | abre/foca o card no herdr |
 | `code [id]` | abre o card no VS Code; sem id, o card atual |
 | `ls` | cards ativos e a branch de cada repo |
-| `refresh <id>` | regenera o `CLAUDE.md` e o `.code-workspace` |
+| `refresh <id>` | regenera o `CLAUDE.md`/`AGENTS.md` e o `.code-workspace` |
 | `rm <id> [-f]` | remove o card e o workspace do herdr (recusa se houver alterações não commitadas ou agente rodando; `-f` ignora) |
 | `prune` | limpa registros de worktrees órfãos |
 | `doctor` | verifica dependências, logins, config e repos |
