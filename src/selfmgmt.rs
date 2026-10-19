@@ -234,10 +234,10 @@ pub fn uninstall(yes: bool) -> Result<()> {
     }
 
     // herdr plugin and shortcut
-    if sys::which("herdr").is_some() {
-        if sys::quiet(Command::new("herdr").args(["plugin", "unlink", "twig"])) {
-            ui::ok("twig plugin unlinked from herdr");
-        }
+    if sys::which("herdr").is_some()
+        && sys::quiet(Command::new("herdr").args(["plugin", "unlink", "twig"]))
+    {
+        ui::ok("twig plugin unlinked from herdr");
     }
     let hc = herdr_config()?;
     if let Ok(text) = fs::read_to_string(&hc) {
