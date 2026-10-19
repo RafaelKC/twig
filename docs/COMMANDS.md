@@ -13,6 +13,7 @@
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls` | lists active cards and each repo's branch |
+| `twig status [id]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
 | `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
 | `twig prune` | cleans up orphaned worktree records |
@@ -155,6 +156,22 @@ It strips `HERDR_*` from VS Code's environment so its terminal can run `herdr`.
 ## `twig ls`
 
 Lists active cards and each repo's branch. A `*` marks uncommitted changes.
+
+## `twig status [id]`
+
+A richer `ls`. Without an id, every card in compact form; with an id, that card plus the
+refs compared against. Per repo:
+
+- branch and `*N` (number of files with uncommitted changes, untracked included)
+- `base ↑a ↓b`: commits ahead/behind `origin/<git.base_branch>` (the local base branch if
+  there is no `origin/` copy)
+- `origin ↑a ↓b`: commits ahead/behind the branch's upstream (or `origin/<branch>`);
+  `-` when there is nothing to compare against
+
+Per card: whether the herdr workspace exists and whether an agent is running
+(`working`/`blocked`, same detection as `twig rm`). herdr is never started for this.
+It reads local refs only (no fetch), so run `git fetch` for fresh numbers. Ports and PR
+info are not shown yet.
 
 ## `twig refresh <id> [--refetch]`
 

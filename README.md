@@ -141,6 +141,7 @@ twig open-card 52644              # open the card page (Azure DevOps) in the bro
 twig herdr 52644                    # open the card in herdr
 twig code                           # open the current card in VS Code
 twig ls                             # cards, branches, uncommitted changes (*)
+twig status 52644                   # ahead/behind, dirty files, herdr agent
 twig refresh 52644 --refetch        # regenerate CLAUDE.md / workspace, refetch the card
 twig rm 52644 --branches            # done: remove worktrees (and local branches)
 ```
@@ -154,6 +155,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `herdr <id>` | open/focus the card in herdr |
 | `code [id]` | open the card in VS Code; without an id, the current card |
 | `ls` | active cards and each repo's branch |
+| `status [id]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
 | `refresh <id>` | regenerate `CLAUDE.md`/`AGENTS.md` and the `.code-workspace` |
 | `rm <id> [-f]` | remove the card and its herdr workspace (refuses with uncommitted changes or a running agent; `-f` overrides) |
 | `prune` | clean orphaned worktree records |

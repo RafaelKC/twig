@@ -142,6 +142,7 @@ twig open-card 52644              # abre a página do card (Azure DevOps) no nav
 twig herdr 52644                    # abre o card no herdr
 twig code                           # abre o card atual no VS Code
 twig ls                             # cards, branches, alterações não commitadas (*)
+twig status 52644                   # ahead/behind, arquivos alterados, agente do herdr
 twig refresh 52644 --refetch        # regenera CLAUDE.md / workspace, rebusca o card
 twig rm 52644 --branches            # terminou: remove worktrees (e branches locais)
 ```
@@ -155,6 +156,7 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `herdr <id>` | abre/foca o card no herdr |
 | `code [id]` | abre o card no VS Code; sem id, o card atual |
 | `ls` | cards ativos e a branch de cada repo |
+| `status [id]` | por repo: branch, arquivos alterados, ahead/behind vs base e origin; workspace e agente do herdr |
 | `refresh <id>` | regenera o `CLAUDE.md`/`AGENTS.md` e o `.code-workspace` |
 | `rm <id> [-f]` | remove o card e o workspace do herdr (recusa se houver alterações não commitadas ou agente rodando; `-f` ignora) |
 | `prune` | limpa registros de worktrees órfãos |

@@ -45,6 +45,7 @@ a card.
 | `twig code [id]` | alias of `open [id] code`: open the card in VS Code |
 | `twig open-card [id]` (alias `opcd`) | open the card's page in the browser (Azure DevOps only; `gh` errors with "not supported yet"); prints the URL if no opener exists |
 | `twig ls` | list active cards and each repo's branch (`*` = uncommitted changes) |
+| `twig status [id]` | per repo: branch, uncommitted files (`*N`), ahead/behind vs base and origin; herdr workspace and running agent. No id = all cards, compact |
 | `twig refresh <id> [--refetch]` | regenerate the context file (`CLAUDE.md`/`AGENTS.md`) and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
 | `twig rm <id> [--branches] [-f]` | close the card and its herdr workspace; refuses with uncommitted changes or a running agent (`working`/`blocked`); `-f/--force` bypasses both, so only use it when the user asks |
 | `twig prune [-n]` | clean up orphaned worktree records (folder deleted by hand) |

@@ -7,6 +7,7 @@ mod doctor;
 mod herdr;
 mod provider;
 mod selfmgmt;
+mod status;
 mod sys;
 mod ui;
 mod workspace;
@@ -124,6 +125,10 @@ enum Cmd {
     /// List active cards and each repo's branch (* = uncommitted changes).
     #[command(alias = "list")]
     Ls,
+    /// Per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent.
+    ///
+    /// Without <ID>, every card (compact); with an id, the details of that card.
+    Status { id: Option<String> },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
         id: String,
@@ -278,6 +283,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Herdr { id } => commands::herdr_cmd(&cfg, &id),
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
         Cmd::Ls => commands::ls(&cfg),
+        Cmd::Status { id } => status::run(&cfg, id.as_deref()),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
         Cmd::Rm {
             id,

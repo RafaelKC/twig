@@ -861,3 +861,83 @@ fn open_card_with_gh_provider_fails_clearly() {
     assert_has(&o, "not supported yet for provider \"gh\"");
     assert_eq!(opened(&log), "");
 }
+
+// ───────────────────────── status ─────────────────────────
+
+fn git_in(dir: &Path, args: &[&str]) {
+    assert!(
+        Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t")
+            .status()
+            .unwrap()
+            .success(),
+        "git {args:?} failed"
+    );
+}
+
+/// Card `123` with worktree `r1` on `card-123`: 2 commits ahead of `origin/main`, 1 ahead of
+/// `origin/card-123` (pushed one commit earlier), 1 uncommitted file. Fake herdr like `rm_sandbox`.
+fn status_sandbox(agent_status: &str) -> Sandbox {
+    let (s, _log) = rm_sandbox(agent_status);
+    let main = s.path("repos/r1");
+    let wt = s.path("wt/123/r1");
+    git_in(&main, &["branch", "-M", "main"]);
+    let remote = s.path("remote.git");
+    fs::create_dir_all(&remote).unwrap();
+    git_in(&remote, &["init", "-q", "--bare"]);
+    git_in(
+        &main,
+        &["remote", "add", "origin", &remote.to_string_lossy()],
+    );
+    git_in(&main, &["push", "-q", "origin", "main"]);
+    git_in(&wt, &["commit", "-q", "--allow-empty", "-m", "one"]);
+    git_in(&wt, &["push", "-q", "-u", "origin", "card-123"]);
+    git_in(&wt, &["commit", "-q", "--allow-empty", "-m", "two"]);
+    fs::write(wt.join("dirty.txt"), "x").unwrap();
+    s
+}
+
+#[test]
+fn status_shows_branch_dirty_ahead_behind_and_herdr() {
+    let s = status_sandbox("working");
+    let o = s.run(&["status", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "card-123");
+    assert_has(&o, "*1");
+    assert_has(&o, "base ↑2 ↓0");
+    assert_has(&o, "origin ↑1 ↓0");
+    assert_has(&o, "workspace, 1 agent(s) running");
+}
+
+#[test]
+fn status_without_id_lists_every_card_compact() {
+    let s = status_sandbox("idle");
+    let o = s.run(&["status"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "#123");
+    assert_has(&o, "workspace, no agent running");
+    assert!(!text(&o).contains("uncommitted files:"), "{}", text(&o));
+}
+
+#[test]
+fn status_without_herdr_reports_no_workspace() {
+    let s = status_sandbox("idle");
+    fs::remove_file(s.bin.join("herdr")).unwrap();
+    let o = s.run(&["status", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "no workspace");
+    assert_has(&o, "uncommitted files: 1");
+}
+
+#[test]
+fn status_unknown_card_is_an_error() {
+    let s = Sandbox::new();
+    s.valid_config("");
+    let o = s.run(&["status", "999"]);
+    assert_exit(&o, 1);
+}

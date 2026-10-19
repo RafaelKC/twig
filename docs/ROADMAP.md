@@ -86,7 +86,8 @@ Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, 
 - [x] `twig rm` also removes the herdr workspace, blocks on a running agent, `-f` ([#6](https://github.com/RafaelKC/twig/issues/6))
 - [x] `twig open [id] [default|herdr|code]` ([#1](https://github.com/RafaelKC/twig/issues/1))
 - [x] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7))
-- [ ] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9)), `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
+- [x] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9); ports and PR info pending #3/#12)
+- [ ] `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
 - [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12)), `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
 - [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5)), handoff notes ([#16](https://github.com/RafaelKC/twig/issues/16))
 
