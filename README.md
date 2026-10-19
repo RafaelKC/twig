@@ -151,7 +151,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `code [id]` | open the card in VS Code; without an id, the current card |
 | `ls` | active cards and each repo's branch |
 | `refresh <id>` | regenerate `CLAUDE.md` and the `.code-workspace` |
-| `rm <id>` | remove the card (refuses with uncommitted changes) |
+| `rm <id> [-f]` | remove the card and its herdr workspace (refuses with uncommitted changes or a running agent; `-f` overrides) |
 | `prune` | clean orphaned worktree records |
 | `doctor` | check dependencies, logins, config and repos |
 | `config edit` | edit the config and validate it on save |

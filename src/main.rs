@@ -114,13 +114,16 @@ enum Cmd {
         #[arg(long)]
         refetch: bool,
     },
-    /// Remove the card's worktrees and folder (refuses with uncommitted changes).
+    /// Remove the card's worktrees, folder and herdr workspace (refuses with uncommitted changes or a running agent).
     #[command(alias = "remove")]
     Rm {
         id: String,
         /// Also delete the local branches.
         #[arg(long)]
         branches: bool,
+        /// Remove even with uncommitted changes or a running agent.
+        #[arg(short, long)]
+        force: bool,
     },
     /// Clean up orphaned worktree records and empty card folders.
     Prune {
@@ -188,7 +191,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
         Cmd::Ls => commands::ls(&cfg),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
-        Cmd::Rm { id, branches } => commands::rm(&cfg, &id, branches),
+        Cmd::Rm { id, branches, force } => commands::rm(&cfg, &id, branches, force),
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
         Cmd::Completions { .. } | Cmd::Doctor | Cmd::Config { .. } | Cmd::Update { .. } | Cmd::Uninstall { .. } => {
             unreachable!()
