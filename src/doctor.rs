@@ -4,37 +4,107 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{bail, Result};
+use serde::Serialize;
 
 use crate::config::{config_path, Config, OpenTarget, ProviderKind};
 use crate::sys;
 
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Level {
+    Ok,
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Check {
+    pub level: Level,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Section {
+    pub name: String,
+    pub checks: Vec<Check>,
+}
+
+/// `twig doctor --json` output.
+#[derive(Debug, Serialize)]
+pub struct DoctorOutput {
+    /// No errors (warnings do not count); the exit code is 0 exactly when this is true.
+    pub ok: bool,
+    pub errors: usize,
+    pub warnings: usize,
+    pub sections: Vec<Section>,
+}
+
+/// Collects every check; prints them as they happen unless `json` is set.
 struct Report {
+    json: bool,
     errors: usize,
     warnings: usize,
+    sections: Vec<Section>,
 }
 
 impl Report {
-    fn section(&self, title: &str) {
-        println!("\n\x1b[1m{title}\x1b[0m");
+    fn new(json: bool) -> Self {
+        Self {
+            json,
+            errors: 0,
+            warnings: 0,
+            sections: Vec::new(),
+        }
     }
 
-    fn ok(&self, msg: impl AsRef<str>) {
-        println!("  \x1b[32m✔\x1b[0m {}", msg.as_ref());
+    fn section(&mut self, title: &str) {
+        self.sections.push(Section {
+            name: title.to_string(),
+            checks: Vec::new(),
+        });
+        if !self.json {
+            println!("\n\x1b[1m{title}\x1b[0m");
+        }
     }
 
-    fn info(&self, msg: impl AsRef<str>) {
-        println!("  \x1b[36m·\x1b[0m {}", msg.as_ref());
+    fn record(&mut self, level: Level, msg: &str) {
+        if let Some(s) = self.sections.last_mut() {
+            s.checks.push(Check {
+                level,
+                message: msg.to_string(),
+            });
+        }
+    }
+
+    fn ok(&mut self, msg: impl AsRef<str>) {
+        self.record(Level::Ok, msg.as_ref());
+        if !self.json {
+            println!("  \x1b[32m✔\x1b[0m {}", msg.as_ref());
+        }
+    }
+
+    fn info(&mut self, msg: impl AsRef<str>) {
+        self.record(Level::Info, msg.as_ref());
+        if !self.json {
+            println!("  \x1b[36m·\x1b[0m {}", msg.as_ref());
+        }
     }
 
     fn warn(&mut self, msg: impl AsRef<str>) {
         self.warnings += 1;
-        println!("  \x1b[33m!\x1b[0m {}", msg.as_ref());
+        self.record(Level::Warn, msg.as_ref());
+        if !self.json {
+            println!("  \x1b[33m!\x1b[0m {}", msg.as_ref());
+        }
     }
 
     fn error(&mut self, msg: impl AsRef<str>) {
         self.errors += 1;
-        println!("  \x1b[31m✖\x1b[0m {}", msg.as_ref());
+        self.record(Level::Error, msg.as_ref());
+        if !self.json {
+            println!("  \x1b[31m✖\x1b[0m {}", msg.as_ref());
+        }
     }
 
     /// Binary on PATH; error if missing. Returns whether it was found.
@@ -67,8 +137,8 @@ fn nearest_existing(p: &Path) -> Option<&Path> {
     p.ancestors().find(|a| a.exists())
 }
 
-pub fn run() -> Result<()> {
-    let mut r = Report::default();
+pub fn run(json: bool) -> Result<()> {
+    let mut r = Report::new(json);
 
     r.section("config");
     let path = config_path()?;
@@ -106,7 +176,7 @@ pub fn run() -> Result<()> {
     }
 
     let Some(cfg) = cfg else {
-        return finish(&r);
+        return finish(r);
     };
 
     r.section("VS Code");
@@ -118,6 +188,18 @@ pub fn run() -> Result<()> {
 
     if cfg.open.default == OpenTarget::Code && !cfg.vscode.enabled {
         r.error("open.default = \"code\" but vscode.enabled = false");
+    }
+
+    r.section("update check");
+    if crate::updatecheck::env_disabled() {
+        r.info("disabled by TWIG_NO_UPDATE_CHECK");
+    } else if cfg.update.check {
+        r.ok(format!(
+            "enabled (every {}h; disable with update.check = false or TWIG_NO_UPDATE_CHECK=1)",
+            cfg.update.check_interval_hours
+        ));
+    } else {
+        r.info("disabled in the config (update.check = false)");
     }
 
     r.section("provider");
@@ -221,10 +303,23 @@ pub fn run() -> Result<()> {
         r.ok("none");
     }
 
-    finish(&r)
+    finish(r)
 }
 
-fn finish(r: &Report) -> Result<()> {
+fn finish(r: Report) -> Result<()> {
+    if r.json {
+        let out = DoctorOutput {
+            ok: r.errors == 0,
+            errors: r.errors,
+            warnings: r.warnings,
+            sections: r.sections,
+        };
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        if out.errors > 0 {
+            bail!("{} error(s), {} warning(s)", out.errors, out.warnings);
+        }
+        return Ok(());
+    }
     println!();
     if r.errors > 0 {
         bail!("{} error(s), {} warning(s)", r.errors, r.warnings);

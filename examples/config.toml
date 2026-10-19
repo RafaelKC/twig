@@ -30,6 +30,10 @@ open_on_new = false
 [open]
 default = "herdr"                 # "herdr" | "code": target of `twig open` without one
 
+[update]
+check                = true       # hint on stderr when a new release exists (TTY only)
+check_interval_hours = 24         # how often the latest release is looked up (cached)
+
 [paths]
 worktrees = "~/.wt"
 repos     = "~/dev"                 # where the main clones live
@@ -38,6 +42,7 @@ search    = ["~/src"]               # other places to look for a repo
 [git]
 base_branch   = "main"
 branch_prefix = { Bug = "fix", default = "feat" }
+sync          = "rebase"            # "rebase" | "merge": what `twig sync` does with the base branch
 
 [worktree]
 # copied into every repo of the card

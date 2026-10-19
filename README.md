@@ -113,7 +113,7 @@ twig doctor
 
 | | |
 |---|---|
-| Update | `twig update` |
+| Update | `twig update` (twig hints on stderr when a new release exists; disable with `TWIG_NO_UPDATE_CHECK=1` or `[update] check = false`) |
 | Specific version | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0` |
 | Uninstall | `twig uninstall` |
 
@@ -141,6 +141,7 @@ twig open-card 52644              # open the card page (Azure DevOps) in the bro
 twig herdr 52644                    # open the card in herdr
 twig code                           # open the current card in VS Code
 twig ls                             # cards, branches, uncommitted changes (*)
+twig status 52644                   # ahead/behind, dirty files, herdr agent
 twig refresh 52644 --refetch        # regenerate CLAUDE.md / workspace, refetch the card
 twig rm 52644 --branches            # done: remove worktrees (and local branches)
 ```
@@ -153,11 +154,13 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `open-card [id]` (`opcd`) | open the card page in the browser (Azure DevOps only for now) |
 | `herdr <id>` | open/focus the card in herdr |
 | `code [id]` | open the card in VS Code; without an id, the current card |
-| `ls` | active cards and each repo's branch |
+| `ls` | active cards and each repo's branch (`--json` for scripts) |
+| `status [id]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent (`--json` for scripts) |
 | `refresh <id>` | regenerate `CLAUDE.md`/`AGENTS.md` and the `.code-workspace` |
+| `sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase/merge it into every repo of the card |
 | `rm <id> [-f]` | remove the card and its herdr workspace (refuses with uncommitted changes or a running agent; `-f` overrides) |
 | `prune` | clean orphaned worktree records |
-| `doctor` | check dependencies, logins, config and repos |
+| `doctor` | check dependencies, logins, config and repos (`--json` for scripts) |
 | `config edit` | edit the config and validate it on save |
 | `update` | update to the latest release |
 | `uninstall` | remove twig, its plugin and skill |

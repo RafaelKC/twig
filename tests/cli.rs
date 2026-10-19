@@ -861,3 +861,602 @@ fn open_card_with_gh_provider_fails_clearly() {
     assert_has(&o, "not supported yet for provider \"gh\"");
     assert_eq!(opened(&log), "");
 }
+
+// ───────────────────────── status ─────────────────────────
+
+fn git_quiet(dir: &Path, args: &[&str]) {
+    assert!(
+        Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t")
+            .status()
+            .unwrap()
+            .success(),
+        "git {args:?} failed"
+    );
+}
+
+/// Card `123` with worktree `r1` on `card-123`: 2 commits ahead of `origin/main`, 1 ahead of
+/// `origin/card-123` (pushed one commit earlier), 1 uncommitted file. Fake herdr like `rm_sandbox`.
+fn status_sandbox(agent_status: &str) -> Sandbox {
+    let (s, _log) = rm_sandbox(agent_status);
+    let main = s.path("repos/r1");
+    let wt = s.path("wt/123/r1");
+    git_quiet(&main, &["branch", "-M", "main"]);
+    let remote = s.path("remote.git");
+    fs::create_dir_all(&remote).unwrap();
+    git_quiet(&remote, &["init", "-q", "--bare"]);
+    git_quiet(
+        &main,
+        &["remote", "add", "origin", &remote.to_string_lossy()],
+    );
+    git_quiet(&main, &["push", "-q", "origin", "main"]);
+    git_quiet(&wt, &["commit", "-q", "--allow-empty", "-m", "one"]);
+    git_quiet(&wt, &["push", "-q", "-u", "origin", "card-123"]);
+    git_quiet(&wt, &["commit", "-q", "--allow-empty", "-m", "two"]);
+    fs::write(wt.join("dirty.txt"), "x").unwrap();
+    s
+}
+
+#[test]
+fn status_shows_branch_dirty_ahead_behind_and_herdr() {
+    let s = status_sandbox("working");
+    let o = s.run(&["status", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "card-123");
+    assert_has(&o, "*1");
+    assert_has(&o, "base ↑2 ↓0");
+    assert_has(&o, "origin ↑1 ↓0");
+    assert_has(&o, "workspace, 1 agent(s) running");
+}
+
+#[test]
+fn status_without_id_lists_every_card_compact() {
+    let s = status_sandbox("idle");
+    let o = s.run(&["status"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "#123");
+    assert_has(&o, "workspace, no agent running");
+    assert!(!text(&o).contains("uncommitted files:"), "{}", text(&o));
+}
+
+#[test]
+fn status_without_herdr_reports_no_workspace() {
+    let s = status_sandbox("idle");
+    fs::remove_file(s.bin.join("herdr")).unwrap();
+    let o = s.run(&["status", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "no workspace");
+    assert_has(&o, "uncommitted files: 1");
+}
+
+#[test]
+fn status_unknown_card_is_an_error() {
+    let s = Sandbox::new();
+    s.valid_config("");
+    let o = s.run(&["status", "999"]);
+    assert_exit(&o, 1);
+}
+
+// ───────────────────── new / add-repo / prune (local git remotes) ─────────────────────
+
+fn git_in(dir: &Path, args: &[&str]) -> String {
+    let o = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@t")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@t")
+        .output()
+        .unwrap();
+    assert!(
+        o.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    String::from_utf8_lossy(&o.stdout).trim().to_string()
+}
+
+/// Bare `origin/<name>.git` with a `main` branch, cloned to `repos/<name>`.
+fn remote_repo(s: &Sandbox, name: &str) -> PathBuf {
+    let origin = s.path(&format!("origin/{name}.git"));
+    fs::create_dir_all(&origin).unwrap();
+    git_in(&origin, &["init", "-q", "--bare", "-b", "main"]);
+    let clone = s.path(&format!("repos/{name}"));
+    fs::create_dir_all(&clone).unwrap();
+    git_in(&clone, &["init", "-q", "-b", "main"]);
+    git_in(
+        &clone,
+        &["remote", "add", "origin", &origin.to_string_lossy()],
+    );
+    git_in(&clone, &["commit", "-q", "--allow-empty", "-m", "init"]);
+    git_in(&clone, &["push", "-q", "origin", "main"]);
+    origin
+}
+
+/// Sandbox with repos `a` (default) and `b` (not default), each with a local bare origin.
+fn new_sandbox() -> Sandbox {
+    let s = Sandbox::new();
+    s.all_tools();
+    remote_repo(&s, "a");
+    remote_repo(&s, "b");
+    s.write_config(&format!(
+        "version = 1\n\n[paths]\nworktrees = \"{wt}\"\nrepos = \"{repos}\"\n\n[repos.a]\ndefault = true\n\n[repos.b]\n",
+        wt = s.path("wt").display(),
+        repos = s.path("repos").display(),
+    ));
+    s
+}
+
+fn branch_of(wt: PathBuf) -> String {
+    git_in(&wt, &["rev-parse", "--abbrev-ref", "HEAD"])
+}
+
+#[test]
+fn new_creates_worktree_branch_from_base_and_context_file() {
+    let s = new_sandbox();
+    let o = s.run(&["new", "7", "my-slug", "--no-ado"]);
+    assert_exit(&o, 0);
+    let wt = s.path("wt/7/a");
+    assert!(wt.join(".git").exists());
+    assert_eq!(branch_of(wt.clone()), "feat/7-my-slug");
+    // branched from origin/main
+    assert_eq!(
+        git_in(&wt, &["rev-parse", "HEAD"]),
+        git_in(&wt, &["rev-parse", "origin/main"])
+    );
+    assert!(!s.path("wt/7/b").exists(), "only default repos");
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("Card #7"), "{ctx}");
+    assert!(ctx.contains("feat/7-my-slug"), "{ctx}");
+}
+
+#[test]
+fn new_uses_the_base_and_fix_prefix_flags() {
+    let s = new_sandbox();
+    let a = s.path("repos/a");
+    git_in(&a, &["checkout", "-q", "-b", "dev"]);
+    git_in(&a, &["commit", "-q", "--allow-empty", "-m", "on dev"]);
+    git_in(&a, &["push", "-q", "origin", "dev"]);
+    git_in(&a, &["checkout", "-q", "main"]);
+    let o = s.run(&["new", "8", "x", "--no-ado", "--base", "dev", "--fix"]);
+    assert_exit(&o, 0);
+    let wt = s.path("wt/8/a");
+    assert_eq!(branch_of(wt.clone()), "fix/8-x");
+    assert_eq!(
+        git_in(&wt, &["rev-parse", "HEAD"]),
+        git_in(&wt, &["rev-parse", "origin/dev"])
+    );
+}
+
+#[test]
+fn new_prefers_an_origin_branch_with_the_id() {
+    let s = new_sandbox();
+    let a = s.path("repos/a");
+    git_in(&a, &["checkout", "-q", "-b", "feature/9-existing"]);
+    git_in(&a, &["commit", "-q", "--allow-empty", "-m", "remote work"]);
+    git_in(&a, &["push", "-q", "origin", "feature/9-existing"]);
+    git_in(&a, &["checkout", "-q", "main"]);
+    git_in(&a, &["branch", "-q", "-D", "feature/9-existing"]);
+    let o = s.run(&["new", "9", "ignored", "--no-ado"]);
+    assert_exit(&o, 0);
+    let wt = s.path("wt/9/a");
+    assert_eq!(branch_of(wt.clone()), "feature/9-existing");
+    assert_eq!(
+        git_in(&wt, &["rev-parse", "--abbrev-ref", "@{upstream}"]),
+        "origin/feature/9-existing"
+    );
+}
+
+#[test]
+fn new_branch_flag_forces_the_branch() {
+    let s = new_sandbox();
+    let o = s.run(&["new", "10", "--no-ado", "--branch", "custom/thing"]);
+    assert_exit(&o, 0);
+    assert_eq!(branch_of(s.path("wt/10/a")), "custom/thing");
+}
+
+#[test]
+fn new_refuses_an_existing_card() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    let o = s.run(&["new", "7", "s", "--no-ado"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "already exists");
+}
+
+#[test]
+fn add_repo_adds_a_repo_to_the_card() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    let o = s.run(&["add-repo", "7", "b", "--branch", "feat/7-b"]);
+    assert_exit(&o, 0);
+    assert!(s.path("wt/7/b/.git").exists());
+    assert_eq!(branch_of(s.path("wt/7/b")), "feat/7-b");
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("`b`"), "{ctx}");
+    // safe to re-run
+    let again = s.run(&["add-repo", "7", "b"]);
+    assert_exit(&again, 0);
+    assert_has(&again, "already in the card");
+}
+
+#[test]
+fn add_repo_to_a_missing_card_fails() {
+    let s = new_sandbox();
+    let o = s.run(&["add-repo", "404", "b"]);
+    assert_exit(&o, 1);
+}
+
+#[test]
+fn rm_refuses_a_dirty_worktree_and_force_removes_it() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    fs::write(s.path("wt/7/a/dirty.txt"), "x").unwrap();
+    let o = s.run(&["rm", "7"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "uncommitted changes");
+    assert!(s.path("wt/7/a").exists());
+    let o = s.run(&["rm", "--force", "--branches", "7"]);
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/7").exists());
+    let branches = git_in(&s.path("repos/a"), &["branch", "--list", "feat/7-s"]);
+    assert!(branches.is_empty(), "branch should be deleted: {branches}");
+}
+
+#[test]
+fn rm_keeps_branches_by_default() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    assert_exit(&s.run(&["rm", "7"]), 0);
+    assert!(!s.path("wt/7").exists());
+    let branches = git_in(&s.path("repos/a"), &["branch", "--list", "feat/7-s"]);
+    assert!(branches.contains("feat/7-s"), "{branches}");
+}
+
+#[test]
+fn prune_cleans_orphaned_worktree_records() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "s", "--no-ado"]), 0);
+    // the worktree folder disappears behind git's back
+    fs::remove_dir_all(s.path("wt/7/a")).unwrap();
+    let main = s.path("repos/a");
+    assert!(git_in(&main, &["worktree", "list", "--porcelain"]).contains("wt/7/a"));
+
+    let dry = s.run(&["prune", "--dry-run"]);
+    assert_exit(&dry, 0);
+    assert!(git_in(&main, &["worktree", "list", "--porcelain"]).contains("wt/7/a"));
+
+    let o = s.run_with(s.cmd(&["prune"]), "n\n");
+    assert_exit(&o, 0);
+    assert!(!git_in(&main, &["worktree", "list", "--porcelain"]).contains("wt/7/a"));
+    // the now-empty card folder was only listed; answering "n" keeps it
+    assert!(s.path("wt/7").exists());
+}
+
+#[test]
+fn prune_removes_empty_card_folders_when_confirmed() {
+    let s = new_sandbox();
+    fs::create_dir_all(s.path("wt/55")).unwrap();
+    let o = s.run_with(s.cmd(&["prune"]), "y\n");
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/55").exists());
+}
+
+// ───────────────────────── sync ─────────────────────────
+
+/// Commit `file` = `content` on `dir`'s current branch.
+fn commit_file(dir: &Path, file: &str, content: &str, msg: &str) {
+    fs::write(dir.join(file), content).unwrap();
+    git_in(dir, &["add", file]);
+    git_in(dir, &["commit", "-q", "-m", msg]);
+}
+
+/// Card `123` with a worktree of `r1` on `card-123` (one own commit, `mine.txt`), cloned from
+/// a bare origin whose `main` has one commit (`base.txt`). `config_extra` goes in the config.
+fn sync_sandbox(config_extra: &str) -> (Sandbox, PathBuf) {
+    let s = Sandbox::new();
+    s.git_identity();
+    s.valid_config(config_extra);
+    let origin = s.path("origin.git");
+    fs::create_dir_all(&origin).unwrap();
+    git_in(&origin, &["init", "-q", "--bare", "-b", "main"]);
+    // valid_config already ran `git init` in repos/r1; replace it with a clone of origin
+    let main = s.path("repos/r1");
+    fs::remove_dir_all(&main).unwrap();
+    git_in(
+        &s.home,
+        &[
+            "clone",
+            "-q",
+            &origin.to_string_lossy(),
+            &main.to_string_lossy(),
+        ],
+    );
+    git_in(&main, &["checkout", "-q", "-B", "main"]);
+    commit_file(&main, "base.txt", "base\n", "base");
+    git_in(&main, &["push", "-q", "origin", "main"]);
+    fs::create_dir_all(s.path("wt/123")).unwrap();
+    let wt = s.path("wt/123/r1");
+    git_in(
+        &main,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "card-123",
+            &wt.to_string_lossy(),
+        ],
+    );
+    commit_file(&wt, "mine.txt", "mine\n", "card work");
+    (s, wt)
+}
+
+/// Push a new commit to origin's main from a throwaway clone.
+fn advance_base(s: &Sandbox, file: &str, content: &str) {
+    let other = s.path("other");
+    if !other.exists() {
+        git_in(
+            &s.home,
+            &[
+                "clone",
+                "-q",
+                &s.path("origin.git").to_string_lossy(),
+                &other.to_string_lossy(),
+            ],
+        );
+    }
+    commit_file(&other, file, content, "advance base");
+    git_in(&other, &["push", "-q", "origin", "main"]);
+}
+
+fn log_subjects(dir: &Path) -> String {
+    git_in(dir, &["log", "--format=%s"])
+}
+
+fn has_merges(dir: &Path) -> bool {
+    !git_in(dir, &["rev-list", "--merges", "HEAD"])
+        .trim()
+        .is_empty()
+}
+
+#[test]
+fn sync_rebases_the_card_branch_onto_the_base() {
+    let (s, wt) = sync_sandbox("");
+    advance_base(&s, "new.txt", "new\n");
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 0);
+    assert!(wt.join("new.txt").exists(), "{}", text(&o));
+    assert_eq!(
+        log_subjects(&wt).lines().collect::<Vec<_>>(),
+        ["card work", "advance base", "base"]
+    );
+    assert!(!has_merges(&wt));
+}
+
+#[test]
+fn sync_merge_flag_creates_a_merge_commit() {
+    let (s, wt) = sync_sandbox("");
+    advance_base(&s, "new.txt", "new\n");
+    let o = s.run(&["sync", "123", "--merge"]);
+    assert_exit(&o, 0);
+    assert!(wt.join("new.txt").exists());
+    assert!(has_merges(&wt));
+}
+
+#[test]
+fn sync_uses_the_configured_strategy_and_rebase_overrides_it() {
+    let (s, wt) = sync_sandbox("[git]\nsync = \"merge\"\n");
+    advance_base(&s, "new.txt", "new\n");
+    assert_exit(&s.run(&["sync", "123"]), 0);
+    assert!(has_merges(&wt));
+
+    let (s, wt) = sync_sandbox("[git]\nsync = \"merge\"\n");
+    advance_base(&s, "new.txt", "new\n");
+    assert_exit(&s.run(&["sync", "123", "--rebase"]), 0);
+    assert!(!has_merges(&wt));
+}
+
+#[test]
+fn sync_rejects_an_invalid_strategy_in_the_config() {
+    let (s, _wt) = sync_sandbox("[git]\nsync = \"squash\"\n");
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "squash");
+}
+
+#[test]
+fn sync_merge_and_rebase_are_mutually_exclusive() {
+    let (s, _wt) = sync_sandbox("");
+    let o = s.run(&["sync", "123", "--merge", "--rebase"]);
+    assert_exit(&o, 2);
+}
+
+#[test]
+fn sync_dry_run_changes_nothing() {
+    let (s, wt) = sync_sandbox("");
+    advance_base(&s, "new.txt", "new\n");
+    let head = git_in(&wt, &["rev-parse", "HEAD"]);
+    let o = s.run(&["sync", "123", "--dry-run"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "would rebase 1 commit(s)");
+    assert_eq!(git_in(&wt, &["rev-parse", "HEAD"]), head);
+    assert!(!wt.join("new.txt").exists());
+}
+
+#[test]
+fn sync_reports_when_already_up_to_date() {
+    let (s, _wt) = sync_sandbox("");
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "up to date");
+}
+
+#[test]
+fn sync_skips_repos_with_uncommitted_changes() {
+    let (s, wt) = sync_sandbox("");
+    advance_base(&s, "new.txt", "new\n");
+    fs::write(wt.join("mine.txt"), "edited\n").unwrap();
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "r1: uncommitted changes, skipped");
+    assert!(!wt.join("new.txt").exists());
+    assert_eq!(fs::read_to_string(wt.join("mine.txt")).unwrap(), "edited\n");
+}
+
+#[test]
+fn sync_stops_on_conflict_naming_repo_and_files() {
+    let (s, wt) = sync_sandbox("");
+    // the card edits base.txt too, and so does the base
+    commit_file(&wt, "base.txt", "card side\n", "card edits base");
+    advance_base(&s, "base.txt", "base side\n");
+    let o = s.run(&["sync", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "r1: conflict in rebase");
+    assert_has(&o, "base.txt");
+    assert_has(&o, "--abort");
+}
+
+#[test]
+fn sync_unknown_card_fails() {
+    let (s, _wt) = sync_sandbox("");
+    let o = s.run(&["sync", "999"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "card 999 not found");
+}
+
+// ───────────────────────── --json ─────────────────────────
+
+fn json_of(o: &Output) -> serde_json::Value {
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(!out.contains('\x1b'), "colors in JSON output:\n{out}");
+    serde_json::from_str(&out).unwrap_or_else(|e| panic!("stdout is not JSON ({e}):\n{out}"))
+}
+
+#[test]
+fn ls_json_lists_cards_repos_and_dirty() {
+    let s = status_sandbox("idle");
+    let o = s.run(&["ls", "--json"]);
+    assert_exit(&o, 0);
+    let v = json_of(&o);
+    assert_eq!(v["cards"].as_array().unwrap().len(), 1);
+    assert_eq!(v["cards"][0]["id"], "123");
+    assert_eq!(v["cards"][0]["repos"][0]["repo"], "r1");
+    assert_eq!(v["cards"][0]["repos"][0]["branch"], "card-123");
+    assert_eq!(v["cards"][0]["repos"][0]["dirty"], true);
+}
+
+#[test]
+fn ls_json_without_cards_is_an_empty_list() {
+    let s = Sandbox::new();
+    s.valid_config("");
+    let o = s.run(&["ls", "--json"]);
+    assert_exit(&o, 0);
+    assert_eq!(json_of(&o)["cards"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn status_json_for_one_card() {
+    let s = status_sandbox("working");
+    let o = s.run(&["status", "123", "--json"]);
+    assert_exit(&o, 0);
+    let v = json_of(&o);
+    let c = &v["cards"][0];
+    assert_eq!(c["id"], "123");
+    assert_eq!(c["herdr"]["workspace"], true);
+    assert_eq!(c["herdr"]["agents_running"], 1);
+    let r = &c["repos"][0];
+    assert_eq!(r["repo"], "r1");
+    assert_eq!(r["branch"], "card-123");
+    assert_eq!(r["dirty"], 1);
+    assert_eq!(r["base_ref"], "origin/main");
+    assert_eq!(r["vs_base"]["ahead"], 2);
+    assert_eq!(r["vs_base"]["behind"], 0);
+    assert_eq!(r["origin_ref"], "origin/card-123");
+    assert_eq!(r["vs_origin"]["ahead"], 1);
+}
+
+#[test]
+fn status_json_without_id_lists_every_card_and_without_herdr() {
+    let s = status_sandbox("idle");
+    fs::remove_file(s.bin.join("herdr")).unwrap();
+    let o = s.run(&["status", "--json"]);
+    assert_exit(&o, 0);
+    let v = json_of(&o);
+    assert_eq!(v["cards"].as_array().unwrap().len(), 1);
+    assert_eq!(v["cards"][0]["herdr"]["workspace"], false);
+    assert_eq!(v["cards"][0]["herdr"]["agents_running"], 0);
+}
+
+#[test]
+fn status_json_unknown_card_fails_with_empty_stdout() {
+    let s = Sandbox::new();
+    s.valid_config("");
+    let o = s.run(&["status", "999", "--json"]);
+    assert_exit(&o, 1);
+    assert!(o.stdout.is_empty(), "{}", text(&o));
+}
+
+#[test]
+fn doctor_json_all_good() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    let o = s.run(&["doctor", "--json"]);
+    assert_exit(&o, 0);
+    let v = json_of(&o);
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["errors"], 0);
+    let sections = v["sections"].as_array().unwrap();
+    assert_eq!(sections[0]["name"], "config");
+    assert_eq!(sections[0]["checks"][0]["level"], "ok");
+    assert!(sections
+        .iter()
+        .flat_map(|s| s["checks"].as_array().unwrap())
+        .all(|c| c["level"] != "error"));
+}
+
+#[test]
+fn doctor_json_reports_errors_and_still_exits_1() {
+    let s = Sandbox::new();
+    s.stub("az", "exit 0")
+        .stub("claude", "exit 0")
+        .stub("code", "exit 0")
+        .git_identity();
+    s.valid_config("");
+    let o = s.run(&["doctor", "--json"]);
+    assert_exit(&o, 1);
+    let v = json_of(&o);
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["errors"], 1);
+    let herdr = v["sections"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["name"] == "herdr")
+        .unwrap();
+    assert_eq!(herdr["checks"][0]["level"], "error");
+    assert!(herdr["checks"][0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("herdr not found"));
+}
+
+#[test]
+fn doctor_json_with_invalid_config_is_an_error_entry() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.write_config("version = 1\n[vscode]\nactive = true\n");
+    let o = s.run(&["doctor", "--json"]);
+    assert_exit(&o, 1);
+    let v = json_of(&o);
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["sections"][0]["checks"][0]["level"], "error");
+}

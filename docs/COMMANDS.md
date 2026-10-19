@@ -12,11 +12,13 @@
 | `twig open-card [id]` (`opcd`) | opens the card's page in the browser (Azure DevOps only for now) |
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
-| `twig ls` | lists active cards and each repo's branch |
+| `twig ls [--json]` | lists active cards and each repo's branch |
+| `twig status [id] [--json]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
+| `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
 | `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
 | `twig prune` | cleans up orphaned worktree records |
-| `twig doctor` | checks dependencies, login and config without changing anything |
+| `twig doctor [--json]` | checks dependencies, login and config without changing anything |
 | `twig config edit` | opens the config in an editor and validates it on save |
 | `twig update [--check] [--version vX.Y.Z]` | updates twig, its herdr plugin and skill to the latest release |
 | `twig uninstall [--yes]` | removes twig, its herdr plugin, skill and completions |
@@ -156,6 +158,68 @@ It strips `HERDR_*` from VS Code's environment so its terminal can run `herdr`.
 
 Lists active cards and each repo's branch. A `*` marks uncommitted changes.
 
+With `--json`, stdout is only this JSON document (no colors, no emoji, no update hint; an
+empty list is `{"cards": []}`). `branch` is `null` on a detached HEAD.
+
+```json
+{
+  "cards": [
+    {
+      "id": "123",
+      "repos": [
+        { "repo": "r1", "branch": "card-123", "dirty": true }
+      ]
+    }
+  ]
+}
+```
+
+## `twig status [id]`
+
+A richer `ls`. Without an id, every card in compact form; with an id, that card plus the
+refs compared against. Per repo:
+
+- branch and `*N` (number of files with uncommitted changes, untracked included)
+- `base ↑a ↓b`: commits ahead/behind `origin/<git.base_branch>` (the local base branch if
+  there is no `origin/` copy)
+- `origin ↑a ↓b`: commits ahead/behind the branch's upstream (or `origin/<branch>`);
+  `-` when there is nothing to compare against
+
+Per card: whether the herdr workspace exists and whether an agent is running
+(`working`/`blocked`, same detection as `twig rm`). herdr is never started for this.
+It reads local refs only (no fetch), so run `git fetch` for fresh numbers. Ports and PR
+info are not shown yet.
+
+With `--json`, stdout is only this JSON document (no colors, no emoji, no update hint).
+It is always `{"cards": [...]}`: one entry per active card, or just the requested one with
+`<id>` (an unknown card still fails with exit 1 and nothing on stdout). `base_ref`,
+`vs_base`, `origin_ref` and `vs_origin` are `null` when there is nothing to compare against.
+
+```json
+{
+  "cards": [
+    {
+      "id": "123",
+      "repos": [
+        {
+          "repo": "r1",
+          "branch": "card-123",
+          "dirty": 1,
+          "base_ref": "origin/main",
+          "vs_base": { "ahead": 2, "behind": 0 },
+          "origin_ref": "origin/card-123",
+          "vs_origin": { "ahead": 1, "behind": 0 }
+        }
+      ],
+      "herdr": { "workspace": true, "agents_running": 1 }
+    }
+  ]
+}
+```
+
+`dirty` is the number of files with uncommitted changes; `agents_running` counts panes
+that are `working` or `blocked`.
+
 ## `twig refresh <id> [--refetch]`
 
 Regenerates the `.code-workspace` and context file of an existing card, preserving the
@@ -178,6 +242,24 @@ running, the herdr steps are skipped.
 |---|---|
 | `--branches` | also deletes the local branches |
 | `-f`, `--force` | skips both checks (uncommitted changes and running agent) |
+
+## `twig sync <id> [--merge | --rebase] [-n | --dry-run]`
+
+Runs `git fetch origin <base>` in each repo of the card (`<base>` is `git.base_branch`) and brings
+`origin/<base>` into the card branch, by rebase or merge.
+
+- Repos with uncommitted changes (or a detached HEAD) are skipped and reported.
+- A conflict stops the whole run, names the repo and the conflicting files, and leaves that
+  worktree mid-rebase/merge for you to resolve (or abort with `git rebase --abort` / `git merge --abort`).
+- A repo whose fetch fails is reported, the others continue, and the command exits 1 at the end.
+
+| Option | Description |
+|---|---|
+| `--merge` | merge instead of rebasing |
+| `--rebase` | rebase (overrides `git.sync = "merge"`) |
+| `-n`, `--dry-run` | fetches, then only shows how many commits each repo would take; changes no worktree |
+
+Without `--merge`/`--rebase`, the strategy is `git.sync` from the config (`"rebase"` by default).
 
 ## `twig prune [-n | --dry-run]`
 
@@ -209,6 +291,29 @@ Works even with a missing or invalid config (checks that depend on it are skippe
 | repos | each `[repos.x]` points to a git repo; at least one has `default = true` | error / warning |
 | orphaned worktrees | same search as `twig prune -n` | warning |
 
+With `--json`, stdout is only this JSON document (no colors, no emoji); the exit code is
+the same as without it (1 on errors, the JSON is still printed first). `level` is one of
+`ok`, `info`, `warn`, `error`; `ok` is `true` when there are no errors; section names and
+messages are the human-readable ones and may change, the keys and levels are the stable part.
+
+```json
+{
+  "ok": false,
+  "errors": 1,
+  "warnings": 0,
+  "sections": [
+    {
+      "name": "config",
+      "checks": [{ "level": "ok", "message": "/home/me/.config/twig/config.toml valid" }]
+    },
+    {
+      "name": "herdr",
+      "checks": [{ "level": "error", "message": "herdr not found on PATH (required)" }]
+    }
+  ]
+}
+```
+
 ADO access is tested with a real call because `az account show` fails for
 users of `az devops login` (PAT), even though `az boards` still works.
 
@@ -234,6 +339,9 @@ completions are replaced; dependencies and config are not touched. Needs `curl`.
 |---|---|
 | `--check` | only reports whether a new version exists |
 | `--version vX.Y.Z` | installs that version, even if it's older or the same |
+
+Other commands also hint at a new release, on stderr, at most once a day; see `[update]` in
+[CONFIG.md](CONFIG.md) and `TWIG_NO_UPDATE_CHECK=1` to turn it off.
 
 ## `twig uninstall [--yes]`
 

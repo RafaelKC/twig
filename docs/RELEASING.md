@@ -2,16 +2,45 @@
 
 ## Cut a release
 
+`main` only accepts changes through a pull request, so a release takes two steps.
+
 ```bash
-scripts/release.sh 0.2.0
+scripts/release.sh 0.2.0          # 1. open the release PR
+# wait for `check` and `test-macos`, then merge the PR
+git switch main && git pull
+scripts/release.sh --tag 0.2.0    # 2. tag the merged release commit
 ```
 
-The script, run from an up-to-date and clean `main`:
+Step 1, run from an up-to-date and clean `main`:
 
-1. sets `version` in `Cargo.toml` (and `Cargo.lock`, via `cargo test`);
-2. runs the tests;
-3. commits `release v0.2.0` and creates the annotated tag `v0.2.0`;
-4. asks before pushing `main` and the tag.
+1. creates the branch `release/v0.2.0` (never `v0.2.0`: a branch named like the tag collided with it once);
+2. sets `version` in `Cargo.toml` (and `Cargo.lock`, via `cargo test`);
+3. runs the tests;
+4. commits `release v0.2.0`;
+5. asks before pushing the branch and opening the PR with `gh pr create`.
+
+Step 2 (`--tag`), run from an up-to-date and clean `main`:
+
+1. checks `main` contains the `release v0.2.0` commit (a squash-merge `(#NN)` suffix is fine) with that version in `Cargo.toml`;
+2. creates the annotated tag `v0.2.0` on that commit;
+3. asks before pushing **only the tag**.
+
+Both steps refuse to run if the tag already exists locally or on `origin`.
+
+## Branch rules for `main`
+
+Recommended ruleset (Settings > Rules > Rulesets), configured by hand in GitHub:
+
+- **Branch `main`**: require a pull request before merging; require the status checks
+  `check` and `test-macos` (from [`ci.yml`](../.github/workflows/ci.yml)), with the branch up to date;
+  block force pushes and deletion.
+- **Tags `v*`**: restrict updates and deletion, so a published release tag can't be moved or
+  re-created. Tag creation must stay allowed for whoever runs `--tag`.
+
+The release flow needs no bypass: the version bump goes through a PR and only the tag is pushed
+directly. The release workflow runs on the `v*` tag push, so these rules don't affect it.
+
+## What the tag does
 
 The tag triggers [`.github/workflows/release.yml`](../.github/workflows/release.yml):
 

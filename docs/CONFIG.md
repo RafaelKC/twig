@@ -124,6 +124,19 @@ See [COMMANDS.md](COMMANDS.md).
 Any other value is a config error (reported by `twig doctor` and `twig config edit`).
 `"code"` with `vscode.enabled = false` is flagged by `twig doctor`.
 
+### `[update]`
+
+| Field | Default | Description |
+|---|---|---|
+| `check` | `true` | after a command, prints `A new version of twig is available (v0.2.0 → v0.3.0). Run: twig update` to **stderr** |
+| `check_interval_hours` | `24` | how often the latest release is looked up; the result is cached in `~/.cache/twig/latest-version` (`$XDG_CACHE_HOME`) |
+
+The check never slows or breaks a command: it uses the cache, refreshes it with a 2 s
+timeout, and any failure (offline, rate limit) is silent. The hint is shown at most once per
+new version per day, only when stdout and stderr are terminals, and never for `update`,
+`uninstall`, `completions`, `doctor` or `config edit`. Set `TWIG_NO_UPDATE_CHECK=1` to disable
+it from the environment. `twig doctor` reports the setting.
+
 ### `[paths]`
 
 | Field | Default | Description |
@@ -140,6 +153,7 @@ Any other value is a config error (reported by `twig doctor` and `twig config ed
 |---|---|---|
 | `base_branch` | `"main"` | branch new branches are created from |
 | `branch_prefix` | `{ default = "feat" }` | new branch prefix per work item type; `default` for the rest |
+| `sync` | `"rebase"` | how `twig sync` brings the base branch in: `"rebase"` or `"merge"` (overridden by `--rebase`/`--merge`) |
 
 ### `[worktree]`
 

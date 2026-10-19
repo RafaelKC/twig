@@ -98,6 +98,21 @@ pub fn running_agents(id: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Whether the card has a herdr workspace and how many of its panes have a busy agent.
+/// Never starts the server; `(false, 0)` when herdr is missing or not running.
+pub fn card_presence(id: &str) -> (bool, usize) {
+    if sys::which("herdr").is_none() || !server_up() {
+        return (false, 0);
+    }
+    let Ok(Some(ws)) = find_workspace(id) else {
+        return (false, 0);
+    };
+    let busy = herdr(&["pane", "list", "--workspace", &ws])
+        .map(|v| busy_panes(&v).len())
+        .unwrap_or(0);
+    (true, busy)
+}
+
 /// Close the card's herdr workspace, if there is one. Failures are only warnings.
 pub fn close_workspace(id: &str) {
     if sys::which("herdr").is_none() || !server_up() {

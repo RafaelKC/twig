@@ -19,8 +19,6 @@ Not scheduled yet; grouped by theme.
 - **Automation:** [#5](https://github.com/RafaelKC/twig/issues/5) run a skill after creating a workspace; [#15](https://github.com/RafaelKC/twig/issues/15) lifecycle hooks; [#14](https://github.com/RafaelKC/twig/issues/14) card templates
 - **Day-to-day commands:** [#9](https://github.com/RafaelKC/twig/issues/9) `status`; [#10](https://github.com/RafaelKC/twig/issues/10) `clean` (merged/closed cards); [#12](https://github.com/RafaelKC/twig/issues/12) `pr`; [#13](https://github.com/RafaelKC/twig/issues/13) `sync`; [#11](https://github.com/RafaelKC/twig/issues/11) `--json`
 - **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
-- **Updates:** [#20](https://github.com/RafaelKC/twig/issues/20) version check on every command with an update hint
-- **Repo safety:** [#18](https://github.com/RafaelKC/twig/issues/18) CI on every PR to `main` (PR [#23](https://github.com/RafaelKC/twig/pull/23)); [#22](https://github.com/RafaelKC/twig/issues/22) branch rules on `main` (require PR and passing CI, protect `v*` tags, adapt `scripts/release.sh`)
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `config get/set`, `.twig.toml`; [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
 
 Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
@@ -54,6 +52,7 @@ Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, 
   - [x] Installs the AI skill and the herdr plugin (with the `prefix+shift+o` shortcut)
   - [ ] Installs the third-party plugins approved in `herdr-plugins/README.md` (pinned refs) and writes the shortcuts to herdr's `config.toml` without duplicating them
 - [x] `twig update`: finds a newer release and reinstalls twig, plugin and skill
+  - [x] Update hint after commands: cached check, stderr only, `[update]` config / `TWIG_NO_UPDATE_CHECK` ([#20](https://github.com/RafaelKC/twig/issues/20))
   - [ ] Migrate the config between schema versions and show the changelog
 - [x] `twig uninstall`: removes twig, plugin, skill and completions; asks about config and az/gh/herdr
 - [x] `twig doctor`: checks dependencies, login, config and repos
@@ -87,8 +86,10 @@ Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, 
 - [x] `twig rm` also removes the herdr workspace, blocks on a running agent, `-f` ([#6](https://github.com/RafaelKC/twig/issues/6))
 - [x] `twig open [id] [default|herdr|code]` ([#1](https://github.com/RafaelKC/twig/issues/1))
 - [x] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7))
-- [ ] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9)), `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
-- [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12)), `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
+- [x] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9); ports and PR info pending #3/#12)
+- [x] `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
+- [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12))
+- [x] `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
 - [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5)), handoff notes ([#16](https://github.com/RafaelKC/twig/issues/16))
 
 ## herdr integration (plugin)
@@ -147,8 +148,8 @@ herdr's native Windows support, which is still in beta, so this waits until it's
 ## Quality
 
 - [x] Integration tests for `doctor`, `config edit`, `code` and the herdr plugin (fake tools on a controlled `PATH`)
-- [ ] Integration tests for `new` / `add-repo` / `rm` / `prune` against local git remotes ([#18](https://github.com/RafaelKC/twig/issues/18))
-- [ ] CI on pull requests: `cargo fmt --check`, `cargo clippy`, `cargo test`, `shellcheck install.sh` (today tests only run on release tags; workflow in [#23](https://github.com/RafaelKC/twig/pull/23)) ([#18](https://github.com/RafaelKC/twig/issues/18))
-- [ ] Branch rules on `main`: require a PR and the CI check, block force pushes, protect `v*` tags, and let `scripts/release.sh` still release ([#22](https://github.com/RafaelKC/twig/issues/22))
+- [x] Integration tests for `new` / `add-repo` / `rm` / `prune` against local git remotes ([#18](https://github.com/RafaelKC/twig/issues/18))
+- [x] CI on pull requests to `main`: `cargo fmt --check`, `cargo clippy`, `cargo test` (Linux and macOS), `shellcheck install.sh` ([#18](https://github.com/RafaelKC/twig/issues/18))
+- [x] Branch rules on `main` (PR and `check`/`test-macos` required, no force push or deletion) and protected `v*` tags; `scripts/release.sh` opens a `release/vX.Y.Z` PR and tags after merge (`--tag`) ([#22](https://github.com/RafaelKC/twig/issues/22), see [RELEASING.md](RELEASING.md))
 - [x] Translate runtime messages and the generated `CLAUDE.md` to English (or make them localizable)
 - [ ] Test on macOS (today used on Linux/WSL)

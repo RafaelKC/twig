@@ -7,8 +7,11 @@ mod doctor;
 mod herdr;
 mod provider;
 mod selfmgmt;
+mod status;
+mod sync;
 mod sys;
 mod ui;
+mod updatecheck;
 mod workspace;
 
 use std::process::ExitCode;
@@ -123,13 +126,42 @@ enum Cmd {
     Code { id: Option<String> },
     /// List active cards and each repo's branch (* = uncommitted changes).
     #[command(alias = "list")]
-    Ls,
+    Ls {
+        /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent.
+    ///
+    /// Without <ID>, every card (compact); with an id, the details of that card.
+    Status {
+        id: Option<String>,
+        /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
+        #[arg(long)]
+        json: bool,
+    },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
         id: String,
         /// Drop the cache and fetch the card data from the provider again.
         #[arg(long)]
         refetch: bool,
+    },
+    /// Fetch the base branch and rebase/merge it into every repo of the card.
+    ///
+    /// Repos with uncommitted changes are skipped and reported; a conflict stops the run
+    /// and names the repo and files. Default strategy: `[git] sync` (rebase).
+    Sync {
+        id: String,
+        /// Merge the base branch instead of rebasing.
+        #[arg(long, conflicts_with = "rebase")]
+        merge: bool,
+        /// Rebase onto the base branch (overrides `[git] sync = "merge"`).
+        #[arg(long)]
+        rebase: bool,
+        /// Fetch and show what would happen, without changing any worktree.
+        #[arg(short = 'n', long)]
+        dry_run: bool,
     },
     /// Remove the card's worktrees, folder and herdr workspace (refuses with uncommitted changes or a running agent).
     #[command(alias = "remove")]
@@ -149,7 +181,11 @@ enum Cmd {
         dry_run: bool,
     },
     /// Check dependencies, login and config without changing anything (exits 1 on error).
-    Doctor,
+    Doctor {
+        /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
+        #[arg(long)]
+        json: bool,
+    },
     /// Manage the config file.
     Config {
         #[command(subcommand)]
@@ -196,7 +232,7 @@ fn run(cli: Cli) -> Result<()> {
             clap_complete::generate(shell, &mut Cli::command(), "twig", &mut std::io::stdout());
             return Ok(());
         }
-        Cmd::Doctor => return doctor::run(),
+        Cmd::Doctor { json } => return doctor::run(json),
         Cmd::Update { check, version } => return selfmgmt::update(check, version),
         Cmd::Uninstall { yes } => return selfmgmt::uninstall(yes),
         Cmd::Config {
@@ -206,7 +242,12 @@ fn run(cli: Cli) -> Result<()> {
     }
 
     let mut cfg = Config::load()?;
-    match cli.cmd {
+    let update = cfg.update.clone();
+    let json = matches!(
+        cli.cmd,
+        Cmd::Ls { json: true } | Cmd::Status { json: true, .. }
+    );
+    let result = match cli.cmd {
         Cmd::New {
             id,
             slug,
@@ -277,22 +318,42 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::OpenCard { id } => commands::open_card(&cfg, id.as_deref()),
         Cmd::Herdr { id } => commands::herdr_cmd(&cfg, &id),
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
-        Cmd::Ls => commands::ls(&cfg),
+        Cmd::Ls { json } => commands::ls(&cfg, json),
+        Cmd::Status { id, json } => status::run(&cfg, id.as_deref(), json),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
         Cmd::Rm {
             id,
             branches,
             force,
         } => commands::rm(&cfg, &id, branches, force),
+        Cmd::Sync {
+            id,
+            merge,
+            rebase,
+            dry_run,
+        } => {
+            let mode = match (merge, rebase) {
+                (true, _) => Some(config::SyncMode::Merge),
+                (_, true) => Some(config::SyncMode::Rebase),
+                _ => None,
+            };
+            sync::run(&cfg, &id, mode, dry_run)
+        }
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
         Cmd::Completions { .. }
-        | Cmd::Doctor
+        | Cmd::Doctor { .. }
         | Cmd::Config { .. }
         | Cmd::Update { .. }
         | Cmd::Uninstall { .. } => {
             unreachable!()
         }
+    };
+    // stderr-only hint after the command's own output; silent unless a TTY and a newer
+    // release, and never with --json
+    if !json {
+        updatecheck::maybe_hint(&update);
     }
+    result
 }
 
 fn main() -> ExitCode {

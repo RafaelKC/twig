@@ -390,24 +390,64 @@ fn launch_code(target: &Path) -> Result<()> {
     sys::run(&mut cmd)
 }
 
-pub fn ls(cfg: &Config) -> Result<()> {
-    let ids = card::list_cards(cfg);
-    if ids.is_empty() {
+/// One repo of a card in `twig ls`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LsRepo {
+    pub repo: String,
+    pub branch: Option<String>,
+    /// Uncommitted changes (including untracked files).
+    pub dirty: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LsCard {
+    pub id: String,
+    pub repos: Vec<LsRepo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LsOutput {
+    pub cards: Vec<LsCard>,
+}
+
+pub fn ls_collect(cfg: &Config) -> LsOutput {
+    let cards = card::list_cards(cfg)
+        .into_iter()
+        .map(|id| {
+            let dir = cfg.card_dir(&id);
+            let repos = card::repos_ordered(cfg, &dir)
+                .into_iter()
+                .map(|repo| {
+                    let wt = dir.join(&repo);
+                    LsRepo {
+                        branch: sys::git_current_branch(&wt),
+                        dirty: sys::git_is_dirty(&wt),
+                        repo,
+                    }
+                })
+                .collect();
+            LsCard { id, repos }
+        })
+        .collect();
+    LsOutput { cards }
+}
+
+pub fn ls(cfg: &Config, json: bool) -> Result<()> {
+    let out = ls_collect(cfg);
+    if json {
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
+    if out.cards.is_empty() {
         ui::info("no active cards");
         return Ok(());
     }
-    for id in ids {
-        println!("\x1b[1m  #{id}\x1b[0m");
-        let dir = cfg.card_dir(&id);
-        for repo in card::repos_ordered(cfg, &dir) {
-            let wt = dir.join(&repo);
-            let branch = sys::git_current_branch(&wt).unwrap_or_else(|| "?".into());
-            let dirty = if sys::git_is_dirty(&wt) {
-                " \x1b[33m*\x1b[0m"
-            } else {
-                ""
-            };
-            println!("      {repo:<18} {branch}{dirty}");
+    for c in out.cards {
+        println!("\x1b[1m  #{}\x1b[0m", c.id);
+        for r in c.repos {
+            let branch = r.branch.as_deref().unwrap_or("?");
+            let dirty = if r.dirty { " \x1b[33m*\x1b[0m" } else { "" };
+            println!("      {:<18} {branch}{dirty}", r.repo);
         }
     }
     Ok(())
