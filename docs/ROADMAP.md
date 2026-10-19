@@ -20,6 +20,7 @@ Not scheduled yet; grouped by theme.
 - **Day-to-day commands:** [#9](https://github.com/RafaelKC/twig/issues/9) `status`; [#10](https://github.com/RafaelKC/twig/issues/10) `clean` (merged/closed cards); [#12](https://github.com/RafaelKC/twig/issues/12) `pr`; [#13](https://github.com/RafaelKC/twig/issues/13) `sync`; [#11](https://github.com/RafaelKC/twig/issues/11) `--json`
 - **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
 - **Updates:** [#20](https://github.com/RafaelKC/twig/issues/20) version check on every command with an update hint
+- **Repo safety:** [#18](https://github.com/RafaelKC/twig/issues/18) CI on every PR to `main` (PR [#23](https://github.com/RafaelKC/twig/pull/23)); [#22](https://github.com/RafaelKC/twig/issues/22) branch rules on `main` (require PR and passing CI, protect `v*` tags, adapt `scripts/release.sh`)
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `config get/set`, `.twig.toml`; [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
 
 Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
@@ -147,6 +148,7 @@ herdr's native Windows support, which is still in beta, so this waits until it's
 
 - [x] Integration tests for `doctor`, `config edit`, `code` and the herdr plugin (fake tools on a controlled `PATH`)
 - [ ] Integration tests for `new` / `add-repo` / `rm` / `prune` against local git remotes ([#18](https://github.com/RafaelKC/twig/issues/18))
-- [ ] CI on pull requests: `cargo fmt --check`, `cargo clippy`, `cargo test`, `shellcheck install.sh` (today tests only run on release tags) ([#18](https://github.com/RafaelKC/twig/issues/18))
+- [ ] CI on pull requests: `cargo fmt --check`, `cargo clippy`, `cargo test`, `shellcheck install.sh` (today tests only run on release tags; workflow in [#23](https://github.com/RafaelKC/twig/pull/23)) ([#18](https://github.com/RafaelKC/twig/issues/18))
+- [ ] Branch rules on `main`: require a PR and the CI check, block force pushes, protect `v*` tags, and let `scripts/release.sh` still release ([#22](https://github.com/RafaelKC/twig/issues/22))
 - [x] Translate runtime messages and the generated `CLAUDE.md` to English (or make them localizable)
 - [ ] Test on macOS (today used on Linux/WSL)
