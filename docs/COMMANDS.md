@@ -235,6 +235,9 @@ completions are replaced; dependencies and config are not touched. Needs `curl`.
 | `--check` | only reports whether a new version exists |
 | `--version vX.Y.Z` | installs that version, even if it's older or the same |
 
+Other commands also hint at a new release, on stderr, at most once a day; see `[update]` in
+[CONFIG.md](CONFIG.md) and `TWIG_NO_UPDATE_CHECK=1` to turn it off.
+
 ## `twig uninstall [--yes]`
 
 Removes what the installer put in place:

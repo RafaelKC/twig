@@ -46,7 +46,7 @@ fn curl() -> Result<Command> {
 }
 
 /// (major, minor, patch) from "v1.2.3" or "1.2.3".
-fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
+pub(crate) fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
     let mut parts = v
         .trim()
         .trim_start_matches('v')
@@ -56,7 +56,15 @@ fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
 }
 
 fn latest_tag() -> Result<String> {
+    latest_tag_within(0)
+}
+
+/// Latest release tag; `timeout_secs > 0` bounds the whole request (used by the update hint).
+pub(crate) fn latest_tag_within(timeout_secs: u32) -> Result<String> {
     let mut cmd = curl()?;
+    if timeout_secs > 0 {
+        cmd.args(["--max-time", &timeout_secs.to_string()]);
+    }
     cmd.args(["-H", "Accept: application/vnd.github+json"]);
     if let Ok(token) = std::env::var("GITHUB_TOKEN") {
         cmd.args(["-H", &format!("Authorization: Bearer {token}")]);
