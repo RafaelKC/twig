@@ -137,6 +137,7 @@ twig completions bash > ~/.local/share/bash-completion/completions/twig
 twig new 52644                      # cria o card com os repos padrão
 twig new 52644 --repos api,ui-kit   # escolhe os repos
 twig add-repo 52644 web             # adiciona um repo depois (ou restaura painéis fechados)
+twig open 52644                     # abre o card no destino padrão (herdr ou code)
 twig herdr 52644                    # abre o card no herdr
 twig code                           # abre o card atual no VS Code
 twig ls                             # cards, branches, alterações não commitadas (*)
@@ -148,6 +149,7 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 |---|---|
 | `new <id> [slug]` | worktrees, `CLAUDE.md`/`AGENTS.md`, workspace do herdr e, se habilitado, o do VS Code |
 | `add-repo <id> <repo,...>` | adiciona repos a um card; recria painéis do herdr que faltam |
+| `open [id] [default\|herdr\|code]` | abre um card no destino escolhido; padrão vem de `[open] default` (herdr) |
 | `herdr <id>` | abre/foca o card no herdr |
 | `code [id]` | abre o card no VS Code; sem id, o card atual |
 | `ls` | cards ativos e a branch de cada repo |

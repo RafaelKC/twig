@@ -17,7 +17,7 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 
-use config::Config;
+use config::{Config, OpenTarget};
 
 /// Per-card environment: git worktrees of several repos under <worktrees>/<id>/,
 /// a herdr workspace with agents and, if enabled, a VS Code workspace.
@@ -97,6 +97,16 @@ enum Cmd {
         #[arg(long)]
         code: bool,
     },
+    /// Open a card in herdr or VS Code (target defaults to `[open] default` in the config).
+    ///
+    /// Without <ID>, the card is inferred like `twig code` does. `twig herdr` and `twig code`
+    /// are aliases of `twig open <id> herdr` / `twig open [id] code`.
+    Open {
+        id: Option<String>,
+        /// Where to open it: `default` uses `[open] default` from the config.
+        #[arg(value_enum)]
+        target: Option<Target>,
+    },
     /// Open the card's herdr workspace (creates whatever is missing).
     Herdr { id: String },
     /// Open the card in VS Code (generates the .code-workspace if missing).
@@ -157,6 +167,15 @@ enum Cmd {
     Completions { shell: Shell },
 }
 
+/// Target of `twig open`.
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum Target {
+    /// The `[open] default` from the config (herdr if unset).
+    Default,
+    Herdr,
+    Code,
+}
+
 #[derive(Subcommand)]
 enum ConfigCmd {
     /// Open the config in $VISUAL/$EDITOR (creates it from the template if missing) and validate on save.
@@ -187,6 +206,14 @@ fn run(cli: Cli) -> Result<()> {
             &mut cfg,
             commands::AddRepoArgs { id, repos, branch, base, fix, install, no_setup, herdr, code },
         ),
+        Cmd::Open { id, target } => {
+            let target = match target {
+                None | Some(Target::Default) => None,
+                Some(Target::Herdr) => Some(OpenTarget::Herdr),
+                Some(Target::Code) => Some(OpenTarget::Code),
+            };
+            commands::open(&cfg, id.as_deref(), target)
+        }
         Cmd::Herdr { id } => commands::herdr_cmd(&cfg, &id),
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
         Cmd::Ls => commands::ls(&cfg),

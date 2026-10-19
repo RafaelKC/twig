@@ -4,7 +4,7 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-use crate::config::Config;
+use crate::config::{Config, OpenTarget};
 use crate::provider::{self, CardInfo};
 use crate::{card, claude_md, herdr, sys, ui, workspace};
 
@@ -244,6 +244,23 @@ fn regenerate(cfg: &Config, id: &str, info: Option<&CardInfo>) -> Result<()> {
         workspace::write(cfg, id, &title)?;
     }
     claude_md::write(cfg, id, "", info)
+}
+
+/// `twig open [id] [target]`; `herdr` and `code` go through the same functions.
+/// Without a target, `[open] default` from the config decides.
+pub fn open(cfg: &Config, id: Option<&str>, target: Option<OpenTarget>) -> Result<()> {
+    match target.unwrap_or(cfg.open.default) {
+        OpenTarget::Code => code(cfg, id),
+        OpenTarget::Herdr => match id {
+            Some(id) => herdr_cmd(cfg, id),
+            None => match card::infer(cfg) {
+                card::Current::Card(id) => herdr_cmd(cfg, &id),
+                card::Current::Dir(dir) => {
+                    bail!("{} is not inside a card; pass the card id", dir.display())
+                }
+            },
+        },
+    }
 }
 
 pub fn herdr_cmd(cfg: &Config, id: &str) -> Result<()> {

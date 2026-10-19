@@ -8,6 +8,7 @@
 |---|---|
 | `twig new <id> [slug]` | creates the card: worktrees, herdr workspace and, if enabled, `.code-workspace` |
 | `twig add-repo <id> <repo,...>` | adds more repos to an existing card |
+| `twig open [id] [default\|herdr\|code]` | opens the card in the chosen target (default: `[open] default`, herdr) |
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls` | lists active cards and each repo's branch |
@@ -89,6 +90,27 @@ Adds more repos to an existing card. Safe to run again:
 | `--fix` | new branch with the `fix/` prefix |
 | `--herdr` | opens herdr at the end |
 | `--code` | opens VS Code at the end (error if VS Code isn't enabled/installed) |
+
+## `twig open [id] [default|herdr|code]`
+
+Opens a card in one target:
+
+| Target | Same as |
+|---|---|
+| `herdr` | `twig herdr <id>` |
+| `code` | `twig code [id]` |
+| `default` (or omitted) | the target set in `[open] default` (`herdr` if unset) |
+
+`twig herdr` and `twig code` are aliases that go through the same code path, with the same
+options and errors. Without `<id>`, the card is inferred as in `twig code` (see below); with
+the `herdr` target, a folder that isn't a card is an error (there is no workspace to open).
+An unknown target is rejected. See [CONFIG.md](CONFIG.md) → `[open]`.
+
+```bash
+twig open 52644             # default target from the config
+twig open 52644 code        # = twig code 52644
+twig open                   # current card, default target
+```
 
 ## `twig herdr <id>`
 

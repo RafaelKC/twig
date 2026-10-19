@@ -5,7 +5,7 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-use crate::config::{config_path, Config, ProviderKind};
+use crate::config::{config_path, Config, OpenTarget, ProviderKind};
 use crate::sys;
 
 #[derive(Default)]
@@ -112,6 +112,10 @@ pub fn run() -> Result<()> {
         r.require_bin("code", "vscode.enabled = true");
     } else {
         r.info("disabled in the config (vscode.enabled = false)");
+    }
+
+    if cfg.open.default == OpenTarget::Code && !cfg.vscode.enabled {
+        r.error("open.default = \"code\" but vscode.enabled = false");
     }
 
     r.section("provider");

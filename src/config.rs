@@ -20,6 +20,8 @@ pub struct Config {
     #[serde(default)]
     pub herdr: Herdr,
     #[serde(default)]
+    pub open: Open,
+    #[serde(default)]
     pub paths: Paths,
     #[serde(default)]
     pub git: Git,
@@ -139,6 +141,21 @@ impl Default for Vscode {
 #[serde(deny_unknown_fields, default)]
 pub struct Herdr {
     pub open_on_new: bool,
+}
+
+/// Where `twig open` goes when no target is given.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OpenTarget {
+    #[default]
+    Herdr,
+    Code,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Open {
+    pub default: OpenTarget,
 }
 
 #[derive(Debug, Deserialize)]

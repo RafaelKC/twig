@@ -27,6 +27,9 @@ open_on_new = false
 [herdr]
 open_on_new = false
 
+[open]
+default = "herdr"                 # "herdr" | "code": target of `twig open` without one
+
 [paths]
 worktrees = "~/.wt"
 repos     = "~/dev"                 # where the main clones live

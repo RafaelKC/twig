@@ -347,6 +347,166 @@ fn herdr_plugin_opens_the_focused_card() {
     assert_eq!(opened(&log), s.path("wt/123/123.code-workspace").display().to_string());
 }
 
+// ───────────────────────── open ─────────────────────────
+
+/// Card `123` with a `code` stub and a `herdr` stub that logs its calls and reports a workspace `123`.
+fn open_sandbox(extra: &str) -> (Sandbox, PathBuf, PathBuf) {
+    let s = Sandbox::new();
+    s.valid_config(extra);
+    fs::create_dir_all(s.path("wt/123/r1/.git")).unwrap();
+    let code_log = s.path("code.log");
+    s.stub("code", &format!("echo \"$1\" > {}", code_log.display()));
+    let herdr_log = s.path("herdr.log");
+    s.stub(
+        "herdr",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[{{"label":"123","workspace_id":"w1"}}]}}}}' ;;
+  "tab list") echo '{{"result":{{"tabs":[{{"label":"agent","tab_id":"t1"}}]}}}}' ;;
+  "pane list") echo '{{"result":{{"panes":[{{"pane_id":"w1:p1","tab_id":"t1","cwd":"{cwd}"}}]}}}}' ;;
+esac"#,
+            log = herdr_log.display(),
+            cwd = s.path("wt/123/r1").display()
+        ),
+    );
+    (s, code_log, herdr_log)
+}
+
+/// HERDR_ENV=1 so that opening herdr only focuses the workspace instead of launching the UI.
+fn run_open(s: &Sandbox, args: &[&str], cwd: Option<PathBuf>) -> Output {
+    let mut c = s.cmd(args);
+    c.env("HERDR_ENV", "1");
+    if let Some(d) = cwd {
+        c.current_dir(d);
+    }
+    s.run_with(c, "")
+}
+
+fn workspace_file(s: &Sandbox) -> String {
+    s.path("wt/123/123.code-workspace").display().to_string()
+}
+
+fn assert_herdr_focused(log: &Path) {
+    assert!(herdr_calls(log).contains("workspace focus w1"), "{}", herdr_calls(log));
+}
+
+#[test]
+fn open_herdr_target_focuses_the_workspace() {
+    let (s, code_log, herdr_log) = open_sandbox("");
+    assert_exit(&run_open(&s, &["open", "123", "herdr"], None), 0);
+    assert_herdr_focused(&herdr_log);
+    assert_eq!(opened(&code_log), "");
+}
+
+#[test]
+fn open_code_target_opens_vscode() {
+    let (s, code_log, herdr_log) = open_sandbox("");
+    assert_exit(&run_open(&s, &["open", "123", "code"], None), 0);
+    assert_eq!(opened(&code_log), workspace_file(&s));
+    assert_eq!(herdr_calls(&herdr_log), "");
+}
+
+#[test]
+fn open_without_target_defaults_to_herdr() {
+    let (s, code_log, herdr_log) = open_sandbox("");
+    assert_exit(&run_open(&s, &["open", "123"], None), 0);
+    assert_herdr_focused(&herdr_log);
+    assert_eq!(opened(&code_log), "");
+}
+
+#[test]
+fn open_without_target_uses_the_config_default() {
+    let (s, code_log, herdr_log) = open_sandbox("[open]\ndefault = \"code\"\n");
+    assert_exit(&run_open(&s, &["open", "123"], None), 0);
+    assert_eq!(opened(&code_log), workspace_file(&s));
+    assert_eq!(herdr_calls(&herdr_log), "");
+}
+
+#[test]
+fn open_default_target_means_the_config_default() {
+    let (s, code_log, _) = open_sandbox("[open]\ndefault = \"code\"\n");
+    assert_exit(&run_open(&s, &["open", "123", "default"], None), 0);
+    assert_eq!(opened(&code_log), workspace_file(&s));
+}
+
+#[test]
+fn open_explicit_target_overrides_the_config_default() {
+    let (s, code_log, herdr_log) = open_sandbox("[open]\ndefault = \"code\"\n");
+    assert_exit(&run_open(&s, &["open", "123", "herdr"], None), 0);
+    assert_herdr_focused(&herdr_log);
+    assert_eq!(opened(&code_log), "");
+}
+
+#[test]
+fn open_without_id_infers_the_current_card() {
+    let (s, code_log, herdr_log) = open_sandbox("");
+    let cwd = s.path("wt/123/r1");
+    assert_exit(&run_open(&s, &["open"], Some(cwd.clone())), 0);
+    assert_herdr_focused(&herdr_log);
+    assert_eq!(opened(&code_log), "");
+    // the target can only follow an id on the command line, so `code` here comes from the config
+    let (s, code_log, _) = open_sandbox("[open]\ndefault = \"code\"\n");
+    assert_exit(&run_open(&s, &["open"], Some(s.path("wt/123/r1"))), 0);
+    assert_eq!(opened(&code_log), workspace_file(&s));
+}
+
+#[test]
+fn open_herdr_without_id_outside_a_card_errors() {
+    let (s, _, herdr_log) = open_sandbox("");
+    fs::create_dir_all(s.path("other")).unwrap();
+    let o = run_open(&s, &["open"], Some(s.path("other")));
+    assert_exit(&o, 1);
+    assert_has(&o, "not inside a card");
+    assert_eq!(herdr_calls(&herdr_log), "");
+}
+
+#[test]
+fn open_unknown_target_is_rejected() {
+    let (s, code_log, herdr_log) = open_sandbox("");
+    let o = run_open(&s, &["open", "123", "emacs"], None);
+    assert_exit(&o, 2);
+    assert_has(&o, "emacs");
+    assert_eq!(opened(&code_log), "");
+    assert_eq!(herdr_calls(&herdr_log), "");
+}
+
+#[test]
+fn open_invalid_config_default_is_a_config_error() {
+    let (s, _, _) = open_sandbox("[open]\ndefault = \"emacs\"\n");
+    let o = run_open(&s, &["open", "123"], None);
+    assert_exit(&o, 1);
+    assert_has(&o, "invalid config");
+}
+
+#[test]
+fn doctor_reports_an_invalid_open_default() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("[open]\ndefault = \"emacs\"\n");
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "emacs");
+}
+
+#[test]
+fn herdr_and_code_aliases_still_work() {
+    let (s, code_log, herdr_log) = open_sandbox("");
+    assert_exit(&run_open(&s, &["herdr", "123"], None), 0);
+    assert_herdr_focused(&herdr_log);
+    assert_exit(&run_open(&s, &["code", "123"], None), 0);
+    assert_eq!(opened(&code_log), workspace_file(&s));
+}
+
+#[test]
+fn completions_list_the_open_targets() {
+    let s = Sandbox::new();
+    let o = s.run(&["completions", "bash"]);
+    assert_exit(&o, 0);
+    let out = text(&o);
+    assert!(out.contains("opts=\"-h --help default herdr code\""), "{out}");
+}
+
 // ───────────────────────── update / uninstall ─────────────────────────
 
 /// `curl` stub: answers the GitHub "latest release" API with `tag` and serves an

@@ -115,6 +115,15 @@ With `open_on_new = false`, the user opens it for that run with `--herdr` or `--
 `--code` errors if `vscode.enabled = false` or if `code` isn't installed.
 See [COMMANDS.md](COMMANDS.md).
 
+### `[open]`
+
+| Field | Default | Description |
+|---|---|---|
+| `default` | `"herdr"` | target of `twig open` when none is given: `"herdr"` or `"code"` |
+
+Any other value is a config error (reported by `twig doctor` and `twig config edit`).
+`"code"` with `vscode.enabled = false` is flagged by `twig doctor`.
+
 ### `[paths]`
 
 | Field | Default | Description |
