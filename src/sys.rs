@@ -16,7 +16,9 @@ pub fn which(bin: &str) -> Option<PathBuf> {
         vec![String::new()]
     };
     env::split_paths(&env::var_os("PATH")?).find_map(|dir| {
-        exts.iter().map(|e| dir.join(format!("{bin}{e}"))).find(|p| p.is_file())
+        exts.iter()
+            .map(|e| dir.join(format!("{bin}{e}")))
+            .find(|p| p.is_file())
     })
 }
 

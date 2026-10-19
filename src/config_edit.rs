@@ -48,7 +48,13 @@ fn editor() -> String {
         .iter()
         .filter_map(|k| std::env::var(k).ok())
         .find(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| if cfg!(windows) { "notepad".into() } else { "nano".into() })
+        .unwrap_or_else(|| {
+            if cfg!(windows) {
+                "notepad".into()
+            } else {
+                "nano".into()
+            }
+        })
 }
 
 /// Run the editor through the shell, so values like `code --wait` work.
@@ -59,7 +65,10 @@ fn open_editor(editor: &str, file: &Path) -> Result<()> {
         c
     } else {
         let mut c = Command::new("sh");
-        c.arg("-c").arg(format!("{editor} \"$@\"")).arg("sh").arg(file);
+        c.arg("-c")
+            .arg(format!("{editor} \"$@\""))
+            .arg("sh")
+            .arg(file);
         c
     };
     sys::run(&mut cmd).with_context(|| format!("editor `{editor}` failed"))
@@ -72,7 +81,10 @@ pub fn edit() -> Result<()> {
             fs::create_dir_all(dir)?;
         }
         fs::write(&file, TEMPLATE)?;
-        ui::ok(format!("config created from the template: {}", file.display()));
+        ui::ok(format!(
+            "config created from the template: {}",
+            file.display()
+        ));
     }
 
     let editor = editor();

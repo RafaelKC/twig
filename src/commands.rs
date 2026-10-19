@@ -49,7 +49,13 @@ fn check_code_flag(cfg: &Config, code: bool) -> Result<()> {
 }
 
 /// Open VS Code and/or herdr at the end of `new` / `add-repo`.
-fn open_after(cfg: &Config, id: &str, ws: Option<&str>, code: bool, herdr_flag: bool) -> Result<()> {
+fn open_after(
+    cfg: &Config,
+    id: &str,
+    ws: Option<&str>,
+    code: bool,
+    herdr_flag: bool,
+) -> Result<()> {
     if code || (cfg.vscode.enabled && cfg.vscode.open_on_new) {
         if sys::which("code").is_some() {
             open_code(cfg, id)?;
@@ -101,7 +107,10 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         if !card::repos_in(&dir).is_empty() {
             bail!("card {id} already exists: use `twig code {id}`, `twig herdr {id}` or `twig rm {id}`");
         }
-        ui::warn(format!("{} existed with no worktrees inside, reusing it", dir.display()));
+        ui::warn(format!(
+            "{} existed with no worktrees inside, reusing it",
+            dir.display()
+        ));
     }
 
     let info: Option<CardInfo> = if a.no_ado {
@@ -128,7 +137,13 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         cfg.branch_prefix(info.as_ref().map(|i| i.kind.as_str()).unwrap_or(""))
     };
     let base = a.base.unwrap_or_else(|| cfg.git.base_branch.clone());
-    let opts = card::BranchOpts { id: &id, slug: &slug, forced: a.branch.as_deref(), base: &base, prefix: &prefix };
+    let opts = card::BranchOpts {
+        id: &id,
+        slug: &slug,
+        forced: a.branch.as_deref(),
+        base: &base,
+        prefix: &prefix,
+    };
 
     let mut done: Vec<String> = vec![];
     let mut title = String::new();
@@ -171,7 +186,10 @@ fn setup(cfg: &Config, id: &str, repos: &[String]) {
     let dir = cfg.card_dir(id);
     for repo in repos {
         let Some(r) = cfg.repo(repo) else { continue };
-        let cmds = Some(&r.install).filter(|c| !c.is_empty()).into_iter().chain(&r.post_create);
+        let cmds = Some(&r.install)
+            .filter(|c| !c.is_empty())
+            .into_iter()
+            .chain(&r.post_create);
         let mut any = false;
         for c in cmds {
             any = true;
@@ -184,7 +202,9 @@ fn setup(cfg: &Config, id: &str, repos: &[String]) {
             }
         }
         if !any {
-            ui::info(format!("[{repo}] no `install` or `post_create` in the config, skipping"));
+            ui::info(format!(
+                "[{repo}] no `install` or `post_create` in the config, skipping"
+            ));
         }
     }
 }
@@ -199,7 +219,11 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     }
 
     let existing = card::repos_ordered(cfg, &dir);
-    let info = provider::load(cfg, &a.id, existing.first().and_then(|r| cfg.repo_path(r)).as_deref());
+    let info = provider::load(
+        cfg,
+        &a.id,
+        existing.first().and_then(|r| cfg.repo_path(r)).as_deref(),
+    );
     let slug = info.as_ref().map(CardInfo::slug).unwrap_or_default();
     let prefix = if a.fix {
         "fix".to_string()
@@ -207,7 +231,13 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
         cfg.branch_prefix(info.as_ref().map(|i| i.kind.as_str()).unwrap_or(""))
     };
     let base = a.base.unwrap_or_else(|| cfg.git.base_branch.clone());
-    let opts = card::BranchOpts { id: &a.id, slug: &slug, forced: a.branch.as_deref(), base: &base, prefix: &prefix };
+    let opts = card::BranchOpts {
+        id: &a.id,
+        slug: &slug,
+        forced: a.branch.as_deref(),
+        base: &base,
+        prefix: &prefix,
+    };
 
     let mut added = false;
     let mut created: Vec<String> = vec![];
@@ -273,20 +303,31 @@ pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
         None => match card::infer(cfg) {
             card::Current::Card(id) => id,
             card::Current::Dir(dir) => {
-                bail!("{} is not inside a card; usage: twig open-card <id>", dir.display())
+                bail!(
+                    "{} is not inside a card; usage: twig open-card <id>",
+                    dir.display()
+                )
             }
         },
     };
-    let repo = card::repos_ordered(cfg, &cfg.card_dir(&id)).first().and_then(|r| cfg.repo_path(r));
+    let repo = card::repos_ordered(cfg, &cfg.card_dir(&id))
+        .first()
+        .and_then(|r| cfg.repo_path(r));
     let url = provider::load(cfg, &id, repo.as_deref())
         .map(|i| i.url)
         .filter(|u| !u.is_empty())
         .ok_or_else(|| anyhow::anyhow!("no URL for card {id}: not cached and the provider returned nothing (is `az` installed and logged in?)"))?;
-    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
     if sys::which(opener).is_some() && sys::quiet(Command::new(opener).arg(&url)) {
         ui::ok(format!("opening #{id}: {url}"));
     } else {
-        ui::warn(format!("could not launch `{opener}`; open this URL manually"));
+        ui::warn(format!(
+            "could not launch `{opener}`; open this URL manually"
+        ));
         println!("{url}");
     }
     Ok(())
@@ -303,7 +344,14 @@ pub fn open_code(cfg: &Config, id: &str) -> Result<()> {
     let file = cfg.workspace_file(id);
     if !file.exists() {
         let dir = cfg.card_dir(id);
-        let info = provider::load(cfg, id, card::repos_ordered(cfg, &dir).first().and_then(|r| cfg.repo_path(r)).as_deref());
+        let info = provider::load(
+            cfg,
+            id,
+            card::repos_ordered(cfg, &dir)
+                .first()
+                .and_then(|r| cfg.repo_path(r))
+                .as_deref(),
+        );
         let title = card::repos_ordered(cfg, &dir)
             .first()
             .and_then(|r| sys::git_current_branch(&dir.join(r)))
@@ -354,7 +402,11 @@ pub fn ls(cfg: &Config) -> Result<()> {
         for repo in card::repos_ordered(cfg, &dir) {
             let wt = dir.join(&repo);
             let branch = sys::git_current_branch(&wt).unwrap_or_else(|| "?".into());
-            let dirty = if sys::git_is_dirty(&wt) { " \x1b[33m*\x1b[0m" } else { "" };
+            let dirty = if sys::git_is_dirty(&wt) {
+                " \x1b[33m*\x1b[0m"
+            } else {
+                ""
+            };
             println!("      {repo:<18} {branch}{dirty}");
         }
     }
@@ -367,7 +419,14 @@ pub fn refresh(cfg: &Config, id: &str, refetch: bool) -> Result<()> {
         provider::drop_cache(cfg, id);
         ui::info("card cache dropped");
     }
-    let info = provider::load(cfg, id, card::repos_ordered(cfg, &dir).first().and_then(|r| cfg.repo_path(r)).as_deref());
+    let info = provider::load(
+        cfg,
+        id,
+        card::repos_ordered(cfg, &dir)
+            .first()
+            .and_then(|r| cfg.repo_path(r))
+            .as_deref(),
+    );
     regenerate(cfg, id, info.as_ref())
 }
 
@@ -393,7 +452,9 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
         let wt = dir.join(repo);
         let branch = sys::git_current_branch(&wt);
         let Some(main) = cfg.repo_path(repo) else {
-            ui::warn(format!("[{repo}] main clone not found, removing only the folder"));
+            ui::warn(format!(
+                "[{repo}] main clone not found, removing only the folder"
+            ));
             continue;
         };
         sys::run(sys::git(&main).args(["worktree", "remove", "--force", &wt.to_string_lossy()]))?;
@@ -417,7 +478,9 @@ pub fn prune(cfg: &Config, dry_run: bool) -> Result<()> {
     ui::info("looking for orphaned worktree records...");
     let mut found = false;
     for repo in &cfg.known_repos() {
-        let Some(main) = cfg.repo_path(repo) else { continue };
+        let Some(main) = cfg.repo_path(repo) else {
+            continue;
+        };
         let orphans = sys::git_orphan_worktrees(&main);
         if orphans.is_empty() {
             continue;

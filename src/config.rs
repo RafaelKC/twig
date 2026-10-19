@@ -46,7 +46,11 @@ pub struct Ai {
 
 impl Default for Ai {
     fn default() -> Self {
-        Self { provider: AgentKind::Claude, command: String::new(), context_file: String::new() }
+        Self {
+            provider: AgentKind::Claude,
+            command: String::new(),
+            context_file: String::new(),
+        }
     }
 }
 
@@ -133,7 +137,10 @@ pub struct Vscode {
 
 impl Default for Vscode {
     fn default() -> Self {
-        Self { enabled: true, open_on_new: true }
+        Self {
+            enabled: true,
+            open_on_new: true,
+        }
     }
 }
 
@@ -168,7 +175,11 @@ pub struct Paths {
 
 impl Default for Paths {
     fn default() -> Self {
-        Self { worktrees: "~/.wt".into(), repos: "~".into(), search: vec![] }
+        Self {
+            worktrees: "~/.wt".into(),
+            repos: "~".into(),
+            search: vec![],
+        }
     }
 }
 
@@ -181,7 +192,10 @@ pub struct Git {
 
 impl Default for Git {
     fn default() -> Self {
-        Self { base_branch: "main".into(), branch_prefix: HashMap::new() }
+        Self {
+            base_branch: "main".into(),
+            branch_prefix: HashMap::new(),
+        }
     }
 }
 
@@ -313,7 +327,11 @@ impl Config {
     }
 
     pub fn default_repos(&self) -> Vec<String> {
-        self.repos.iter().filter(|(_, r)| r.default).map(|(n, _)| n.clone()).collect()
+        self.repos
+            .iter()
+            .filter(|(_, r)| r.default)
+            .map(|(n, _)| n.clone())
+            .collect()
     }
 
     /// Folders searched, in order, for a repo without `path`.
@@ -344,7 +362,10 @@ impl Config {
                 return is_git_repo(&p).then_some(p);
             }
         }
-        self.search_roots().into_iter().map(|b| b.join(name)).find(|p| is_git_repo(p))
+        self.search_roots()
+            .into_iter()
+            .map(|b| b.join(name))
+            .find(|p| is_git_repo(p))
     }
 
     pub fn branch_prefix(&self, work_item_type: &str) -> String {
@@ -376,7 +397,14 @@ impl Config {
         fs::write(&self.file, doc.to_string())
             .with_context(|| format!("could not write {}", self.file.display()))?;
 
-        let repo = Repo { path: if in_root { String::new() } else { clone.display().to_string() }, ..Default::default() };
+        let repo = Repo {
+            path: if in_root {
+                String::new()
+            } else {
+                clone.display().to_string()
+            },
+            ..Default::default()
+        };
         self.repos.insert(name.to_string(), repo);
         Ok(())
     }
@@ -419,7 +447,9 @@ mod tests {
 
     #[test]
     fn unknown_agent_is_rejected_with_the_valid_options() {
-        let err = parse("[agent]\nprovider = \"gemini\"").unwrap_err().to_string();
+        let err = parse("[agent]\nprovider = \"gemini\"")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("claude") && err.contains("codex"), "{err}");
     }
 }

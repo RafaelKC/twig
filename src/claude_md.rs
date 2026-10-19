@@ -25,7 +25,10 @@ fn kept_context(old: &str) -> Option<String> {
     if ctx.contains(CONTEXT_PLACEHOLDER) || ctx.contains(LEGACY_CONTEXT_PLACEHOLDER) {
         return None;
     }
-    Some(format!("{CONTEXT_HEADING}{}", ctx[heading.len()..].trim_end()))
+    Some(format!(
+        "{CONTEXT_HEADING}{}",
+        ctx[heading.len()..].trim_end()
+    ))
 }
 
 pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Result<()> {
@@ -34,14 +37,22 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
     let repos = card::repos_ordered(cfg, &dir);
 
     // keep the "Card context" section if it has already been filled in
-    let kept = fs::read_to_string(&path).ok().and_then(|old| kept_context(&old));
+    let kept = fs::read_to_string(&path)
+        .ok()
+        .and_then(|old| kept_context(&old));
 
     let mut rows = String::new();
     let mut runs = String::new();
     for repo in &repos {
         let branch = sys::git_current_branch(&dir.join(repo)).unwrap_or_else(|| "?".into());
-        let main = cfg.repo_path(repo).map(|p| p.display().to_string()).unwrap_or_else(|| "?".into());
-        rows += &format!("| {} | `{repo}` | `{branch}` | `{main}` |\n", cfg.label(repo));
+        let main = cfg
+            .repo_path(repo)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "?".into());
+        rows += &format!(
+            "| {} | `{repo}` | `{branch}` | `{main}` |\n",
+            cfg.label(repo)
+        );
         if let Some(r) = cfg.repo(repo).filter(|r| !r.run.is_empty()) {
             runs += &format!("- `{repo}`: `{}`\n", r.run);
         }
@@ -58,7 +69,10 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
     }
 
     let mut meta = String::new();
-    let url = info.map(|i| i.url.clone()).filter(|u| !u.is_empty()).unwrap_or_else(|| provider::fallback_url(cfg, id));
+    let url = info
+        .map(|i| i.url.clone())
+        .filter(|u| !u.is_empty())
+        .unwrap_or_else(|| provider::fallback_url(cfg, id));
     if !url.is_empty() {
         meta += &format!("**Work item:** {url}\n");
     }
@@ -105,11 +119,15 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
     };
 
     let provider_rule = match cfg.provider.default {
-        ProviderKind::Az => "- **The `az` CLI is available.** You can query Azure DevOps directly\n  \
+        ProviderKind::Az => {
+            "- **The `az` CLI is available.** You can query Azure DevOps directly\n  \
              (`az boards work-item show --id <id>`, `az repos pr list`, etc.) instead of\n  \
-             asking the user.\n",
-        ProviderKind::Gh => "- **The `gh` CLI is available.** You can query GitHub directly\n  \
-             (`gh issue view <id>`, `gh pr list`, etc.) instead of asking the user.\n",
+             asking the user.\n"
+        }
+        ProviderKind::Gh => {
+            "- **The `gh` CLI is available.** You can query GitHub directly\n  \
+             (`gh issue view <id>`, `gh pr list`, etc.) instead of asking the user.\n"
+        }
     };
 
     let context = kept.unwrap_or_else(|| {
@@ -152,7 +170,11 @@ change is coupled, mention the card (`#{id}`) in the messages for traceability.\
     );
 
     fs::write(&path, body)?;
-    ui::ok(format!("{} generated in {}", cfg.ai.context_file(), dir.display()));
+    ui::ok(format!(
+        "{} generated in {}",
+        cfg.ai.context_file(),
+        dir.display()
+    ));
     Ok(())
 }
 
@@ -163,20 +185,32 @@ mod tests {
     #[test]
     fn keeps_filled_context_with_current_heading() {
         let old = "# Card #1\n\n## Rules\n\n- x\n\n## Card context\n\nDecided to use X.\n\n";
-        assert_eq!(kept_context(old).unwrap(), "## Card context\n\nDecided to use X.");
+        assert_eq!(
+            kept_context(old).unwrap(),
+            "## Card context\n\nDecided to use X."
+        );
     }
 
     #[test]
     fn legacy_heading_is_rewritten_and_body_kept() {
         let old = "# Card #1\n\n## Contexto do card\n\n<!-- nota -->\n\nDecidimos usar X.\n";
-        assert_eq!(kept_context(old).unwrap(), "## Card context\n\n<!-- nota -->\n\nDecidimos usar X.");
+        assert_eq!(
+            kept_context(old).unwrap(),
+            "## Card context\n\n<!-- nota -->\n\nDecidimos usar X."
+        );
     }
 
     #[test]
     fn placeholder_in_either_language_means_not_filled() {
         assert_eq!(kept_context("## Card context\n\n_(to fill in)_\n"), None);
-        assert_eq!(kept_context("## Contexto do card\n\n_(a preencher)_\n"), None);
-        assert_eq!(kept_context("## Contexto do card\n\n_(to fill in)_\n"), None);
+        assert_eq!(
+            kept_context("## Contexto do card\n\n_(a preencher)_\n"),
+            None
+        );
+        assert_eq!(
+            kept_context("## Contexto do card\n\n_(to fill in)_\n"),
+            None
+        );
         assert_eq!(kept_context("## Card context\n\n_(a preencher)_\n"), None);
     }
 
@@ -219,7 +253,8 @@ mod tests {
 
     #[test]
     fn context_file_override_is_used() {
-        let (_tmp, dir) = write_card("[agent]\nprovider = \"codex\"\ncontext_file = \"NOTES.md\"\n");
+        let (_tmp, dir) =
+            write_card("[agent]\nprovider = \"codex\"\ncontext_file = \"NOTES.md\"\n");
         assert!(dir.join("NOTES.md").is_file());
     }
 }

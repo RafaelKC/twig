@@ -199,24 +199,72 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Doctor => return doctor::run(),
         Cmd::Update { check, version } => return selfmgmt::update(check, version),
         Cmd::Uninstall { yes } => return selfmgmt::uninstall(yes),
-        Cmd::Config { cmd: ConfigCmd::Edit } => return config_edit::edit(),
+        Cmd::Config {
+            cmd: ConfigCmd::Edit,
+        } => return config_edit::edit(),
         _ => {}
     }
 
     let mut cfg = Config::load()?;
     match cli.cmd {
-        Cmd::New { id, slug, repos, branch, base, fix, install, no_setup, herdr, code, no_ado } => commands::new(
+        Cmd::New {
+            id,
+            slug,
+            repos,
+            branch,
+            base,
+            fix,
+            install,
+            no_setup,
+            herdr,
+            code,
+            no_ado,
+        } => commands::new(
             &mut cfg,
-            commands::NewArgs { id, slug, repos, branch, base, fix, install, no_setup, herdr, code, no_ado },
+            commands::NewArgs {
+                id,
+                slug,
+                repos,
+                branch,
+                base,
+                fix,
+                install,
+                no_setup,
+                herdr,
+                code,
+                no_ado,
+            },
         ),
-        Cmd::AddRepo { id, repos, branch, base, fix, install, no_setup, herdr, code } => commands::add_repo(
+        Cmd::AddRepo {
+            id,
+            repos,
+            branch,
+            base,
+            fix,
+            install,
+            no_setup,
+            herdr,
+            code,
+        } => commands::add_repo(
             &mut cfg,
-            commands::AddRepoArgs { id, repos, branch, base, fix, install, no_setup, herdr, code },
+            commands::AddRepoArgs {
+                id,
+                repos,
+                branch,
+                base,
+                fix,
+                install,
+                no_setup,
+                herdr,
+                code,
+            },
         ),
         Cmd::Open { id, target } => {
             // `twig open code`: a lone target name is the target, not a card id
             let (id, target) = match (id.as_deref(), target) {
-                (Some(t), None) if <Target as clap::ValueEnum>::from_str(t, true).is_ok() => (None, <Target as clap::ValueEnum>::from_str(t, true).ok()),
+                (Some(t), None) if <Target as clap::ValueEnum>::from_str(t, true).is_ok() => {
+                    (None, <Target as clap::ValueEnum>::from_str(t, true).ok())
+                }
                 _ => (id, target),
             };
             let target = match target {
@@ -231,9 +279,17 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
         Cmd::Ls => commands::ls(&cfg),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
-        Cmd::Rm { id, branches, force } => commands::rm(&cfg, &id, branches, force),
+        Cmd::Rm {
+            id,
+            branches,
+            force,
+        } => commands::rm(&cfg, &id, branches, force),
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
-        Cmd::Completions { .. } | Cmd::Doctor | Cmd::Config { .. } | Cmd::Update { .. } | Cmd::Uninstall { .. } => {
+        Cmd::Completions { .. }
+        | Cmd::Doctor
+        | Cmd::Config { .. }
+        | Cmd::Update { .. }
+        | Cmd::Uninstall { .. } => {
             unreachable!()
         }
     }

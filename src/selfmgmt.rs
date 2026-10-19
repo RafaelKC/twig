@@ -15,7 +15,10 @@ const HERDR_BLOCK_BEGIN: &str = "# twig:begin";
 const HERDR_BLOCK_END: &str = "# twig:end";
 
 fn repo() -> String {
-    std::env::var("TWIG_REPO").ok().filter(|r| !r.is_empty()).unwrap_or_else(|| DEFAULT_REPO.into())
+    std::env::var("TWIG_REPO")
+        .ok()
+        .filter(|r| !r.is_empty())
+        .unwrap_or_else(|| DEFAULT_REPO.into())
 }
 
 fn data_dir() -> Result<PathBuf> {
@@ -44,7 +47,11 @@ fn curl() -> Result<Command> {
 
 /// (major, minor, patch) from "v1.2.3" or "1.2.3".
 fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
-    let mut parts = v.trim().trim_start_matches('v').split('.').map(|p| p.parse::<u64>().ok());
+    let mut parts = v
+        .trim()
+        .trim_start_matches('v')
+        .split('.')
+        .map(|p| p.parse::<u64>().ok());
     Some((parts.next()??, parts.next()??, parts.next()??))
 }
 
@@ -54,10 +61,17 @@ fn latest_tag() -> Result<String> {
     if let Ok(token) = std::env::var("GITHUB_TOKEN") {
         cmd.args(["-H", &format!("Authorization: Bearer {token}")]);
     }
-    cmd.arg(format!("https://api.github.com/repos/{}/releases/latest", repo()));
+    cmd.arg(format!(
+        "https://api.github.com/repos/{}/releases/latest",
+        repo()
+    ));
     let body = sys::output(&mut cmd).context("could not query the latest release on GitHub")?;
-    let json: serde_json::Value = serde_json::from_str(&body).context("unexpected response from GitHub")?;
-    json["tag_name"].as_str().map(String::from).context("release without tag_name")
+    let json: serde_json::Value =
+        serde_json::from_str(&body).context("unexpected response from GitHub")?;
+    json["tag_name"]
+        .as_str()
+        .map(String::from)
+        .context("release without tag_name")
 }
 
 pub fn update(check: bool, version: Option<String>) -> Result<()> {
@@ -78,16 +92,27 @@ pub fn update(check: bool, version: Option<String>) -> Result<()> {
         return Ok(());
     }
     if check {
-        ui::info(format!("new version available: {tag} (current: {current}). Run `twig update`."));
+        ui::info(format!(
+            "new version available: {tag} (current: {current}). Run `twig update`."
+        ));
         return Ok(());
     }
 
     ui::info(format!("updating twig {current} → {tag}"));
     let script = std::env::temp_dir().join(format!("twig-install-{}.sh", std::process::id()));
-    let url = format!("https://raw.githubusercontent.com/{}/{tag}/install.sh", repo());
+    let url = format!(
+        "https://raw.githubusercontent.com/{}/{tag}/install.sh",
+        repo()
+    );
     let result = sys::run(curl()?.arg("-o").arg(&script).arg(&url))
         .with_context(|| format!("could not download {url}"))
-        .and_then(|_| sys::run(Command::new("sh").arg(&script).args(["--update", "--version", &tag])));
+        .and_then(|_| {
+            sys::run(
+                Command::new("sh")
+                    .arg(&script)
+                    .args(["--update", "--version", &tag]),
+            )
+        });
     let _ = fs::remove_file(&script);
     result
 }
@@ -118,7 +143,11 @@ fn strip_herdr_block(text: &str) -> Option<String> {
 }
 
 fn remove_path(p: &Path, what: &str) {
-    let res = if p.is_dir() && !p.is_symlink() { fs::remove_dir_all(p) } else { fs::remove_file(p) };
+    let res = if p.is_dir() && !p.is_symlink() {
+        fs::remove_dir_all(p)
+    } else {
+        fs::remove_file(p)
+    };
     match res {
         Ok(()) => ui::ok(format!("{what} removed: {}", p.display())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -139,7 +168,9 @@ fn completion_files() -> Result<Vec<PathBuf>> {
 }
 
 fn sudo() -> Option<&'static str> {
-    let root = sys::output(Command::new("id").arg("-u")).map(|s| s.trim() == "0").unwrap_or(false);
+    let root = sys::output(Command::new("id").arg("-u"))
+        .map(|s| s.trim() == "0")
+        .unwrap_or(false);
     (!root && sys::which("sudo").is_some()).then_some("sudo")
 }
 
@@ -169,7 +200,9 @@ struct Packages {
 
 /// Uninstalls a tool the way it was installed: package manager if one owns it, else the binary file.
 fn remove_tool(bin: &str, pkgs: &Packages) -> Result<()> {
-    if sys::which("brew").is_some() && sys::quiet(Command::new("brew").args(["list", "--formula", pkgs.brew])) {
+    if sys::which("brew").is_some()
+        && sys::quiet(Command::new("brew").args(["list", "--formula", pkgs.brew]))
+    {
         return sys::run(Command::new("brew").args(["uninstall", pkgs.brew]));
     }
     if sys::which("dpkg").is_some() && sys::quiet(Command::new("dpkg").args(["-s", pkgs.deb])) {
@@ -178,7 +211,9 @@ fn remove_tool(bin: &str, pkgs: &Packages) -> Result<()> {
     if sys::which("rpm").is_some() && sys::quiet(Command::new("rpm").args(["-q", pkgs.rpm])) {
         return run_maybe_sudo(&["dnf", "remove", "-y", pkgs.rpm]);
     }
-    if sys::which("pacman").is_some() && sys::quiet(Command::new("pacman").args(["-Qi", pkgs.pacman])) {
+    if sys::which("pacman").is_some()
+        && sys::quiet(Command::new("pacman").args(["-Qi", pkgs.pacman]))
+    {
         return run_maybe_sudo(&["pacman", "-R", "--noconfirm", pkgs.pacman]);
     }
     let path = sys::which(bin).context("binary not found")?;
@@ -187,7 +222,10 @@ fn remove_tool(bin: &str, pkgs: &Packages) -> Result<()> {
         ui::ok(format!("{} removed", path.display()));
         return Ok(());
     }
-    bail!("don't know how {bin} was installed; remove it manually: {}", path.display())
+    bail!(
+        "don't know how {bin} was installed; remove it manually: {}",
+        path.display()
+    )
 }
 
 pub fn uninstall(yes: bool) -> Result<()> {
@@ -214,9 +252,15 @@ pub fn uninstall(yes: bool) -> Result<()> {
     remove_path(&data_dir()?, "twig data (herdr plugin)");
 
     // AI skill: only ours
-    for dir in [".claude/skills/twig", ".agents/skills/twig", ".codex/skills/twig"] {
+    for dir in [
+        ".claude/skills/twig",
+        ".agents/skills/twig",
+        ".codex/skills/twig",
+    ] {
         let skill = home()?.join(dir);
-        let ours = fs::read_to_string(skill.join("SKILL.md")).map(|s| s.contains("name: twig")).unwrap_or(false);
+        let ours = fs::read_to_string(skill.join("SKILL.md"))
+            .map(|s| s.contains("name: twig"))
+            .unwrap_or(false);
         if ours || skill.is_symlink() {
             remove_path(&skill, "skill");
         }
@@ -229,7 +273,9 @@ pub fn uninstall(yes: bool) -> Result<()> {
     // PATH line install.sh appended (`export PATH="...:$PATH"  # twig`)
     for rc in [".bashrc", ".zshrc"] {
         let rc = home()?.join(rc);
-        let Ok(text) = fs::read_to_string(&rc) else { continue };
+        let Ok(text) = fs::read_to_string(&rc) else {
+            continue;
+        };
         let kept: Vec<&str> = text
             .lines()
             .filter(|l| !(l.starts_with("export PATH=") && l.trim_end().ends_with("# twig")))
@@ -242,7 +288,12 @@ pub fn uninstall(yes: bool) -> Result<()> {
 
     let cfg = config_path()?;
     if cfg.exists() {
-        if !yes && ui::confirm(&format!("also remove the config ({})? [y/N]: ", cfg.display())) {
+        if !yes
+            && ui::confirm(&format!(
+                "also remove the config ({})? [y/N]: ",
+                cfg.display()
+            ))
+        {
             remove_path(&cfg, "config");
         } else {
             ui::info(format!("config kept: {}", cfg.display()));
@@ -252,9 +303,36 @@ pub fn uninstall(yes: bool) -> Result<()> {
 
     if !yes {
         let tools: [(&str, &str, Packages); 3] = [
-            ("az", "Azure CLI", Packages { brew: "azure-cli", deb: "azure-cli", rpm: "azure-cli", pacman: "azure-cli" }),
-            ("gh", "GitHub CLI", Packages { brew: "gh", deb: "gh", rpm: "gh", pacman: "github-cli" }),
-            ("herdr", "herdr", Packages { brew: "herdr", deb: "herdr", rpm: "herdr", pacman: "herdr" }),
+            (
+                "az",
+                "Azure CLI",
+                Packages {
+                    brew: "azure-cli",
+                    deb: "azure-cli",
+                    rpm: "azure-cli",
+                    pacman: "azure-cli",
+                },
+            ),
+            (
+                "gh",
+                "GitHub CLI",
+                Packages {
+                    brew: "gh",
+                    deb: "gh",
+                    rpm: "gh",
+                    pacman: "github-cli",
+                },
+            ),
+            (
+                "herdr",
+                "herdr",
+                Packages {
+                    brew: "herdr",
+                    deb: "herdr",
+                    rpm: "herdr",
+                    pacman: "herdr",
+                },
+            ),
         ];
         for (bin, name, pkgs) in &tools {
             if sys::which(bin).is_none() {
@@ -296,8 +374,14 @@ mod tests {
     #[test]
     fn removes_only_the_twig_block() {
         let text = "[ui]\ntheme = \"x\"\n\n# twig:begin (managed)\n[[keys.command]]\nkey = \"a\"\n# twig:end\n\n[other]\nx = 1\n";
-        assert_eq!(strip_herdr_block(text).unwrap(), "[ui]\ntheme = \"x\"\n\n[other]\nx = 1\n");
+        assert_eq!(
+            strip_herdr_block(text).unwrap(),
+            "[ui]\ntheme = \"x\"\n\n[other]\nx = 1\n"
+        );
         assert_eq!(strip_herdr_block("[ui]\n"), None);
-        assert_eq!(strip_herdr_block("[ui]\n\n# twig:begin\nk\n# twig:end\n").unwrap(), "[ui]\n");
+        assert_eq!(
+            strip_herdr_block("[ui]\n\n# twig:begin\nk\n# twig:end\n").unwrap(),
+            "[ui]\n"
+        );
     }
 }

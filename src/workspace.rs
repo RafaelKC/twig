@@ -95,7 +95,10 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
             "terminal.integrated.env.linux": { "CARD_ID": id }
         }),
     );
-    ws.insert("tasks".into(), json!({ "version": "2.0.0", "tasks": tasks }));
+    ws.insert(
+        "tasks".into(),
+        json!({ "version": "2.0.0", "tasks": tasks }),
+    );
 
     // a compound only makes sense with 2+ processes; with fewer, the repo's dropdown is enough
     let n_dbg = compound.len();
@@ -115,9 +118,14 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
         );
     }
 
-    fs::write(cfg.workspace_file(id), serde_json::to_string_pretty(&Value::Object(ws))? + "\n")?;
+    fs::write(
+        cfg.workspace_file(id),
+        serde_json::to_string_pretty(&Value::Object(ws))? + "\n",
+    )?;
     if n_dbg >= 2 {
-        ui::ok(format!("VS Code workspace generated (color {color}, compound with {n_dbg} processes)"));
+        ui::ok(format!(
+            "VS Code workspace generated (color {color}, compound with {n_dbg} processes)"
+        ));
     } else {
         ui::ok(format!("VS Code workspace generated (color {color})"));
     }
@@ -125,5 +133,9 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
 }
 
 pub fn debug_count(cfg: &Config, repos: &[String]) -> usize {
-    repos.iter().filter_map(|r| cfg.repo(r)).map(|r| r.debug.len()).sum()
+    repos
+        .iter()
+        .filter_map(|r| cfg.repo(r))
+        .map(|r| r.debug.len())
+        .sum()
 }

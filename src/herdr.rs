@@ -14,7 +14,8 @@ use crate::{card, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
     let out = sys::output(Command::new("herdr").args(args))?;
-    serde_json::from_str(&out).with_context(|| format!("unexpected response from herdr: herdr {}", args.join(" ")))
+    serde_json::from_str(&out)
+        .with_context(|| format!("unexpected response from herdr: herdr {}", args.join(" ")))
 }
 
 fn herdr_quiet(args: &[&str]) {
@@ -42,7 +43,10 @@ pub fn ensure_server() -> Result<()> {
     }
     ui::info("starting the herdr server...");
     let mut cmd = Command::new("herdr");
-    cmd.arg("server").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.arg("server")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -86,8 +90,12 @@ pub fn running_agents(id: &str) -> Vec<String> {
     if sys::which("herdr").is_none() || !server_up() {
         return Vec::new();
     }
-    let Ok(Some(ws)) = find_workspace(id) else { return Vec::new() };
-    herdr(&["pane", "list", "--workspace", &ws]).map(|v| busy_panes(&v)).unwrap_or_default()
+    let Ok(Some(ws)) = find_workspace(id) else {
+        return Vec::new();
+    };
+    herdr(&["pane", "list", "--workspace", &ws])
+        .map(|v| busy_panes(&v))
+        .unwrap_or_default()
 }
 
 /// Close the card's herdr workspace, if there is one. Failures are only warnings.
@@ -135,11 +143,29 @@ fn tab_panes(ws: &str, tab: &str) -> Result<Vec<(String, String, String)>> {
 
 /// Make sure a repo has a pane in a tab. Creates the tab if missing; an existing pane
 /// is left alone unless `force` (root pane just created along with the workspace).
-fn ensure_panel(cfg: &Config, ws: &str, tab_label: &str, repo: &str, cmd: &str, cwd: &Path, mut force: bool) -> Result<()> {
+fn ensure_panel(
+    cfg: &Config,
+    ws: &str,
+    tab_label: &str,
+    repo: &str,
+    cmd: &str,
+    cwd: &Path,
+    mut force: bool,
+) -> Result<()> {
     let cwd_s = cwd.to_string_lossy().into_owned();
     let pane = match find_tab(ws, tab_label)? {
         None => {
-            let v = herdr(&["tab", "create", "--workspace", ws, "--cwd", &cwd_s, "--label", tab_label, "--no-focus"])?;
+            let v = herdr(&[
+                "tab",
+                "create",
+                "--workspace",
+                ws,
+                "--cwd",
+                &cwd_s,
+                "--label",
+                tab_label,
+                "--no-focus",
+            ])?;
             force = true;
             str_at(&v, "/result/root_pane/pane_id")?
         }
@@ -150,9 +176,21 @@ fn ensure_panel(cfg: &Config, ws: &str, tab_label: &str, repo: &str, cmd: &str, 
                 Some((id, _, _)) => id.clone(),
                 None => {
                     // first split is side by side; later ones stack on the last pane
-                    let last = panes.last().map(|p| p.0.clone()).context("herdr tab without panes")?;
+                    let last = panes
+                        .last()
+                        .map(|p| p.0.clone())
+                        .context("herdr tab without panes")?;
                     let dir = if panes.len() <= 1 { "right" } else { "down" };
-                    let v = herdr(&["pane", "split", &last, "--direction", dir, "--cwd", &cwd_s, "--no-focus"])?;
+                    let v = herdr(&[
+                        "pane",
+                        "split",
+                        &last,
+                        "--direction",
+                        dir,
+                        "--cwd",
+                        &cwd_s,
+                        "--no-focus",
+                    ])?;
                     force = true;
                     str_at(&v, "/result/pane/pane_id")?
                 }
@@ -174,13 +212,23 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
     ensure_server()?;
     let dir = card::require_card(cfg, id)?;
     let repos = card::repos_ordered(cfg, &dir);
-    let first = repos.first().with_context(|| format!("card {id} has no worktrees"))?;
+    let first = repos
+        .first()
+        .with_context(|| format!("card {id} has no worktrees"))?;
 
     let (ws, fresh) = match find_workspace(id)? {
         Some(ws) => (ws, false),
         None => {
             let cwd = dir.join(first).to_string_lossy().into_owned();
-            let v = herdr(&["workspace", "create", "--cwd", &cwd, "--label", id, "--no-focus"])?;
+            let v = herdr(&[
+                "workspace",
+                "create",
+                "--cwd",
+                &cwd,
+                "--label",
+                id,
+                "--no-focus",
+            ])?;
             let ws = str_at(&v, "/result/workspace/workspace_id")?;
             herdr_quiet(&["tab", "rename", &str_at(&v, "/result/tab/tab_id")?, "agent"]);
             ui::ok(format!("herdr workspace #{id} created"));
@@ -189,7 +237,15 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
     };
 
     for (i, repo) in repos.iter().enumerate() {
-        ensure_panel(cfg, &ws, "agent", repo, cfg.ai.command(), &dir.join(repo), fresh && i == 0)?;
+        ensure_panel(
+            cfg,
+            &ws,
+            "agent",
+            repo,
+            cfg.ai.command(),
+            &dir.join(repo),
+            fresh && i == 0,
+        )?;
     }
     for repo in &repos {
         let Some(r) = cfg.repo(repo) else { continue };

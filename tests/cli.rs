@@ -3,10 +3,10 @@
 #![cfg(unix)]
 
 use std::fs;
+use std::io::Write;
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::io::Write;
 
 use tempfile::TempDir;
 
@@ -18,7 +18,10 @@ struct Sandbox {
 }
 
 fn real(bin: &str) -> PathBuf {
-    let out = Command::new("sh").args(["-c", &format!("command -v {bin}")]).output().unwrap();
+    let out = Command::new("sh")
+        .args(["-c", &format!("command -v {bin}")])
+        .output()
+        .unwrap();
     PathBuf::from(String::from_utf8(out.stdout).unwrap().trim())
 }
 
@@ -33,7 +36,12 @@ impl Sandbox {
         symlink(real("git"), bin.join("git")).unwrap();
         symlink(real("sh"), bin.join("sh")).unwrap();
         let config = home.join(".config/twig/config.toml");
-        Self { bin, home, config, _root: root }
+        Self {
+            bin,
+            home,
+            config,
+            _root: root,
+        }
     }
 
     fn path(&self, rel: &str) -> PathBuf {
@@ -56,18 +64,30 @@ impl Sandbox {
     }
 
     fn all_tools(&self) -> &Self {
-        self.stub("herdr", "exit 0").stub("az", "exit 0").stub("claude", "exit 0").stub("code", "exit 0")
+        self.stub("herdr", "exit 0")
+            .stub("az", "exit 0")
+            .stub("claude", "exit 0")
+            .stub("code", "exit 0")
     }
 
     fn git_identity(&self) -> &Self {
-        fs::write(self.home.join(".gitconfig"), "[user]\n\tname = Test\n\temail = t@t\n").unwrap();
+        fs::write(
+            self.home.join(".gitconfig"),
+            "[user]\n\tname = Test\n\temail = t@t\n",
+        )
+        .unwrap();
         self
     }
 
     fn git_repo(&self, rel: &str) -> PathBuf {
         let p = self.path(rel);
         fs::create_dir_all(&p).unwrap();
-        assert!(Command::new("git").args(["init", "-q"]).current_dir(&p).status().unwrap().success());
+        assert!(Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&p)
+            .status()
+            .unwrap()
+            .success());
         p
     }
 
@@ -103,14 +123,28 @@ impl Sandbox {
     }
 
     fn run_with(&self, mut c: Command, stdin: &str) -> Output {
-        let mut child = c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
-        child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
+        let mut child = c
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(stdin.as_bytes())
+            .unwrap();
         child.wait_with_output().unwrap()
     }
 }
 
 fn text(o: &Output) -> String {
-    format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr))
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&o.stdout),
+        String::from_utf8_lossy(&o.stderr)
+    )
 }
 
 fn assert_exit(o: &Output, code: i32) {
@@ -118,7 +152,11 @@ fn assert_exit(o: &Output, code: i32) {
 }
 
 fn assert_has(o: &Output, needle: &str) {
-    assert!(text(o).contains(needle), "expected {needle:?} in the output:\n{}", text(o));
+    assert!(
+        text(o).contains(needle),
+        "expected {needle:?} in the output:\n{}",
+        text(o)
+    );
 }
 
 // ───────────────────────── doctor ─────────────────────────
@@ -136,7 +174,10 @@ fn doctor_all_good() {
 #[test]
 fn doctor_without_herdr_is_error() {
     let s = Sandbox::new();
-    s.stub("az", "exit 0").stub("claude", "exit 0").stub("code", "exit 0").git_identity();
+    s.stub("az", "exit 0")
+        .stub("claude", "exit 0")
+        .stub("code", "exit 0")
+        .git_identity();
     s.valid_config("");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 1);
@@ -147,7 +188,10 @@ fn doctor_without_herdr_is_error() {
 fn doctor_without_ado_access_is_warning() {
     let s = Sandbox::new();
     s.all_tools().git_identity();
-    s.stub("az", "case \"$*\" in *\"devops project\"*) exit 1;; esac\nexit 0");
+    s.stub(
+        "az",
+        "case \"$*\" in *\"devops project\"*) exit 1;; esac\nexit 0",
+    );
     s.valid_config("");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 0);
@@ -178,7 +222,10 @@ fn doctor_invalid_config_is_error() {
 #[test]
 fn doctor_vscode_disabled_skips_code() {
     let s = Sandbox::new();
-    s.stub("herdr", "exit 0").stub("az", "exit 0").stub("claude", "exit 0").git_identity();
+    s.stub("herdr", "exit 0")
+        .stub("az", "exit 0")
+        .stub("claude", "exit 0")
+        .git_identity();
     s.valid_config("[vscode]\nenabled = false\n");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 0);
@@ -192,7 +239,10 @@ fn doctor_repo_that_is_not_git_is_error() {
     s.valid_config("");
     fs::create_dir_all(s.path("loose")).unwrap();
     let mut cfg = fs::read_to_string(&s.config).unwrap();
-    cfg += &format!("\n[repos.loose]\npath = \"{}\"\n", s.path("loose").display());
+    cfg += &format!(
+        "\n[repos.loose]\npath = \"{}\"\n",
+        s.path("loose").display()
+    );
     fs::write(&s.config, cfg).unwrap();
     let o = s.run(&["doctor"]);
     assert_exit(&o, 1);
@@ -255,7 +305,9 @@ fn config_edit_creates_template_when_missing() {
     let o = edit(&s, &s.script("noop.sh", "exit 0"), "");
     assert_exit(&o, 0);
     assert_has(&o, "config created from the template");
-    assert!(fs::read_to_string(&s.config).unwrap().contains("version = 1"));
+    assert!(fs::read_to_string(&s.config)
+        .unwrap()
+        .contains("version = 1"));
 }
 
 #[test]
@@ -285,7 +337,10 @@ fn code_sandbox() -> (Sandbox, PathBuf) {
 }
 
 fn opened(log: &Path) -> String {
-    fs::read_to_string(log).unwrap_or_default().trim().to_string()
+    fs::read_to_string(log)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
 }
 
 #[test]
@@ -293,7 +348,10 @@ fn code_with_id_opens_the_card_workspace() {
     let (s, log) = code_sandbox();
     let o = s.run(&["code", "123"]);
     assert_exit(&o, 0);
-    assert_eq!(opened(&log), s.path("wt/123/123.code-workspace").display().to_string());
+    assert_eq!(
+        opened(&log),
+        s.path("wt/123/123.code-workspace").display().to_string()
+    );
     assert!(s.path("wt/123/123.code-workspace").exists());
 }
 
@@ -304,7 +362,10 @@ fn code_without_id_uses_herdr_workspace_label() {
     c.env("HERDR_PLUGIN_CONTEXT_JSON", r#"{"workspace_label":"123"}"#);
     let o = s.run_with(c, "");
     assert_exit(&o, 0);
-    assert_eq!(opened(&log), s.path("wt/123/123.code-workspace").display().to_string());
+    assert_eq!(
+        opened(&log),
+        s.path("wt/123/123.code-workspace").display().to_string()
+    );
 }
 
 #[test]
@@ -314,7 +375,10 @@ fn code_without_id_uses_cwd_inside_the_card() {
     c.current_dir(s.path("wt/123/r1"));
     let o = s.run_with(c, "");
     assert_exit(&o, 0);
-    assert_eq!(opened(&log), s.path("wt/123/123.code-workspace").display().to_string());
+    assert_eq!(
+        opened(&log),
+        s.path("wt/123/123.code-workspace").display().to_string()
+    );
 }
 
 #[test]
@@ -322,7 +386,10 @@ fn code_outside_a_card_opens_the_folder() {
     let (s, log) = code_sandbox();
     fs::create_dir_all(s.path("other")).unwrap();
     let mut c = s.cmd(&["code"]);
-    let ctx = format!(r#"{{"workspace_label":"xyz","focused_pane_cwd":"{}"}}"#, s.path("other").display());
+    let ctx = format!(
+        r#"{{"workspace_label":"xyz","focused_pane_cwd":"{}"}}"#,
+        s.path("other").display()
+    );
     c.env("HERDR_PLUGIN_CONTEXT_JSON", ctx);
     let o = s.run_with(c, "");
     assert_exit(&o, 0);
@@ -344,7 +411,10 @@ fn herdr_plugin_opens_the_focused_card() {
         .env("HERDR_ENV", "1");
     let o = s.run_with(c, "");
     assert_exit(&o, 0);
-    assert_eq!(opened(&log), s.path("wt/123/123.code-workspace").display().to_string());
+    assert_eq!(
+        opened(&log),
+        s.path("wt/123/123.code-workspace").display().to_string()
+    );
 }
 
 // ───────────────────────── open ─────────────────────────
@@ -388,7 +458,11 @@ fn workspace_file(s: &Sandbox) -> String {
 }
 
 fn assert_herdr_focused(log: &Path) {
-    assert!(herdr_calls(log).contains("workspace focus w1"), "{}", herdr_calls(log));
+    assert!(
+        herdr_calls(log).contains("workspace focus w1"),
+        "{}",
+        herdr_calls(log)
+    );
 }
 
 #[test]
@@ -513,7 +587,10 @@ fn completions_list_the_open_targets() {
     let o = s.run(&["completions", "bash"]);
     assert_exit(&o, 0);
     let out = text(&o);
-    assert!(out.contains("opts=\"-h --help default herdr code\""), "{out}");
+    assert!(
+        out.contains("opts=\"-h --help default herdr code\""),
+        "{out}"
+    );
 }
 
 // ───────────────────────── update / uninstall ─────────────────────────
@@ -522,7 +599,10 @@ fn completions_list_the_open_targets() {
 /// install.sh that records how it was called.
 fn fake_github(s: &Sandbox, tag: &str) -> PathBuf {
     let calls = s.path("install-calls.log");
-    let installer = s.script("fake-install.sh", &format!("echo \"$@\" >> {}", calls.display()));
+    let installer = s.script(
+        "fake-install.sh",
+        &format!("echo \"$@\" >> {}", calls.display()),
+    );
     s.stub(
         "curl",
         &format!(
@@ -565,7 +645,10 @@ fn update_runs_the_tag_installer() {
     let calls = fake_github(&s, "v99.0.0");
     let o = s.run(&["update"]);
     assert_exit(&o, 0);
-    assert_eq!(fs::read_to_string(&calls).unwrap().trim(), "--update --version v99.0.0");
+    assert_eq!(
+        fs::read_to_string(&calls).unwrap().trim(),
+        "--update --version v99.0.0"
+    );
 }
 
 #[test]
@@ -625,11 +708,26 @@ fn rm_sandbox(agent_status: &str) -> (Sandbox, PathBuf) {
     s.valid_config("");
     let main = s.path("repos/r1");
     let git = |args: &[&str], dir: &Path| {
-        assert!(Command::new("git").args(args).current_dir(dir).status().unwrap().success());
+        assert!(Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .unwrap()
+            .success());
     };
     git(&["commit", "-q", "--allow-empty", "-m", "init"], &main);
     fs::create_dir_all(s.path("wt/123")).unwrap();
-    git(&["worktree", "add", "-q", "-b", "card-123", &s.path("wt/123/r1").to_string_lossy()], &main);
+    git(
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "card-123",
+            &s.path("wt/123/r1").to_string_lossy(),
+        ],
+        &main,
+    );
     let log = s.path("herdr.log");
     let body = format!(
         r#"echo "$@" >> {log}
@@ -653,7 +751,11 @@ fn rm_removes_card_and_closes_herdr_workspace() {
     let o = s.run(&["rm", "123"]);
     assert_exit(&o, 0);
     assert!(!s.path("wt/123").exists());
-    assert!(herdr_calls(&log).contains("workspace close w1"), "{}", herdr_calls(&log));
+    assert!(
+        herdr_calls(&log).contains("workspace close w1"),
+        "{}",
+        herdr_calls(&log)
+    );
 }
 
 #[test]
@@ -700,7 +802,9 @@ fn open_card_sandbox(extra: &str) -> (Sandbox, PathBuf) {
     fs::create_dir_all(s.path("wt/123/r1/.git")).unwrap();
     fs::write(
         s.path("wt/123/.ado.json"),
-        format!(r#"{{"fields":{{"System.Title":"T"}},"_links":{{"html":{{"href":"{CARD_URL}"}}}}}}"#),
+        format!(
+            r#"{{"fields":{{"System.Title":"T"}},"_links":{{"html":{{"href":"{CARD_URL}"}}}}}}"#
+        ),
     )
     .unwrap();
     let log = s.path("opener.log");
