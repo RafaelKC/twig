@@ -15,6 +15,7 @@
 | `twig ls [--json]` | lists active cards and each repo's branch |
 | `twig status [id] [--json]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
+| `twig memo [text] [-c id]` (in development) | appends a dated line to the card memory (`MEMORY.md`, survives `rm`); without text, shows it. See [MEMORY.md](MEMORY.md) |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
 | `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
 | `twig prune` | cleans up orphaned worktree records |
@@ -236,12 +237,57 @@ Use it after renaming a branch or changing the config.
 Removes the card's worktrees and folder, and closes its herdr workspace. Refuses if any
 repo has uncommitted changes or if an agent is running (`working` or `blocked`) in the
 card's herdr workspace. Local branches are kept by default. Without herdr installed or
-running, the herdr steps are skipped.
+running, the herdr steps are skipped. The card's memo (see `twig memo`) is never removed;
+when one exists, `rm` prints where it is kept.
 
 | Option | Description |
 |---|---|
 | `--branches` | also deletes the local branches |
 | `-f`, `--force` | skips both checks (uncommitted changes and running agent) |
+
+## `twig memo [TEXT] [--card <id>]`
+
+> **In development.** First, simple version of [#16](https://github.com/RafaelKC/twig/issues/16).
+> Behavior and file format may change before they are stable. Design and rationale:
+> [MEMORY.md](MEMORY.md).
+
+A small per-card memory that survives sessions and `twig rm`, so the next agent session (or a
+reopened card) starts informed.
+
+```bash
+twig memo "api validation moved to the service layer; web just shows the error"
+twig memo                      # prints the memo path and its content
+twig memo -c 52644 "QA found X"   # another card, from anywhere
+```
+
+- **Line format:** appends one line, `YYYY-MM-DD HH:MM: TEXT` (local time), at the **end** of the
+  memo. Newlines and runs of whitespace in TEXT collapse to single spaces. Empty TEXT is a usage
+  error (exit 1). Several words without quotes are joined with spaces.
+- **Without TEXT:** prints the memo file path and its content.
+- **Which card:** inferred from the current directory (or the herdr plugin context) like
+  `twig code`; outside a card it fails and asks for `--card`.
+- **Where it lives:** the real file is `<worktrees>/memos/<id>-<provider>/MEMORY.md`
+  (`<provider>` = `az` or `gh`, e.g. `memos/52644-az/MEMORY.md`). The card folder holds
+  `MEMORY.md`, a **relative symlink** to it (`../memos/52644-az/MEMORY.md`). Directories and the
+  file are created as needed. The `memos` folder is never treated as a card (`ls`, `status`,
+  `sync`, `prune`, card inference ignore it).
+- **`twig rm`:** deletes the card folder and the symlink, never the memo; it prints where the
+  memo is kept.
+- **`twig new <id>` on a card that has a memo:** recreates the symlink and says
+  "memo restored". Use it when a closed card has to be reopened (e.g. QA asks).
+- **Context file:** `new`, `add-repo` and `refresh` put the **last 10 entries** (constant
+  `MEMO_CONTEXT_ENTRIES`) in the context file (`CLAUDE.md` / `AGENTS.md`) under
+  `## Memory (last 10 entries, full file: MEMORY.md)`, before "Card context"; omitted when
+  there is no memo.
+- `new`, `add-repo` and `refresh` also make sure the symlink exists.
+
+| Option | Description |
+|---|---|
+| `-c`, `--card <id>` | use this card instead of the inferred one; the card folder must exist, unless a memo for that id already exists |
+
+**Limits and known follow-ups:** Unix symlinks only (if linking fails twig warns and prints the
+real path); no consolidation of old entries; no size cap; no export on `rm` (needs lifecycle
+hooks, [#15](https://github.com/RafaelKC/twig/issues/15)); no structured sections.
 
 ## `twig sync <id> [--merge | --rebase] [-n | --dry-run]`
 

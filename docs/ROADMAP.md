@@ -10,6 +10,10 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 
 Not planned yet; pick from [Later](#later).
 
+### In development
+
+- **Card memory:** `twig memo`, a per-card `MEMORY.md` that survives `rm`, with the last 10 entries injected into the context file ([#16](https://github.com/RafaelKC/twig/issues/16)). Simple version implemented, still experimental: see [MEMORY.md](MEMORY.md). Follow-ups: consolidation of old entries, size cap, export on `rm` through lifecycle hooks ([#15](https://github.com/RafaelKC/twig/issues/15)), structured sections.
+
 ### Later
 
 Not scheduled yet; grouped by theme.
@@ -18,7 +22,7 @@ Not scheduled yet; grouped by theme.
 - **GitHub provider:** [#4](https://github.com/RafaelKC/twig/issues/4) `owner/repo#123` ids (unblocks `open-card` for `gh`)
 - **Automation:** [#5](https://github.com/RafaelKC/twig/issues/5) run a skill after creating a workspace; [#15](https://github.com/RafaelKC/twig/issues/15) lifecycle hooks; [#14](https://github.com/RafaelKC/twig/issues/14) card templates
 - **Day-to-day commands:** [#9](https://github.com/RafaelKC/twig/issues/9) `status`; [#10](https://github.com/RafaelKC/twig/issues/10) `clean` (merged/closed cards); [#12](https://github.com/RafaelKC/twig/issues/12) `pr`; [#13](https://github.com/RafaelKC/twig/issues/13) `sync`; [#11](https://github.com/RafaelKC/twig/issues/11) `--json`
-- **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
+- **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes (simple version in development, see above); [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `config get/set`, `.twig.toml`; [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
 
 Current: v0.2.5 (`status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hint, CI on PRs and branch rules on `main`, PR-based release flow; on top of v0.2.0's `rm` that closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
@@ -90,7 +94,8 @@ Current: v0.2.5 (`status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hi
 - [x] `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
 - [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12))
 - [x] `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
-- [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5)), handoff notes ([#16](https://github.com/RafaelKC/twig/issues/16))
+- [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5))
+- [ ] `twig memo` card memory ([#16](https://github.com/RafaelKC/twig/issues/16)): **in development** (simple version in; consolidation, size cap and export on `rm` via hooks [#15](https://github.com/RafaelKC/twig/issues/15) pending). See [MEMORY.md](MEMORY.md)
 
 ## herdr integration (plugin)
 

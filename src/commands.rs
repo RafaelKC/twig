@@ -6,7 +6,7 @@ use anyhow::{bail, Result};
 
 use crate::config::{Config, OpenTarget, ProviderKind};
 use crate::provider::{self, CardInfo};
-use crate::{card, claude_md, herdr, sys, ui, workspace};
+use crate::{card, claude_md, herdr, memo, sys, ui, workspace};
 
 pub struct NewArgs {
     pub id: String,
@@ -90,6 +90,9 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     check_code_flag(cfg, a.code)?;
 
     let (id, slug_from_id) = card::split_id(&a.id);
+    if card::is_reserved(&id) {
+        bail!("{id:?} cannot be a card id (reserved folder name)");
+    }
     let mut slug = a.slug.or(slug_from_id).unwrap_or_default();
 
     let repos = a.repos.unwrap_or_else(|| cfg.default_repos());
@@ -167,6 +170,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     if cfg.vscode.enabled {
         workspace::write(cfg, &id, &title)?;
     }
+    memo::ensure_link(cfg, &id);
     claude_md::write(cfg, &id, &slug, info.as_ref())?;
 
     if wants_setup(cfg, a.install, a.no_setup) {
@@ -273,6 +277,7 @@ fn regenerate(cfg: &Config, id: &str, info: Option<&CardInfo>) -> Result<()> {
     if cfg.vscode.enabled {
         workspace::write(cfg, id, &title)?;
     }
+    memo::ensure_link(cfg, id);
     claude_md::write(cfg, id, "", info)
 }
 
@@ -511,6 +516,12 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
 
     fs::remove_dir_all(&dir)?;
     ui::ok(format!("card {id} removed"));
+    if memo::entries(cfg, id) > 0 {
+        ui::info(format!(
+            "memo kept at {} (`twig new {id}` links it back)",
+            cfg.memo_file(id).display()
+        ));
+    }
     Ok(())
 }
 

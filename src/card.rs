@@ -45,6 +45,14 @@ pub fn repos_ordered(cfg: &Config, dir: &Path) -> Vec<String> {
     ordered
 }
 
+/// Folder under `<worktrees>` that holds the cards' memos; never a card.
+pub const MEMOS_DIR: &str = "memos";
+
+/// Folder names in `<worktrees>` that are never cards (hidden dirs and the memos dir).
+pub fn is_reserved(name: &str) -> bool {
+    name.starts_with('.') || name == MEMOS_DIR
+}
+
 pub fn list_cards(cfg: &Config) -> Vec<String> {
     let Ok(entries) = fs::read_dir(cfg.worktrees()) else {
         return vec![];
@@ -53,7 +61,7 @@ pub fn list_cards(cfg: &Config) -> Vec<String> {
         .flatten()
         .filter(|e| e.path().is_dir())
         .map(|e| e.file_name().to_string_lossy().into_owned())
-        .filter(|n| !n.starts_with('.'))
+        .filter(|n| !is_reserved(n))
         .collect();
     ids.sort();
     ids
@@ -61,7 +69,7 @@ pub fn list_cards(cfg: &Config) -> Vec<String> {
 
 pub fn require_card(cfg: &Config, id: &str) -> Result<PathBuf> {
     let dir = cfg.card_dir(id);
-    if !dir.is_dir() {
+    if is_reserved(id) || !dir.is_dir() {
         bail!("card {id} not found in {}", cfg.worktrees().display());
     }
     Ok(dir)
@@ -81,7 +89,7 @@ pub fn infer(cfg: &Config) -> Current {
         .unwrap_or_default();
 
     if let Some(label) = ctx["workspace_label"].as_str().filter(|l| !l.is_empty()) {
-        if cfg.card_dir(label).is_dir() {
+        if !is_reserved(label) && cfg.card_dir(label).is_dir() {
             return Current::Card(label.to_string());
         }
     }
@@ -101,7 +109,7 @@ pub fn infer(cfg: &Config) -> Current {
         if let Some(rest) = rel_to_worktrees(d, &wt, &wt_real) {
             if let Some(id) = rest.components().next() {
                 let id = id.as_os_str().to_string_lossy().into_owned();
-                if !id.starts_with('.') && cfg.card_dir(&id).is_dir() {
+                if !is_reserved(&id) && cfg.card_dir(&id).is_dir() {
                     return Current::Card(id);
                 }
             }

@@ -5,6 +5,7 @@ mod config;
 mod config_edit;
 mod doctor;
 mod herdr;
+mod memo;
 mod provider;
 mod selfmgmt;
 mod status;
@@ -146,6 +147,21 @@ enum Cmd {
         /// Drop the cache and fetch the card data from the provider again.
         #[arg(long)]
         refetch: bool,
+    },
+    /// (in development) Append a line to the card's memory, or show it when no text is given.
+    ///
+    /// The memory is a MEMORY.md per card, kept in `<worktrees>/memos/<id>-<provider>/` and
+    /// linked from the card folder, so it survives `twig rm`. Each entry is one line,
+    /// `YYYY-MM-DD HH:MM: TEXT` (local time). The last 10 entries are copied into the context
+    /// file on `new`, `add-repo` and `refresh`. The format may change before it is stable.
+    ///
+    /// Without --card, the card is inferred from the current directory.
+    Memo {
+        /// Entry to append (newlines become spaces). Without it, prints the memo path and content.
+        text: Vec<String>,
+        /// Card to use instead of the one inferred from the current directory.
+        #[arg(short, long)]
+        card: Option<String>,
     },
     /// Fetch the base branch and rebase/merge it into every repo of the card.
     ///
@@ -321,6 +337,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Ls { json } => commands::ls(&cfg, json),
         Cmd::Status { id, json } => status::run(&cfg, id.as_deref(), json),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
+        Cmd::Memo { text, card } => memo::run(&cfg, &text, card.as_deref()),
         Cmd::Rm {
             id,
             branches,

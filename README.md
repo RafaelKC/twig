@@ -143,6 +143,7 @@ twig code                           # open the current card in VS Code
 twig ls                             # cards, branches, uncommitted changes (*)
 twig status 52644                   # ahead/behind, dirty files, herdr agent
 twig refresh 52644 --refetch        # regenerate CLAUDE.md / workspace, refetch the card
+twig memo "validation moved to API" # (in development) note for the next agent session
 twig rm 52644 --branches            # done: remove worktrees (and local branches)
 ```
 
@@ -157,6 +158,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `ls` | active cards and each repo's branch (`--json` for scripts) |
 | `status [id]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent (`--json` for scripts) |
 | `refresh <id>` | regenerate `CLAUDE.md`/`AGENTS.md` and the `.code-workspace` |
+| `memo [text] [-c id]` | (in development) append a dated line to the card memory, kept across sessions and `rm`; no text shows it |
 | `sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase/merge it into every repo of the card |
 | `rm <id> [-f]` | remove the card and its herdr workspace (refuses with uncommitted changes or a running agent; `-f` overrides) |
 | `prune` | clean orphaned worktree records |
@@ -167,6 +169,16 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `completions <shell>` | shell completion script |
 
 All options: [docs/COMMANDS.md](docs/COMMANDS.md).
+
+### Card memory (in development)
+
+Agents lose context between sessions. `twig memo "..."` appends one dated line to a per-card
+`MEMORY.md`. The real file lives in `<worktrees>/memos/<id>-<provider>/` and the card folder
+holds a relative symlink to it, so the notes **survive `twig rm`** and come back when
+`twig new <id>` reopens the card. The last 10 entries are copied into `CLAUDE.md`/`AGENTS.md`
+on `new`, `add-repo` and `refresh`. This is the first, simple version of
+[#16](https://github.com/RafaelKC/twig/issues/16) and the format may still change; design and
+what is missing (consolidation, size cap, export on `rm`) in [docs/MEMORY.md](docs/MEMORY.md).
 
 ## Configuration
 
