@@ -726,8 +726,10 @@ fn completions_list_the_config_subcommands() {
     let o = s.run(&["completions", "bash"]);
     assert_exit(&o, 0);
     let out = text(&o);
+    // global flags (e.g. --no-hooks) also land in this list, so only check the subcommands
     assert!(
-        out.contains("opts=\"-h --help edit get set help\""),
+        out.lines()
+            .any(|l| l.contains("opts=\"") && l.contains(" edit get set help\"")),
         "{out}"
     );
 }
