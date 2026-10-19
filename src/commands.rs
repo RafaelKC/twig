@@ -5,12 +5,14 @@ use std::process::Command;
 use anyhow::{bail, Result};
 
 use crate::config::{Config, OpenTarget, ProviderKind};
+use crate::hooks::{self, Event};
 use crate::provider::{self, CardInfo};
-use crate::{card, claude_md, herdr, memo, sys, ui, workspace};
+use crate::{card, claude_md, herdr, memo, sys, templates, ui, workspace};
 
 pub struct NewArgs {
     pub id: String,
     pub slug: Option<String>,
+    pub template: Option<String>,
     pub repos: Option<Vec<String>>,
     pub branch: Option<String>,
     pub base: Option<String>,
@@ -65,11 +67,25 @@ fn open_after(
     }
     if herdr_flag || cfg.herdr.open_on_new {
         match ws {
-            Some(ws) => herdr::open(ws)?,
+            Some(ws) => {
+                herdr::open(ws)?;
+                fire(cfg, Event::PostOpen, id, &hooks::card_repos(cfg, id));
+            }
             None => ui::warn("herdr workspace was not created; try `twig herdr <id>`"),
         }
     }
     Ok(())
+}
+
+/// Fire the card/repo hooks of a `post_*` event (failures only warn).
+fn fire(cfg: &Config, ev: Event, id: &str, repos: &[hooks::RepoCtx]) {
+    fire_in(cfg, ev, id, &cfg.card_dir(id), repos);
+}
+
+fn fire_in(cfg: &Config, ev: Event, id: &str, cwd: &Path, repos: &[hooks::RepoCtx]) {
+    if let Err(e) = hooks::run(cfg, ev, id, cwd, repos) {
+        ui::warn(format!("{e:#}"));
+    }
 }
 
 fn sync_herdr(cfg: &Config, id: &str) -> Option<String> {
@@ -95,7 +111,25 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     }
     let mut slug = a.slug.or(slug_from_id).unwrap_or_default();
 
-    let repos = a.repos.unwrap_or_else(|| cfg.default_repos());
+    // the template is a preset: explicit flags override it
+    let tpl = templates::resolve(cfg, a.template.as_deref())?;
+    let tpl_name = tpl.as_ref().map(|(n, _)| n.clone());
+    let (mut t_repos, mut t_install, mut t_prefix, mut t_base) = (vec![], None, None, None);
+    if let Some((name, t)) = tpl {
+        ui::info(format!("template: {name}"));
+        t_repos = t.repos.clone();
+        t_install = t.install;
+        t_prefix = t.branch_prefix.clone();
+        t_base = t.base.clone();
+        templates::apply(cfg, t);
+    }
+    let install = a.install || (t_install == Some(true) && !a.no_setup);
+    let no_setup = a.no_setup || (t_install == Some(false) && !a.install);
+
+    let repos = a
+        .repos
+        .or_else(|| Some(t_repos).filter(|r| !r.is_empty()))
+        .unwrap_or_else(|| cfg.default_repos());
     if repos.is_empty() {
         bail!("no repos: pass --repos or set `default = true` on some repo in the config");
     }
@@ -133,13 +167,21 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     if let Some(i) = &info {
         provider::save_cache(cfg, &id, i);
     }
+    if let Some(name) = &tpl_name {
+        templates::record(cfg, &id, name);
+    }
 
     let prefix = if a.fix {
         "fix".to_string()
     } else {
-        cfg.branch_prefix(info.as_ref().map(|i| i.kind.as_str()).unwrap_or(""))
+        t_prefix.unwrap_or_else(|| {
+            cfg.branch_prefix(info.as_ref().map(|i| i.kind.as_str()).unwrap_or(""))
+        })
     };
-    let base = a.base.unwrap_or_else(|| cfg.git.base_branch.clone());
+    let base = a
+        .base
+        .or(t_base)
+        .unwrap_or_else(|| cfg.git.base_branch.clone());
     let opts = card::BranchOpts {
         id: &id,
         slug: &slug,
@@ -173,9 +215,15 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     memo::ensure_link(cfg, &id);
     claude_md::write(cfg, &id, &slug, info.as_ref())?;
 
-    if wants_setup(cfg, a.install, a.no_setup) {
+    if wants_setup(cfg, install, no_setup) {
         setup(cfg, &id, &repos);
     }
+    fire(
+        cfg,
+        Event::PostCreate,
+        &id,
+        &hooks::repo_ctxs(cfg, &id, &repos),
+    );
 
     let ws = sync_herdr(cfg, &id);
     open_after(cfg, &id, ws.as_deref(), a.code, a.herdr)
@@ -229,12 +277,21 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
         existing.first().and_then(|r| cfg.repo_path(r)).as_deref(),
     );
     let slug = info.as_ref().map(CardInfo::slug).unwrap_or_default();
+    let t = cfg.template.as_ref();
+    let t_install = t.and_then(|t| t.install);
+    let install = a.install || (t_install == Some(true) && !a.no_setup);
+    let no_setup = a.no_setup || (t_install == Some(false) && !a.install);
     let prefix = if a.fix {
         "fix".to_string()
     } else {
-        cfg.branch_prefix(info.as_ref().map(|i| i.kind.as_str()).unwrap_or(""))
+        t.and_then(|t| t.branch_prefix.clone()).unwrap_or_else(|| {
+            cfg.branch_prefix(info.as_ref().map(|i| i.kind.as_str()).unwrap_or(""))
+        })
     };
-    let base = a.base.unwrap_or_else(|| cfg.git.base_branch.clone());
+    let base = a
+        .base
+        .or_else(|| t.and_then(|t| t.base.clone()))
+        .unwrap_or_else(|| cfg.git.base_branch.clone());
     let opts = card::BranchOpts {
         id: &a.id,
         slug: &slug,
@@ -256,10 +313,18 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     }
 
     card::copy_local_files(cfg, &dir);
-    if wants_setup(cfg, a.install, a.no_setup) {
+    if wants_setup(cfg, install, no_setup) {
         setup(cfg, &a.id, &created);
     }
     regenerate(cfg, &a.id, info.as_ref())?;
+    if !created.is_empty() {
+        fire(
+            cfg,
+            Event::PostCreate,
+            &a.id,
+            &hooks::repo_ctxs(cfg, &a.id, &created),
+        );
+    }
     let ws = sync_herdr(cfg, &a.id);
     if added && cfg.vscode.enabled {
         ui::info("if the card's VS Code is open, accept the workspace reload");
@@ -340,7 +405,9 @@ pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
 
 pub fn herdr_cmd(cfg: &Config, id: &str) -> Result<()> {
     let ws = herdr::sync(cfg, id)?;
-    herdr::open(&ws)
+    herdr::open(&ws)?;
+    fire(cfg, Event::PostOpen, id, &hooks::card_repos(cfg, id));
+    Ok(())
 }
 
 pub fn open_code(cfg: &Config, id: &str) -> Result<()> {
@@ -366,6 +433,7 @@ pub fn open_code(cfg: &Config, id: &str) -> Result<()> {
     }
     launch_code(&file)?;
     ui::ok(format!("opening #{id} in VS Code"));
+    fire(cfg, Event::PostOpen, id, &hooks::card_repos(cfg, id));
     Ok(())
 }
 
@@ -472,7 +540,9 @@ pub fn refresh(cfg: &Config, id: &str, refetch: bool) -> Result<()> {
             .and_then(|r| cfg.repo_path(r))
             .as_deref(),
     );
-    regenerate(cfg, id, info.as_ref())
+    regenerate(cfg, id, info.as_ref())?;
+    fire(cfg, Event::PostRefresh, id, &hooks::card_repos(cfg, id));
+    Ok(())
 }
 
 pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
@@ -489,6 +559,11 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
         if !busy.is_empty() {
             bail!("an agent is running in the herdr workspace #{id} ({}), stop it first (or use --force)", busy.join(", "));
         }
+    }
+
+    let mut ctxs = hooks::repo_ctxs(cfg, id, &repos);
+    if !force {
+        hooks::run(cfg, Event::PreRm, id, &dir, &ctxs)?;
     }
 
     herdr::close_workspace(id);
@@ -522,6 +597,15 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
             cfg.memo_file(id).display()
         ));
     }
+    // the worktrees are gone: repo-level hooks run in the main clone, card-level ones in the
+    // worktrees folder
+    for c in &mut ctxs {
+        if let Some(main) = cfg.repo_path(&c.name) {
+            c.cwd = main;
+        }
+    }
+    ctxs.retain(|c| c.cwd.is_dir());
+    fire_in(cfg, Event::PostRm, id, &cfg.worktrees(), &ctxs);
     Ok(())
 }
 

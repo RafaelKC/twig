@@ -30,10 +30,35 @@ pub struct Config {
     #[serde(default)]
     pub update: Update,
     #[serde(default)]
+    pub hooks: Hooks,
+    #[serde(default)]
+    pub templates: TemplatesCfg,
+    #[serde(default)]
     pub repos: IndexMap<String, Repo>,
 
     #[serde(skip)]
     pub file: PathBuf,
+    /// Template of the card being operated on (see `templates.rs`); not part of the file.
+    #[serde(skip)]
+    pub template: Option<crate::templates::Template>,
+}
+
+/// `[templates]`: only the default; the templates themselves live in `templates.toml`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct TemplatesCfg {
+    pub default: Option<String>,
+}
+
+/// `[hooks]` (card-wide) and `[repos.<name>.hooks]`: shell commands run around card operations.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Hooks {
+    pub post_create: Vec<String>,
+    pub pre_rm: Vec<String>,
+    pub post_rm: Vec<String>,
+    pub post_open: Vec<String>,
+    pub post_refresh: Vec<String>,
 }
 
 /// `[update]`: the passive "new version available" hint.
@@ -74,6 +99,15 @@ impl Default for Ai {
 }
 
 impl Ai {
+    /// Switch to another agent (a template's `agent`); drops overrides meant for the old one.
+    pub fn use_agent(&mut self, kind: AgentKind) {
+        if self.provider != kind {
+            self.provider = kind;
+            self.command.clear();
+            self.context_file.clear();
+        }
+    }
+
     /// What `twig herdr` runs in the agent tab.
     pub fn command(&self) -> &str {
         if self.command.is_empty() {
@@ -258,6 +292,7 @@ pub struct Repo {
     pub autorun: bool,
     pub install: String,
     pub post_create: Vec<String>,
+    pub hooks: Hooks,
     pub debug: Vec<String>,
     pub local_files: Vec<String>,
 }
@@ -273,6 +308,7 @@ impl Default for Repo {
             autorun: true,
             install: String::new(),
             post_create: vec![],
+            hooks: Hooks::default(),
             debug: vec![],
             local_files: vec![],
         }
@@ -331,6 +367,14 @@ impl Config {
         let cf = cfg.ai.context_file();
         if cf.contains(['/', '\\']) {
             bail!("agent.context_file must be a file name, not a path: {cf}");
+        }
+        if cfg
+            .templates
+            .default
+            .as_deref()
+            .is_some_and(|d| d.trim().is_empty())
+        {
+            bail!("templates.default must not be empty");
         }
         cfg.file = file;
         Ok(cfg)

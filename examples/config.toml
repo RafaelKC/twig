@@ -50,6 +50,16 @@ local_files = [
   ".claude/settings.local.json",   # Claude Code permissions, not versioned
 ]
 
+# Lifecycle hooks: your own shell commands (see docs/CONFIG.md). Env: TWIG_CARD_ID, TWIG_CARD_DIR,
+# TWIG_REPO, TWIG_REPO_DIR, TWIG_BRANCH, TWIG_EVENT. A failing pre_* aborts; post_* only warns.
+# `--no-hooks` skips them all.
+# [hooks]
+# post_create  = ["echo created $TWIG_CARD_ID"]
+# pre_rm       = ["./scripts/check-clean.sh"]
+# post_rm      = []
+# post_open    = []
+# post_refresh = []
+
 [repos.api]
 label   = "⚙️ API"
 short   = "api"
