@@ -6,6 +6,7 @@ mod config_edit;
 mod config_kv;
 mod doctor;
 mod herdr;
+mod hooks;
 mod provider;
 mod selfmgmt;
 mod status;
@@ -30,6 +31,10 @@ use config::{Config, OpenTarget};
 #[derive(Parser)]
 #[command(name = "twig", version)]
 struct Cli {
+    /// Skip every lifecycle hook (`[hooks]`, `[repos.<name>.hooks]`) for this invocation.
+    #[arg(long, global = true)]
+    no_hooks: bool,
+
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -239,6 +244,9 @@ enum ConfigCmd {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    if cli.no_hooks {
+        hooks::disable();
+    }
     // these work without a valid config
     match cli.cmd {
         Cmd::Completions { shell } => {

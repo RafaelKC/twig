@@ -60,6 +60,7 @@ Seus clones principais ficam na `main`. Dois cards nunca pisam um no outro.
   `run:` e um compound que depura todos os repos de uma vez.
 - **Arquivos locais.** Arquivos no gitignore (`appsettings.Development.json`, `.env.local`, …)
   são copiados do clone principal para cada worktree.
+- **Hooks de ciclo de vida.** Seus próprios comandos de shell em `post_create`, `pre_rm`, `post_rm`, `post_open` e `post_refresh`, no card todo ou por repo; `--no-hooks` ignora todos.
 - **Uma só config.** Tudo que é específico do time fica em `~/.config/twig/config.toml`.
 - **Autodiagnóstico.** `twig doctor` verifica ferramentas, logins, config e repos, e encontra
   worktrees órfãos.

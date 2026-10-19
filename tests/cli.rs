@@ -588,7 +588,7 @@ fn completions_list_the_open_targets() {
     assert_exit(&o, 0);
     let out = text(&o);
     assert!(
-        out.contains("opts=\"-h --help default herdr code\""),
+        out.contains("opts=\"-h --no-hooks --help default herdr code\""),
         "{out}"
     );
 }
@@ -1598,4 +1598,222 @@ fn doctor_json_with_invalid_config_is_an_error_entry() {
     let v = json_of(&o);
     assert_eq!(v["ok"], false);
     assert_eq!(v["sections"][0]["checks"][0]["level"], "error");
+}
+
+// ───────────────────────── hooks ─────────────────────────
+
+/// Append raw TOML to the sandbox config.
+fn append_config(s: &Sandbox, extra: &str) {
+    let mut cfg = fs::read_to_string(&s.config).unwrap();
+    cfg.push_str(extra);
+    fs::write(&s.config, cfg).unwrap();
+}
+
+/// Shell snippet that appends one line of hook context to `log`.
+fn hook_line(log: &Path, tag: &str) -> String {
+    format!(
+        r#"echo "{tag}|$TWIG_EVENT|$TWIG_CARD_ID|$TWIG_REPO|$TWIG_BRANCH|${{TWIG_CARD_DIR##*/}}|${{TWIG_REPO_DIR##*/}}|${{PWD##*/}}" >> {log}"#,
+        log = log.display()
+    )
+}
+
+fn hook_log(log: &Path) -> String {
+    fs::read_to_string(log).unwrap_or_default()
+}
+
+#[test]
+fn hooks_post_create_fire_on_new_and_add_repo_with_env() {
+    let s = new_sandbox();
+    let log = s.path("hooks.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npost_create = [{card:?}]\n\n[repos.a.hooks]\npost_create = [{a:?}]\n\n[repos.b.hooks]\npost_create = [{b:?}]\n",
+            card = hook_line(&log, "card"),
+            a = hook_line(&log, "a"),
+            b = hook_line(&log, "b"),
+        ),
+    );
+    assert_exit(&s.run(&["new", "7", "slug", "--no-ado"]), 0);
+    let l = hook_log(&log);
+    // repo-level runs in the worktree; card-level in the card folder with no repo
+    assert!(l.contains("a|post_create|7|a|feat/7-slug|7|a|a\n"), "{l}");
+    assert!(l.contains("card|post_create|7|||7||7\n"), "{l}");
+    assert!(!l.contains("b|post_create"), "{l}");
+
+    assert_exit(&s.run(&["add-repo", "7", "b"]), 0);
+    let l = hook_log(&log);
+    assert!(l.contains("b|post_create|7|b|feat/7|7|b|b\n"), "{l}");
+    assert_eq!(l.matches("a|post_create").count(), 1, "{l}");
+}
+
+#[test]
+fn hooks_legacy_repo_post_create_is_unchanged() {
+    let s = new_sandbox();
+    let log = s.path("legacy.log");
+    let cfg = fs::read_to_string(&s.config).unwrap().replace(
+        "[repos.a]\ndefault = true\n",
+        &format!(
+            "[repos.a]\ndefault = true\ninstall = \"echo install >> {log}\"\npost_create = [\"echo legacy $TWIG_CARD $TWIG_REPO >> {log}\"]\n",
+            log = log.display()
+        ),
+    );
+    fs::write(&s.config, cfg).unwrap();
+    // not run without auto_install / --install
+    assert_exit(&s.run(&["new", "7", "slug", "--no-ado"]), 0);
+    assert_eq!(hook_log(&log), "");
+    assert_exit(&s.run(&["rm", "7"]), 0);
+    assert_exit(&s.run(&["new", "7", "slug", "--no-ado", "--install"]), 0);
+    assert_eq!(hook_log(&log), "install\nlegacy 7 a\n");
+}
+
+#[test]
+fn hooks_pre_rm_and_post_rm_fire_with_env() {
+    let (s, _log) = rm_sandbox("idle");
+    let log = s.path("hooks.log");
+    let cpost = format!(
+        r#"echo "cpost|$TWIG_EVENT|$TWIG_CARD_ID|$TWIG_REPO" >> {}"#,
+        log.display()
+    );
+    let rpost = format!(
+        r#"echo "rpost|$TWIG_EVENT|$TWIG_REPO|$TWIG_BRANCH|${{TWIG_REPO_DIR##*/}}" >> {}"#,
+        log.display()
+    );
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npre_rm = [{:?}]\npost_rm = [{cpost:?}]\n\n[repos.r1.hooks]\npre_rm = [{:?}]\npost_rm = [{rpost:?}]\n",
+            hook_line(&log, "cpre"),
+            hook_line(&log, "rpre"),
+        ),
+    );
+    assert_exit(&s.run(&["rm", "123"]), 0);
+    assert_eq!(
+        hook_log(&log),
+        "cpre|pre_rm|123|||123||123\n\
+         rpre|pre_rm|123|r1|card-123|123|r1|r1\n\
+         rpost|post_rm|r1|card-123|r1\n\
+         cpost|post_rm|123|\n"
+    );
+    assert!(!s.path("wt/123").exists());
+}
+
+#[test]
+fn hooks_failing_pre_rm_blocks_and_force_bypasses() {
+    let (s, _log) = rm_sandbox("idle");
+    let marker = s.path("pre.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npre_rm = [\"echo ran >> {}; exit 3\"]\n",
+            marker.display()
+        ),
+    );
+    let o = s.run(&["rm", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "pre_rm hook");
+    assert!(s.path("wt/123/r1").exists(), "card must survive");
+    assert_eq!(hook_log(&marker), "ran\n");
+
+    // --force skips pre_* hooks
+    assert_exit(&s.run(&["rm", "-f", "123"]), 0);
+    assert_eq!(hook_log(&marker), "ran\n");
+    assert!(!s.path("wt/123").exists());
+}
+
+#[test]
+fn hooks_failing_post_hook_only_warns() {
+    let (s, _log) = rm_sandbox("idle");
+    append_config(&s, "\n[hooks]\npost_rm = [\"exit 5\"]\n");
+    let o = s.run(&["rm", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "post_rm hook `exit 5` failed");
+    assert!(!s.path("wt/123").exists());
+}
+
+#[test]
+fn hooks_no_hooks_flag_skips_everything() {
+    let (s, _log) = rm_sandbox("idle");
+    let marker = s.path("any.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npre_rm = [\"echo pre >> {m}; exit 1\"]\npost_rm = [\"echo post >> {m}\"]\n",
+            m = marker.display()
+        ),
+    );
+    assert_exit(&s.run(&["rm", "123", "--no-hooks"]), 0);
+    assert_eq!(hook_log(&marker), "");
+    assert!(!s.path("wt/123").exists());
+}
+
+#[test]
+fn hooks_post_open_fires_for_code_and_herdr() {
+    let (s, _code_log, _herdr_log) = open_sandbox("");
+    let log = s.path("hooks.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npost_open = [{:?}]\n\n[repos.r1.hooks]\npost_open = [{:?}]\n",
+            hook_line(&log, "card"),
+            hook_line(&log, "r1")
+        ),
+    );
+    assert_exit(&run_open(&s, &["code", "123"], None), 0);
+    let l = hook_log(&log);
+    assert!(l.contains("r1|post_open|123|r1||123|r1|r1\n"), "{l}");
+    assert!(l.contains("card|post_open|123|||123||123\n"), "{l}");
+
+    fs::remove_file(&log).unwrap();
+    assert_exit(&run_open(&s, &["herdr", "123"], None), 0);
+    assert!(hook_log(&log).contains("card|post_open|123"));
+
+    fs::remove_file(&log).unwrap();
+    assert_exit(&run_open(&s, &["open", "123", "code"], None), 0);
+    assert!(hook_log(&log).contains("card|post_open|123"));
+
+    fs::remove_file(&log).unwrap();
+    assert_exit(&run_open(&s, &["herdr", "123", "--no-hooks"], None), 0);
+    assert_eq!(hook_log(&log), "");
+}
+
+#[test]
+fn hooks_post_refresh_fires() {
+    let (s, _code_log) = code_sandbox();
+    let log = s.path("hooks.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[hooks]\npost_refresh = [{:?}]\n",
+            hook_line(&log, "card")
+        ),
+    );
+    assert_exit(&s.run(&["refresh", "123"]), 0);
+    assert!(hook_log(&log).contains("card|post_refresh|123|||123||123\n"));
+}
+
+#[test]
+fn doctor_flags_empty_hook_commands() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    append_config(
+        &s,
+        "\n[hooks]\npost_open = [\"echo ok\", \"  \"]\n\n[repos.r1.hooks]\npre_rm = [\"\"]\n",
+    );
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "hooks.post_open[1] is an empty command");
+    assert_has(&o, "repos.r1.hooks.pre_rm[0] is an empty command");
+}
+
+#[test]
+fn doctor_counts_valid_hooks() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    append_config(&s, "\n[hooks]\npost_open = [\"echo ok\"]\n");
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "1 hook command(s) configured");
 }

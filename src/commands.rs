@@ -5,6 +5,7 @@ use std::process::Command;
 use anyhow::{bail, Result};
 
 use crate::config::{Config, OpenTarget, ProviderKind};
+use crate::hooks::{self, Event};
 use crate::provider::{self, CardInfo};
 use crate::{card, claude_md, herdr, sys, ui, workspace};
 
@@ -65,11 +66,25 @@ fn open_after(
     }
     if herdr_flag || cfg.herdr.open_on_new {
         match ws {
-            Some(ws) => herdr::open(ws)?,
+            Some(ws) => {
+                herdr::open(ws)?;
+                fire(cfg, Event::PostOpen, id, &hooks::card_repos(cfg, id));
+            }
             None => ui::warn("herdr workspace was not created; try `twig herdr <id>`"),
         }
     }
     Ok(())
+}
+
+/// Fire the card/repo hooks of a `post_*` event (failures only warn).
+fn fire(cfg: &Config, ev: Event, id: &str, repos: &[hooks::RepoCtx]) {
+    fire_in(cfg, ev, id, &cfg.card_dir(id), repos);
+}
+
+fn fire_in(cfg: &Config, ev: Event, id: &str, cwd: &Path, repos: &[hooks::RepoCtx]) {
+    if let Err(e) = hooks::run(cfg, ev, id, cwd, repos) {
+        ui::warn(format!("{e:#}"));
+    }
 }
 
 fn sync_herdr(cfg: &Config, id: &str) -> Option<String> {
@@ -172,6 +187,12 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     if wants_setup(cfg, a.install, a.no_setup) {
         setup(cfg, &id, &repos);
     }
+    fire(
+        cfg,
+        Event::PostCreate,
+        &id,
+        &hooks::repo_ctxs(cfg, &id, &repos),
+    );
 
     let ws = sync_herdr(cfg, &id);
     open_after(cfg, &id, ws.as_deref(), a.code, a.herdr)
@@ -256,6 +277,14 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
         setup(cfg, &a.id, &created);
     }
     regenerate(cfg, &a.id, info.as_ref())?;
+    if !created.is_empty() {
+        fire(
+            cfg,
+            Event::PostCreate,
+            &a.id,
+            &hooks::repo_ctxs(cfg, &a.id, &created),
+        );
+    }
     let ws = sync_herdr(cfg, &a.id);
     if added && cfg.vscode.enabled {
         ui::info("if the card's VS Code is open, accept the workspace reload");
@@ -335,7 +364,9 @@ pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
 
 pub fn herdr_cmd(cfg: &Config, id: &str) -> Result<()> {
     let ws = herdr::sync(cfg, id)?;
-    herdr::open(&ws)
+    herdr::open(&ws)?;
+    fire(cfg, Event::PostOpen, id, &hooks::card_repos(cfg, id));
+    Ok(())
 }
 
 pub fn open_code(cfg: &Config, id: &str) -> Result<()> {
@@ -361,6 +392,7 @@ pub fn open_code(cfg: &Config, id: &str) -> Result<()> {
     }
     launch_code(&file)?;
     ui::ok(format!("opening #{id} in VS Code"));
+    fire(cfg, Event::PostOpen, id, &hooks::card_repos(cfg, id));
     Ok(())
 }
 
@@ -467,7 +499,9 @@ pub fn refresh(cfg: &Config, id: &str, refetch: bool) -> Result<()> {
             .and_then(|r| cfg.repo_path(r))
             .as_deref(),
     );
-    regenerate(cfg, id, info.as_ref())
+    regenerate(cfg, id, info.as_ref())?;
+    fire(cfg, Event::PostRefresh, id, &hooks::card_repos(cfg, id));
+    Ok(())
 }
 
 pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
@@ -484,6 +518,11 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
         if !busy.is_empty() {
             bail!("an agent is running in the herdr workspace #{id} ({}), stop it first (or use --force)", busy.join(", "));
         }
+    }
+
+    let mut ctxs = hooks::repo_ctxs(cfg, id, &repos);
+    if !force {
+        hooks::run(cfg, Event::PreRm, id, &dir, &ctxs)?;
     }
 
     herdr::close_workspace(id);
@@ -511,6 +550,15 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
 
     fs::remove_dir_all(&dir)?;
     ui::ok(format!("card {id} removed"));
+    // the worktrees are gone: repo-level hooks run in the main clone, card-level ones in the
+    // worktrees folder
+    for c in &mut ctxs {
+        if let Some(main) = cfg.repo_path(&c.name) {
+            c.cwd = main;
+        }
+    }
+    ctxs.retain(|c| c.cwd.is_dir());
+    fire_in(cfg, Event::PostRm, id, &cfg.worktrees(), &ctxs);
     Ok(())
 }
 

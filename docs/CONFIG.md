@@ -170,6 +170,47 @@ it from the environment. `twig doctor` reports the setting.
 | `local_files` | `[]` | gitignored files copied into **every** repo of the card (added to each repo's `local_files`) |
 | `auto_install` | `false` | `twig new` / `add-repo` run each new repo's `install` and `post_create` on their own, before herdr starts the `run` panes. `--no-setup` skips it for one call; `--install` forces it |
 
+### `[hooks]` and `[repos.<name>.hooks]`
+
+Lifecycle hooks: lists of shell commands you wrote, run around card operations. `[hooks]` is
+card-wide; `[repos.<name>.hooks]` is per repo. Both take the same five keys, each a list of
+non-empty strings (`twig doctor` flags empty ones):
+
+| Key | When | Failure |
+|---|---|---|
+| `post_create` | after `twig new` / `add-repo` created the worktrees (and after `install`/legacy `post_create`, if they ran) | warns |
+| `pre_rm` | `twig rm`, after the safety checks, before anything is removed | **aborts** the rm; skipped with `-f/--force` |
+| `post_rm` | after the card was removed | warns |
+| `post_open` | after `twig open` / `herdr` / `code` (and `new --herdr/--code`) opened the card | warns |
+| `post_refresh` | after `twig refresh` | warns |
+
+```toml
+[hooks]
+pre_rm       = ["./scripts/stop-stack.sh"]
+post_open    = ["notify-send 'card ready'"]
+
+[repos.api.hooks]
+post_create  = ["dotnet ef database update"]
+```
+
+- **Where they run.** Card-level hooks run in the card folder; repo-level hooks run in that repo's
+  worktree, once per repo of the card (for `new`/`add-repo`, only the repos just created). Exception:
+  `post_rm`, where the folders are gone: card-level runs in `paths.worktrees`, repo-level in the
+  repo's main clone.
+- **Order.** Per list, commands run in order and stop at the first failure. Across lists:
+  `pre_*` runs card-level first, then each repo; `post_*` runs each repo, then card-level.
+- **Environment.** `TWIG_CARD_ID` (also `TWIG_CARD`), `TWIG_CARD_DIR`, `TWIG_REPO`,
+  `TWIG_REPO_DIR` (the worktree), `TWIG_BRANCH` and `TWIG_EVENT` (`post_create`, `pre_rm`, ...).
+  In card-level hooks `TWIG_REPO`, `TWIG_REPO_DIR` and `TWIG_BRANCH` are empty.
+- **Output** streams to the terminal; there is no timeout.
+- **`--no-hooks`** (global flag, any command) skips every hook for that invocation.
+- **Your commands only.** Hooks run exactly what you wrote in your own config: nothing is
+  injected by a provider, card or plugin. This is the safe part of
+  [#5](https://github.com/RafaelKC/twig/issues/5) (running an agent command after creating a
+  workspace): put it in `post_create` yourself.
+- The per-repo `post_create` field below is unchanged (it only runs with `--install` /
+  `worktree.auto_install`, after `install`); the hook `post_create` always runs.
+
 ### `[repos.<name>]`
 
 `<name>` is what the repo is called in `--repos`.
@@ -184,6 +225,7 @@ it from the environment. `twig doctor` reports the setting.
 | `autorun` | `true` | `false` = don't start it in herdr's `run` tab (still a VS Code task); only applies with `run` |
 | `install` | — | dependency install command (e.g. `pnpm install`), used by `--install` or `worktree.auto_install`; without it, the repo is skipped |
 | `post_create` | `[]` | extra shell commands run in the worktree after `install` (e.g. `["cp .env.example .env", "dotnet ef database update"]`). Env: `TWIG_CARD`, `TWIG_REPO`. Stops at the first failure (warns only) |
+| `hooks` | — | per-repo lifecycle hooks, see [`[hooks]`](#hooks-and-reposnamehooks) |
 | `debug` | `[]` | exact names of `.vscode/launch.json` configs included in the card's compound |
 | `local_files` | `[]` | gitignored files (globs allowed, including `**`) copied from the main clone into the worktree |
 

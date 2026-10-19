@@ -26,6 +26,16 @@
 | `twig completions <shell>` | generates the completion script (bash, zsh, fish, powershell, elvish) |
 | `twig help [command]` | general help or help for one command |
 
+## Global options
+
+| Option | Description |
+|---|---|
+| `--no-hooks` | skips every lifecycle hook (`[hooks]`, `[repos.<name>.hooks]`) for this invocation; see [CONFIG.md](CONFIG.md) |
+
+Lifecycle hooks fire from `new`/`add-repo` (`post_create`), `rm` (`pre_rm`, `post_rm`),
+`open`/`herdr`/`code` (`post_open`) and `refresh` (`post_refresh`). A failing `pre_*` hook aborts
+the command; a failing `post_*` hook only warns.
+
 ## Opening in herdr and VS Code
 
 Rule shared by `twig new` and `twig add-repo`:
@@ -242,7 +252,9 @@ running, the herdr steps are skipped.
 | Option | Description |
 |---|---|
 | `--branches` | also deletes the local branches |
-| `-f`, `--force` | skips both checks (uncommitted changes and running agent) |
+| `-f`, `--force` | skips both checks (uncommitted changes and running agent) and the `pre_rm` hooks |
+
+Hooks: `pre_rm` runs after the checks and aborts the removal if it fails; `post_rm` runs at the end (warns on failure).
 
 ## `twig sync <id> [--merge | --rebase] [-n | --dry-run]`
 

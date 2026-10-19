@@ -30,10 +30,23 @@ pub struct Config {
     #[serde(default)]
     pub update: Update,
     #[serde(default)]
+    pub hooks: Hooks,
+    #[serde(default)]
     pub repos: IndexMap<String, Repo>,
 
     #[serde(skip)]
     pub file: PathBuf,
+}
+
+/// `[hooks]` (card-wide) and `[repos.<name>.hooks]`: shell commands run around card operations.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Hooks {
+    pub post_create: Vec<String>,
+    pub pre_rm: Vec<String>,
+    pub post_rm: Vec<String>,
+    pub post_open: Vec<String>,
+    pub post_refresh: Vec<String>,
 }
 
 /// `[update]`: the passive "new version available" hint.
@@ -249,6 +262,7 @@ pub struct Repo {
     pub autorun: bool,
     pub install: String,
     pub post_create: Vec<String>,
+    pub hooks: Hooks,
     pub debug: Vec<String>,
     pub local_files: Vec<String>,
 }
@@ -264,6 +278,7 @@ impl Default for Repo {
             autorun: true,
             install: String::new(),
             post_create: vec![],
+            hooks: Hooks::default(),
             debug: vec![],
             local_files: vec![],
         }
