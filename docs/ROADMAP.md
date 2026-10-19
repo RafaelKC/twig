@@ -19,7 +19,6 @@ Not scheduled yet; grouped by theme.
 - **Automation:** [#5](https://github.com/RafaelKC/twig/issues/5) run a skill after creating a workspace; [#15](https://github.com/RafaelKC/twig/issues/15) lifecycle hooks; [#14](https://github.com/RafaelKC/twig/issues/14) card templates
 - **Day-to-day commands:** [#9](https://github.com/RafaelKC/twig/issues/9) `status`; [#10](https://github.com/RafaelKC/twig/issues/10) `clean` (merged/closed cards); [#12](https://github.com/RafaelKC/twig/issues/12) `pr`; [#13](https://github.com/RafaelKC/twig/issues/13) `sync`; [#11](https://github.com/RafaelKC/twig/issues/11) `--json`
 - **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
-- **Updates:** [#20](https://github.com/RafaelKC/twig/issues/20) version check on every command with an update hint
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `config get/set`, `.twig.toml`; [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
 
 Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
@@ -53,6 +52,7 @@ Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, 
   - [x] Installs the AI skill and the herdr plugin (with the `prefix+shift+o` shortcut)
   - [ ] Installs the third-party plugins approved in `herdr-plugins/README.md` (pinned refs) and writes the shortcuts to herdr's `config.toml` without duplicating them
 - [x] `twig update`: finds a newer release and reinstalls twig, plugin and skill
+  - [x] Update hint after commands: cached check, stderr only, `[update]` config / `TWIG_NO_UPDATE_CHECK` ([#20](https://github.com/RafaelKC/twig/issues/20))
   - [ ] Migrate the config between schema versions and show the changelog
 - [x] `twig uninstall`: removes twig, plugin, skill and completions; asks about config and az/gh/herdr
 - [x] `twig doctor`: checks dependencies, login, config and repos

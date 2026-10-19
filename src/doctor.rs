@@ -120,6 +120,18 @@ pub fn run() -> Result<()> {
         r.error("open.default = \"code\" but vscode.enabled = false");
     }
 
+    r.section("update check");
+    if crate::updatecheck::env_disabled() {
+        r.info("disabled by TWIG_NO_UPDATE_CHECK");
+    } else if cfg.update.check {
+        r.ok(format!(
+            "enabled (every {}h; disable with update.check = false or TWIG_NO_UPDATE_CHECK=1)",
+            cfg.update.check_interval_hours
+        ));
+    } else {
+        r.info("disabled in the config (update.check = false)");
+    }
+
     r.section("provider");
     match cfg.provider.default {
         ProviderKind::Az => {

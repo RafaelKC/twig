@@ -10,6 +10,7 @@ mod selfmgmt;
 mod status;
 mod sys;
 mod ui;
+mod updatecheck;
 mod workspace;
 
 use std::process::ExitCode;
@@ -211,7 +212,8 @@ fn run(cli: Cli) -> Result<()> {
     }
 
     let mut cfg = Config::load()?;
-    match cli.cmd {
+    let update = cfg.update.clone();
+    let result = match cli.cmd {
         Cmd::New {
             id,
             slug,
@@ -298,7 +300,10 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Uninstall { .. } => {
             unreachable!()
         }
-    }
+    };
+    // stderr-only hint after the command's own output; silent unless a TTY and a newer release
+    updatecheck::maybe_hint(&update);
+    result
 }
 
 fn main() -> ExitCode {

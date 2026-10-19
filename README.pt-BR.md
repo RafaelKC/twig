@@ -114,7 +114,7 @@ twig doctor
 
 | | |
 |---|---|
-| Atualizar | `twig update` |
+| Atualizar | `twig update` (o twig avisa no stderr quando há release nova; desative com `TWIG_NO_UPDATE_CHECK=1` ou `[update] check = false`) |
 | Versão específica | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0` |
 | Desinstalar | `twig uninstall` |
 

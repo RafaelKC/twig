@@ -28,10 +28,29 @@ pub struct Config {
     #[serde(default)]
     pub worktree: Worktree,
     #[serde(default)]
+    pub update: Update,
+    #[serde(default)]
     pub repos: IndexMap<String, Repo>,
 
     #[serde(skip)]
     pub file: PathBuf,
+}
+
+/// `[update]`: the passive "new version available" hint.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Update {
+    pub check: bool,
+    pub check_interval_hours: u64,
+}
+
+impl Default for Update {
+    fn default() -> Self {
+        Self {
+            check: true,
+            check_interval_hours: 24,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
