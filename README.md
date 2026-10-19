@@ -60,6 +60,7 @@ Your main clones stay on `main`. Two cards never step on each other.
   compound that debugs every repo at once.
 - **Local files.** Gitignored files (`appsettings.Development.json`, `.env.local`, …) are copied
   from the main clone into each worktree.
+- **Lifecycle hooks.** Your own shell commands on `post_create`, `pre_rm`, `post_rm`, `post_open` and `post_refresh`, card-wide or per repo; `--no-hooks` skips them.
 - **One config.** Everything team-specific lives in `~/.config/twig/config.toml`.
 - **Self-check.** `twig doctor` checks tools, logins, config and repos, and finds orphaned worktrees.
 

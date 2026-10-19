@@ -286,6 +286,17 @@ pub fn run(json: bool) -> Result<()> {
         }
     }
 
+    let (hook_count, hook_errors) = crate::hooks::validate(&cfg);
+    if hook_count > 0 {
+        r.section("hooks");
+        for e in &hook_errors {
+            r.error(e);
+        }
+        if hook_errors.is_empty() {
+            r.ok(format!("{hook_count} hook command(s) configured"));
+        }
+    }
+
     r.section("orphaned worktrees");
     let mut any = false;
     for repo in cfg.known_repos() {

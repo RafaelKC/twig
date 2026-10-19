@@ -55,6 +55,12 @@ a card.
 | `twig uninstall` | remove twig (asks before touching config and dependencies; don't run it unless the user asks) |
 | `twig config edit` | edit the config (interactive, see below) |
 
+Lifecycle hooks (`[hooks]` and `[repos.<name>.hooks]` in the config: `post_create`, `pre_rm`, `post_rm`,
+`post_open`, `post_refresh`) run the user's own shell commands around `new`/`add-repo`, `rm`, `open`/`herdr`/`code`
+and `refresh`, with `TWIG_CARD_ID`, `TWIG_CARD_DIR`, `TWIG_REPO`, `TWIG_REPO_DIR`, `TWIG_BRANCH`, `TWIG_EVENT`.
+A failing `pre_rm` blocks `rm` (`-f` skips it); `post_*` failures only warn. `--no-hooks` (global) skips all of
+them; don't use it unless the user asks. Never add hooks to the config on your own.
+
 `--json` (on `ls`, `status`, `doctor`) prints only a JSON document on stdout, no colors; use it
 instead of parsing the text. `ls`/`status`: `{"cards":[{"id","repos":[...]}]}` (`status` repos add
 `dirty` count, `base_ref`/`vs_base`, `origin_ref`/`vs_origin` and a per-card `herdr`
