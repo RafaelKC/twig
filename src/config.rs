@@ -124,6 +124,8 @@ impl Default for Git {
 #[serde(deny_unknown_fields, default)]
 pub struct Worktree {
     pub local_files: Vec<String>,
+    /// Run each repo's `install` (then `post_create`) automatically on new worktrees.
+    pub auto_install: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,6 +138,7 @@ pub struct Repo {
     pub run: String,
     pub autorun: bool,
     pub install: String,
+    pub post_create: Vec<String>,
     pub debug: Vec<String>,
     pub local_files: Vec<String>,
 }
@@ -150,6 +153,7 @@ impl Default for Repo {
             run: String::new(),
             autorun: true,
             install: String::new(),
+            post_create: vec![],
             debug: vec![],
             local_files: vec![],
         }

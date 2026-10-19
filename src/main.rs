@@ -53,9 +53,12 @@ enum Cmd {
         /// New branch with the fix/ prefix.
         #[arg(long)]
         fix: bool,
-        /// Run each repo's `install` in the worktree.
+        /// Run each repo's `install` and `post_create` (default with `worktree.auto_install`).
         #[arg(long)]
         install: bool,
+        /// Skip `install` and `post_create`, even with `worktree.auto_install`.
+        #[arg(long, conflicts_with = "install")]
+        no_setup: bool,
         /// Open herdr at the end.
         #[arg(long)]
         herdr: bool,
@@ -81,6 +84,12 @@ enum Cmd {
         /// New branch with the fix/ prefix.
         #[arg(long)]
         fix: bool,
+        /// Run `install` and `post_create` on the new repos (default with `worktree.auto_install`).
+        #[arg(long)]
+        install: bool,
+        /// Skip `install` and `post_create`, even with `worktree.auto_install`.
+        #[arg(long, conflicts_with = "install")]
+        no_setup: bool,
         /// Open herdr at the end.
         #[arg(long)]
         herdr: bool,
@@ -167,13 +176,13 @@ fn run(cli: Cli) -> Result<()> {
 
     let mut cfg = Config::load()?;
     match cli.cmd {
-        Cmd::New { id, slug, repos, branch, base, fix, install, herdr, code, no_ado } => commands::new(
+        Cmd::New { id, slug, repos, branch, base, fix, install, no_setup, herdr, code, no_ado } => commands::new(
             &mut cfg,
-            commands::NewArgs { id, slug, repos, branch, base, fix, install, herdr, code, no_ado },
+            commands::NewArgs { id, slug, repos, branch, base, fix, install, no_setup, herdr, code, no_ado },
         ),
-        Cmd::AddRepo { id, repos, branch, base, fix, herdr, code } => commands::add_repo(
+        Cmd::AddRepo { id, repos, branch, base, fix, install, no_setup, herdr, code } => commands::add_repo(
             &mut cfg,
-            commands::AddRepoArgs { id, repos, branch, base, fix, herdr, code },
+            commands::AddRepoArgs { id, repos, branch, base, fix, install, no_setup, herdr, code },
         ),
         Cmd::Herdr { id } => commands::herdr_cmd(&cfg, &id),
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),

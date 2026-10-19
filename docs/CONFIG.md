@@ -133,6 +133,7 @@ See [COMMANDS.md](COMMANDS.md).
 | Field | Default | Description |
 |---|---|---|
 | `local_files` | `[]` | gitignored files copied into **every** repo of the card (added to each repo's `local_files`) |
+| `auto_install` | `false` | `twig new` / `add-repo` run each new repo's `install` and `post_create` on their own, before herdr starts the `run` panes. `--no-setup` skips it for one call; `--install` forces it |
 
 ### `[repos.<name>]`
 
@@ -146,7 +147,8 @@ See [COMMANDS.md](COMMANDS.md).
 | `default` | `false` | included in the card when the user doesn't pass `--repos` |
 | `run` | — | command to start the project: becomes a VS Code task and a pane in herdr's `run` tab |
 | `autorun` | `true` | `false` = don't start it in herdr's `run` tab (still a VS Code task); only applies with `run` |
-| `install` | — | dependency install command (e.g. `pnpm install`), used by `--install`; without it, the repo is skipped |
+| `install` | — | dependency install command (e.g. `pnpm install`), used by `--install` or `worktree.auto_install`; without it, the repo is skipped |
+| `post_create` | `[]` | extra shell commands run in the worktree after `install` (e.g. `["cp .env.example .env", "dotnet ef database update"]`). Env: `TWIG_CARD`, `TWIG_REPO`. Stops at the first failure (warns only) |
 | `debug` | `[]` | exact names of `.vscode/launch.json` configs included in the card's compound |
 | `local_files` | `[]` | gitignored files (globs allowed, including `**`) copied from the main clone into the worktree |
 

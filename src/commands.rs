@@ -16,6 +16,7 @@ pub struct NewArgs {
     pub base: Option<String>,
     pub fix: bool,
     pub install: bool,
+    pub no_setup: bool,
     pub herdr: bool,
     pub code: bool,
     pub no_ado: bool,
@@ -27,6 +28,8 @@ pub struct AddRepoArgs {
     pub branch: Option<String>,
     pub base: Option<String>,
     pub fix: bool,
+    pub install: bool,
+    pub no_setup: bool,
     pub herdr: bool,
     pub code: bool,
 }
@@ -151,28 +154,39 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     }
     claude_md::write(cfg, &id, &slug, info.as_ref())?;
 
-    if a.install {
-        install(cfg, &id, &repos)?;
+    if wants_setup(cfg, a.install, a.no_setup) {
+        setup(cfg, &id, &repos);
     }
 
     let ws = sync_herdr(cfg, &id);
     open_after(cfg, &id, ws.as_deref(), a.code, a.herdr)
 }
 
-fn install(cfg: &Config, id: &str, repos: &[String]) -> Result<()> {
+fn wants_setup(cfg: &Config, install: bool, no_setup: bool) -> bool {
+    install || (cfg.worktree.auto_install && !no_setup)
+}
+
+/// Per repo: `install`, then each `post_create` command, in the worktree. Failures only warn.
+fn setup(cfg: &Config, id: &str, repos: &[String]) {
     let dir = cfg.card_dir(id);
     for repo in repos {
-        match cfg.repo(repo).filter(|r| !r.install.is_empty()) {
-            Some(r) => {
-                ui::info(format!("[{repo}] {}...", r.install));
-                if let Err(e) = sys::run(&mut sys::shell(&r.install, &dir.join(repo))) {
-                    ui::warn(format!("[{repo}] install failed: {e:#}"));
-                }
+        let Some(r) = cfg.repo(repo) else { continue };
+        let cmds = Some(&r.install).filter(|c| !c.is_empty()).into_iter().chain(&r.post_create);
+        let mut any = false;
+        for c in cmds {
+            any = true;
+            ui::info(format!("[{repo}] {c}"));
+            let mut cmd = sys::shell(c, &dir.join(repo));
+            cmd.env("TWIG_CARD", id).env("TWIG_REPO", repo);
+            if let Err(e) = sys::run(&mut cmd) {
+                ui::warn(format!("[{repo}] `{c}` failed: {e:#}"));
+                break;
             }
-            None => ui::info(format!("[{repo}] no `install` in the config, skipping")),
+        }
+        if !any {
+            ui::info(format!("[{repo}] no `install` or `post_create` in the config, skipping"));
         }
     }
-    Ok(())
 }
 
 pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
@@ -196,6 +210,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     let opts = card::BranchOpts { id: &a.id, slug: &slug, forced: a.branch.as_deref(), base: &base, prefix: &prefix };
 
     let mut added = false;
+    let mut created: Vec<String> = vec![];
     for (repo, path) in a.repos.iter().zip(&paths) {
         if dir.join(repo).join(".git").exists() {
             ui::info(format!("[{repo}] is already in the card"));
@@ -203,9 +218,13 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
         }
         card::make_worktree(repo, path, &dir.join(repo), &opts)?;
         added = true;
+        created.push(repo.clone());
     }
 
     card::copy_local_files(cfg, &dir);
+    if wants_setup(cfg, a.install, a.no_setup) {
+        setup(cfg, &a.id, &created);
+    }
     regenerate(cfg, &a.id, info.as_ref())?;
     let ws = sync_herdr(cfg, &a.id);
     if added && cfg.vscode.enabled {
