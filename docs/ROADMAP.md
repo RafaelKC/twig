@@ -147,6 +147,7 @@ herdr's native Windows support, which is still in beta, so this waits until it's
 
 - [x] Integration tests for `doctor`, `config edit`, `code` and the herdr plugin (fake tools on a controlled `PATH`)
 - [ ] Integration tests for `new` / `add-repo` / `rm` / `prune` against local git remotes ([#18](https://github.com/RafaelKC/twig/issues/18))
+- [x] `scripts/release.sh` opens a `release/vX.Y.Z` PR and tags after merge (`--tag`), so it works with branch rules on `main` ([#22](https://github.com/RafaelKC/twig/issues/22); enabling the ruleset itself is still manual, see [RELEASING.md](RELEASING.md))
 - [ ] CI on pull requests: `cargo fmt --check`, `cargo clippy`, `cargo test`, `shellcheck install.sh` (today tests only run on release tags) ([#18](https://github.com/RafaelKC/twig/issues/18))
 - [x] Translate runtime messages and the generated `CLAUDE.md` to English (or make them localizable)
 - [ ] Test on macOS (today used on Linux/WSL)
