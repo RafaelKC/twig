@@ -1602,6 +1602,140 @@ fn doctor_json_with_invalid_config_is_an_error_entry() {
     assert_eq!(v["sections"][0]["checks"][0]["level"], "error");
 }
 
+// ───────────────────────── memo ─────────────────────────
+
+fn memo_sandbox() -> Sandbox {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "slug", "--no-ado"]), 0);
+    s
+}
+
+fn memo_in(s: &Sandbox, dir: &Path, args: &[&str]) -> Output {
+    let mut c = s.cmd(args);
+    c.current_dir(dir);
+    s.run_with(c, "")
+}
+
+fn memo_file(s: &Sandbox) -> PathBuf {
+    s.path("wt/memos/7-az/MEMORY.md")
+}
+
+#[test]
+fn memo_appends_lines_in_order_with_timestamp() {
+    let s = memo_sandbox();
+    let card = s.path("wt/7");
+    assert_exit(&memo_in(&s, &card, &["memo", "first\nline"]), 0);
+    assert_exit(&memo_in(&s, &card.join("a"), &["memo", "second"]), 0);
+    let body = fs::read_to_string(memo_file(&s)).unwrap();
+    let lines: Vec<&str> = body.lines().collect();
+    assert_eq!(lines.len(), 2, "{body}");
+    let re = regex::Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}: ").unwrap();
+    assert!(re.is_match(lines[0]) && lines[0].ends_with(": first line"));
+    assert!(re.is_match(lines[1]) && lines[1].ends_with(": second"));
+    // without text: prints path and content
+    let o = memo_in(&s, &card, &["memo"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "memos/7-az/MEMORY.md");
+    assert_has(&o, ": second");
+}
+
+#[test]
+fn memo_symlink_is_relative_and_points_into_memos() {
+    let s = memo_sandbox();
+    let link = s.path("wt/7/MEMORY.md");
+    assert!(fs::symlink_metadata(&link)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(
+        fs::read_link(&link).unwrap(),
+        PathBuf::from("../memos/7-az/MEMORY.md")
+    );
+    assert_exit(&memo_in(&s, &s.path("wt/7"), &["memo", "hello"]), 0);
+    assert!(fs::read_to_string(&link).unwrap().contains(": hello"));
+}
+
+#[test]
+fn memo_survives_rm_and_new_relinks_it() {
+    let s = memo_sandbox();
+    assert_exit(&memo_in(&s, &s.path("wt/7"), &["memo", "keep me"]), 0);
+    let o = s.run(&["rm", "7", "--force"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "memo kept");
+    assert!(!s.path("wt/7").exists());
+    assert!(memo_file(&s).is_file());
+    // the card is gone but the memo can still be extended with --card
+    assert_exit(&s.run(&["memo", "-c", "7", "after rm"]), 0);
+    let o = s.run(&["new", "7", "slug", "--no-ado"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "memo restored");
+    let body = fs::read_to_string(s.path("wt/7/MEMORY.md")).unwrap();
+    assert!(
+        body.contains(": keep me") && body.contains(": after rm"),
+        "{body}"
+    );
+}
+
+#[test]
+fn memo_context_file_shows_only_the_last_10_entries() {
+    let s = memo_sandbox();
+    let card = s.path("wt/7");
+    for i in 1..=12 {
+        assert_exit(&memo_in(&s, &card, &["memo", &format!("entry-{i:02}")]), 0);
+    }
+    assert_exit(&s.run(&["refresh", "7"]), 0);
+    let ctx = fs::read_to_string(card.join("CLAUDE.md")).unwrap();
+    assert!(ctx.contains("## Memory (last 10 entries"), "{ctx}");
+    assert!(
+        !ctx.contains("entry-01") && !ctx.contains("entry-02"),
+        "{ctx}"
+    );
+    assert!(
+        ctx.contains("entry-03") && ctx.contains("entry-12"),
+        "{ctx}"
+    );
+}
+
+#[test]
+fn memos_dir_is_never_a_card() {
+    let s = memo_sandbox();
+    assert_exit(&memo_in(&s, &s.path("wt/7"), &["memo", "x"]), 0);
+    let o = s.run(&["ls", "--json"]);
+    assert_exit(&o, 0);
+    let out = String::from_utf8_lossy(&o.stdout).into_owned();
+    assert!(out.contains("\"7\"") && !out.contains("memos"), "{out}");
+    assert_exit(&s.run(&["status"]), 0);
+    let o = s.run(&["prune", "-n"]);
+    assert_exit(&o, 0);
+    assert!(!text(&o).contains("memos"), "{}", text(&o));
+    // cwd inside memos does not infer a card
+    let o = memo_in(&s, &s.path("wt/memos/7-az"), &["memo", "nope"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "not inside a card");
+    assert_exit(&s.run(&["memo", "-c", "memos", "nope"]), 1);
+    assert_exit(&s.run(&["new", "memos", "--no-ado"]), 1);
+}
+
+#[test]
+fn memo_empty_text_is_an_error() {
+    let s = memo_sandbox();
+    let o = memo_in(&s, &s.path("wt/7"), &["memo", "  \n "]);
+    assert_exit(&o, 1);
+    assert_has(&o, "empty memo text");
+    assert!(fs::read_to_string(memo_file(&s)).unwrap().is_empty());
+}
+
+#[test]
+fn memo_card_flag_targets_another_card_from_anywhere() {
+    let s = memo_sandbox();
+    let o = s.run(&["memo", "--card", "7", "from outside"]);
+    assert_exit(&o, 0);
+    assert!(fs::read_to_string(memo_file(&s))
+        .unwrap()
+        .contains(": from outside"));
+    assert_exit(&s.run(&["memo", "-c", "999", "x"]), 1);
+}
+
 // ───────────────────────── hooks ─────────────────────────
 
 /// Append raw TOML to the sandbox config.

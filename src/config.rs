@@ -159,6 +159,15 @@ pub enum ProviderKind {
     Gh,
 }
 
+impl ProviderKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            ProviderKind::Az => "az",
+            ProviderKind::Gh => "gh",
+        }
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct Provider {
@@ -377,6 +386,14 @@ impl Config {
 
     pub fn card_dir(&self, id: &str) -> PathBuf {
         self.worktrees().join(id)
+    }
+
+    /// The real memo file, outside the card folder so it survives `twig rm`.
+    pub fn memo_file(&self, id: &str) -> PathBuf {
+        self.worktrees()
+            .join(crate::card::MEMOS_DIR)
+            .join(format!("{id}-{}", self.provider.default.name()))
+            .join(crate::memo::MEMO_FILE)
     }
 
     pub fn workspace_file(&self, id: &str) -> PathBuf {

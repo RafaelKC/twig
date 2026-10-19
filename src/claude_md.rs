@@ -130,6 +130,8 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
         }
     };
 
+    let memory = crate::memo::context_section(cfg, id).unwrap_or_default();
+
     let context = kept.unwrap_or_else(|| {
         format!(
             "{CONTEXT_HEADING}\n\n<!-- Fill in what matters: decisions made, key files,\n     \
@@ -165,7 +167,7 @@ change is coupled, mention the card (`#{id}`) in the messages for traceability.\
 `node_modules`, `bin/`, `obj/` etc. between cards.\n\
 - **Do not commit this file.** It lives outside the repos on purpose.\n\
 {provider_rule}\n\
-{context}\n",
+{memory}{context}\n",
         version = env!("CARGO_PKG_VERSION"),
     );
 

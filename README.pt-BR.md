@@ -146,6 +146,7 @@ twig code                           # abre o card atual no VS Code
 twig ls                             # cards, branches, alterações não commitadas (*)
 twig status 52644                   # ahead/behind, arquivos alterados, agente do herdr
 twig refresh 52644 --refetch        # regenera CLAUDE.md / workspace, rebusca o card
+twig memo "validação foi pra API"   # (em desenvolvimento) nota para a próxima sessão do agente
 twig rm 52644 --branches            # terminou: remove worktrees (e branches locais)
 ```
 
@@ -160,6 +161,7 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `ls` | cards ativos e a branch de cada repo (`--json` para scripts) |
 | `status [id]` | por repo: branch, arquivos alterados, ahead/behind vs base e origin; workspace e agente do herdr (`--json` para scripts) |
 | `refresh <id>` | regenera o `CLAUDE.md`/`AGENTS.md` e o `.code-workspace` |
+| `memo [texto] [-c id]` | (em desenvolvimento) acrescenta uma linha datada à memória do card, mantida entre sessões e após o `rm`; sem texto, mostra a memória |
 | `sync <id> [--merge\|--rebase] [-n]` | busca a branch base e faz rebase/merge dela em cada repo do card |
 | `rm <id> [-f]` | remove o card e o workspace do herdr (recusa se houver alterações não commitadas ou agente rodando; `-f` ignora) |
 | `prune` | limpa registros de worktrees órfãos |
@@ -172,6 +174,17 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `completions <shell>` | script de completion do shell |
 
 Todas as opções: [docs/COMMANDS.md](docs/COMMANDS.md).
+
+### Memória do card (em desenvolvimento)
+
+Agentes perdem contexto entre sessões. `twig memo "..."` acrescenta uma linha datada a um
+`MEMORY.md` por card. O arquivo real fica em `<worktrees>/memos/<id>-<provider>/` e a pasta do
+card tem um symlink relativo para ele, então as notas **sobrevivem ao `twig rm`** e voltam
+quando `twig new <id>` reabre o card. As últimas 10 entradas são copiadas para o
+`CLAUDE.md`/`AGENTS.md` em `new`, `add-repo` e `refresh`. É a primeira versão, simples, da
+[#16](https://github.com/RafaelKC/twig/issues/16) e o formato ainda pode mudar; o desenho e o
+que falta (consolidação, limite de tamanho, exportar no `rm`) estão em
+[docs/MEMORY.md](docs/MEMORY.md) (em inglês).
 
 ## Configuração
 

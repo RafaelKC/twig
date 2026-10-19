@@ -49,6 +49,7 @@ a card.
 | `twig refresh <id> [--refetch]` | regenerate the context file (`CLAUDE.md`/`AGENTS.md`) and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase (default, `git.sync`) or merge it into every repo of the card; skips repos with uncommitted changes, stops on a conflict naming repo/files; `-n` = dry run |
 | `twig rm <id> [--branches] [-f]` | close the card and its herdr workspace; refuses with uncommitted changes or a running agent (`working`/`blocked`); `-f/--force` bypasses both, so only use it when the user asks |
+| `twig memo ["text"] [-c id]` | **in development**: append a dated line to the card memory `MEMORY.md` (kept after `twig rm`); no text prints it. Format may change |
 | `twig prune [-n]` | clean up orphaned worktree records (folder deleted by hand) |
 | `twig doctor [--json]` | diagnose dependencies, login, config, and repos |
 | `twig update` | update twig, its herdr plugin and this skill to the latest release |
@@ -119,6 +120,7 @@ Two pitfalls:
   `twig rm 123`. If it refuses because an agent is running, tell the user instead of using `-f`. Local branches are only deleted with `--branches`, and only if the user asks.
 - "mudei de branch" or "mexi no config" (switched branch / changed the config) → `twig refresh <id>`.
 - "dá erro de 'already registered'" ('already registered' error) → `twig prune`.
+- "anota isso" / finished a chunk of work (note this / finished a chunk) → `twig memo "..."` (see "Card memory").
 - Something odd in the environment → `twig doctor` and read the ✖ and ! lines.
 
 ## Rules inside a card
@@ -133,6 +135,18 @@ Two pitfalls:
 - **The card's context file (`CLAUDE.md`/`AGENTS.md`) is not versioned.** Update the "Card context"
   section with decisions and loose ends; it survives `twig refresh`. The rest of the file
   is regenerated.
+
+## Card memory (in development)
+
+`twig memo` is experimental: use it, but expect the format and details to change. Each card
+has a `MEMORY.md` in its root (a symlink to `<worktrees>/memos/<id>-<provider>/MEMORY.md`, so
+it survives `twig rm`). The last 10 entries are also in the context file under "Memory".
+
+- **When you enter a card, read `MEMORY.md`.**
+- **Write to it with `twig memo "..."`** after finishing a chunk of work, after making a
+  decision, and before stopping. One line each: what was done, what is left, or the decision
+  and why. Newlines collapse; keep it short.
+- Never edit the `memos/` folder by hand or treat it as a card.
 
 ## Config
 
