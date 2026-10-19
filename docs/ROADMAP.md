@@ -6,14 +6,9 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 
 ## Releases
 
-### Next: v0.2.0 — card lifecycle and agents
+### Next: v0.3.0
 
-Order of work (each step settles the surface the next one builds on):
-
-1. [x] [#6](https://github.com/RafaelKC/twig/issues/6) `rm` removes the herdr workspace, blocks when an agent is running, `-f/--force` bypasses the checks
-2. [x] [#1](https://github.com/RafaelKC/twig/issues/1) `twig open [id] [default|herdr|code]`; `herdr` and `code` stay as aliases; default target in the config
-3. [x] [#7](https://github.com/RafaelKC/twig/issues/7) `twig open-card` / `opcd`, Azure DevOps only (`gh` gives a clear "not supported yet")
-4. [x] [#2](https://github.com/RafaelKC/twig/issues/2) Codex next to Claude Code (`AGENTS.md` / `CLAUDE.md`); other agents are tracked in [#8](https://github.com/RafaelKC/twig/issues/8)
+Not planned yet; pick from [Later](#later).
 
 ### Later
 
@@ -27,7 +22,7 @@ Not scheduled yet; grouped by theme.
 - **Updates:** [#20](https://github.com/RafaelKC/twig/issues/20) version check on every command with an update hint
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `config get/set`, `.twig.toml`; [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
 
-Current: v0.1.1 (installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
+Current: v0.2.0 (`rm` closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
 
 ## Product and name
 
