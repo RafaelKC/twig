@@ -1,6 +1,6 @@
 name: release
 
-# Push a tag like v0.2.0 (scripts/release.sh does it) to build, sign and publish a release.
+# Push a tag like v0.2.0 (scripts/release.sh --tag does it) to build, sign and publish a release.
 on:
   push:
     tags: ["v*"]
