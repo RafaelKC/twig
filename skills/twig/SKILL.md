@@ -53,6 +53,8 @@ a card.
 | `twig doctor [--json]` | diagnose dependencies, login, config, and repos |
 | `twig update` | update twig, its herdr plugin and this skill to the latest release |
 | `twig uninstall` | remove twig (asks before touching config and dependencies; don't run it unless the user asks) |
+| `twig new <id> --template NAME` | apply a card template from `templates.toml` (repos, agent, install, hooks); explicit flags override it; `[templates] default` in the config is used when omitted |
+| `twig template ls` / `twig template show NAME` | list / inspect the templates; `twig template edit` opens an editor (interactive; don't run it as an agent) |
 | `twig config edit` | edit the config (interactive, see below) |
 | `twig config get <key>` / `twig config set <key> <value>` | read / change one config value by dotted key (`git.base_branch`, `repos.my-back.run`); validated, comments kept; arrays as `a,b` or `[a,b]` |
 

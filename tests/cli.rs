@@ -1819,3 +1819,239 @@ fn doctor_counts_valid_hooks() {
     assert_exit(&o, 0);
     assert_has(&o, "1 hook command(s) configured");
 }
+
+// ───────────────────────── templates ─────────────────────────
+
+fn write_templates(s: &Sandbox, body: &str) {
+    fs::write(s.config.parent().unwrap().join("templates.toml"), body).unwrap();
+}
+
+fn tpl_sandbox(templates: &str) -> Sandbox {
+    let s = new_sandbox();
+    write_templates(&s, templates);
+    s
+}
+
+#[test]
+fn template_applies_its_repos() {
+    let s = tpl_sandbox("[both]\nrepos = [\"a\", \"b\"]\n");
+    assert_exit(
+        &s.run(&["new", "7", "x", "--no-ado", "--template", "both"]),
+        0,
+    );
+    assert!(s.path("wt/7/a/.git").exists());
+    assert!(s.path("wt/7/b/.git").exists());
+}
+
+#[test]
+fn explicit_repos_and_flags_override_the_template() {
+    let s =
+        tpl_sandbox("[t]\nrepos = [\"a\", \"b\"]\nbranch_prefix = \"chore\"\nbase = \"nope\"\n");
+    let o = s.run(&[
+        "new",
+        "7",
+        "x",
+        "--no-ado",
+        "--template",
+        "t",
+        "--repos",
+        "b",
+        "--base",
+        "main",
+    ]);
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/7/a").exists());
+    // the template's branch_prefix applies (no --fix); --base beat the template's bad base
+    assert_eq!(branch_of(s.path("wt/7/b")), "chore/7-x");
+
+    let o = s.run(&[
+        "new",
+        "8",
+        "x",
+        "--no-ado",
+        "--template",
+        "t",
+        "--base",
+        "main",
+        "--fix",
+    ]);
+    assert_exit(&o, 0);
+    assert_eq!(branch_of(s.path("wt/8/a")), "fix/8-x");
+}
+
+#[test]
+fn default_template_from_the_config_is_used() {
+    let s = tpl_sandbox("[both]\nrepos = [\"a\", \"b\"]\n");
+    append_config(&s, "\n[templates]\ndefault = \"both\"\n");
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado"]), 0);
+    assert!(s.path("wt/7/b/.git").exists());
+}
+
+#[test]
+fn unknown_template_lists_the_available_ones() {
+    let s = tpl_sandbox("[one]\nrepos = [\"a\"]\n\n[two]\nrepos = [\"b\"]\n");
+    let o = s.run(&["new", "7", "x", "--no-ado", "--template", "nope"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "unknown template `nope`");
+    assert_has(&o, "one, two");
+    assert!(!s.path("wt/7").exists());
+}
+
+#[test]
+fn template_hooks_fire_after_config_hooks_and_follow_the_card() {
+    let s = tpl_sandbox("");
+    let log = s.path("hooks.log");
+    append_config(
+        &s,
+        &format!("\n[hooks]\npost_create = [{:?}]\n", hook_line(&log, "cfg")),
+    );
+    write_templates(
+        &s,
+        &format!(
+            "[t]\nrepos = [\"a\"]\n\n[t.hooks]\npost_create = [{:?}]\npost_refresh = [{:?}]\n",
+            hook_line(&log, "tpl"),
+            hook_line(&log, "tplrefresh"),
+        ),
+    );
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado", "--template", "t"]), 0);
+    let l = hook_log(&log);
+    let (c, t) = (l.find("cfg|post_create"), l.find("tpl|post_create"));
+    assert!(c.is_some() && t.is_some() && c < t, "{l}");
+
+    // refresh re-reads the template recorded for the card
+    assert_exit(&s.run(&["refresh", "7"]), 0);
+    assert!(hook_log(&log).contains("tplrefresh|post_refresh|7"));
+
+    // a card made without the template does not run its hooks
+    assert_exit(&s.run(&["new", "8", "x", "--no-ado"]), 0);
+    assert!(!hook_log(&log).contains("tpl|post_create|8"));
+}
+
+#[test]
+fn template_agent_picks_the_context_file() {
+    let s = tpl_sandbox("[cx]\nrepos = [\"a\"]\nagent = \"codex\"\n");
+    assert_exit(
+        &s.run(&["new", "7", "x", "--no-ado", "--template", "cx"]),
+        0,
+    );
+    assert!(s.path("wt/7/AGENTS.md").exists());
+    assert!(!s.path("wt/7/CLAUDE.md").exists());
+    assert_exit(&s.run(&["refresh", "7"]), 0);
+    assert!(s.path("wt/7/AGENTS.md").exists());
+    assert!(!s.path("wt/7/CLAUDE.md").exists());
+}
+
+#[test]
+fn template_install_runs_the_repo_setup() {
+    let s = tpl_sandbox("[t]\nrepos = [\"a\"]\ninstall = true\n");
+    let log = s.path("install.log");
+    let cfg = fs::read_to_string(&s.config).unwrap().replace(
+        "[repos.a]\ndefault = true\n",
+        &format!(
+            "[repos.a]\ndefault = true\ninstall = \"echo installed >> {}\"\n",
+            log.display()
+        ),
+    );
+    fs::write(&s.config, cfg).unwrap();
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado", "--template", "t"]), 0);
+    assert!(hook_log(&log).contains("installed"));
+    assert_exit(
+        &s.run(&["new", "8", "x", "--no-ado", "--template", "t", "--no-setup"]),
+        0,
+    );
+    assert_eq!(hook_log(&log).matches("installed").count(), 1);
+}
+
+#[test]
+fn no_templates_file_changes_nothing() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado"]), 0);
+    assert!(s.path("wt/7/CLAUDE.md").exists());
+    let o = s.run(&["new", "8", "x", "--no-ado", "--template", "t"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "no templates file");
+    assert_exit(&s.run(&["template", "ls"]), 0);
+}
+
+#[test]
+fn template_env_var_overrides_the_path() {
+    let s = new_sandbox();
+    let f = s.path("elsewhere.toml");
+    fs::write(&f, "[x]\nrepos = [\"b\"]\n").unwrap();
+    let mut c = s.cmd(&["new", "7", "x", "--no-ado", "--template", "x"]);
+    c.env("TWIG_TEMPLATES", &f);
+    assert_exit(&s.run_with(c, ""), 0);
+    assert!(s.path("wt/7/b/.git").exists());
+}
+
+#[test]
+fn doctor_catches_a_template_with_an_unknown_repo_agent_or_hook() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    write_templates(
+        &s,
+        "[bad]\nrepos = [\"r1\", \"ghost\"]\n\n[bad.hooks]\npre_rm = [\" \"]\n",
+    );
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "[bad] repo `ghost` is not in the config");
+    assert_has(&o, "[bad] bad.hooks.pre_rm[0] is an empty command");
+
+    write_templates(&s, "[bad]\nagent = \"gemini\"\n");
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "claude");
+
+    write_templates(&s, "[ok]\nrepos = [\"r1\"]\n");
+    append_config(&s, "\n[templates]\ndefault = \"missing\"\n");
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "templates.default = `missing`");
+
+    let cfg = fs::read_to_string(&s.config)
+        .unwrap()
+        .replace("missing", "ok");
+    fs::write(&s.config, cfg).unwrap();
+    assert_exit(&s.run(&["doctor"]), 0);
+}
+
+#[test]
+fn template_ls_and_show() {
+    let s = tpl_sandbox(
+        "[full]\nrepos = [\"a\", \"b\"]\nagent = \"codex\"\ninstall = true\n\n[full.hooks]\npost_create = [\"echo hi\"]\n\n[solo]\nrepos = [\"a\"]\n",
+    );
+    let o = s.run(&["template", "ls"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "full");
+    assert_has(&o, "a, b");
+    assert_has(&o, "solo");
+
+    let o = s.run(&["template", "show", "full"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "codex");
+    assert_has(&o, "install        true");
+    assert_has(&o, "echo hi");
+
+    let o = s.run(&["template", "show", "nope"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "full, solo");
+}
+
+#[test]
+fn template_edit_creates_and_validates() {
+    let s = new_sandbox();
+    let ed = s.script("ed.sh", "printf '[t]\\nrepos = [\"ghost\"]\\n' > \"$1\"");
+    let mut c = s.cmd(&["template", "edit"]);
+    c.env("EDITOR", &ed);
+    // the unknown repo is invalid; declining the reopen leaves an error
+    let o = s.run_with(c, "n\n");
+    assert_exit(&o, 1);
+    assert_has(&o, "ghost");
+
+    let ed = s.script("ed2.sh", "printf '[t]\\nrepos = [\"a\"]\\n' > \"$1\"");
+    let mut c = s.cmd(&["template", "edit"]);
+    c.env("EDITOR", &ed);
+    assert_exit(&s.run_with(c, ""), 0);
+    assert_has(&s.run(&["template", "ls"]), "t");
+}

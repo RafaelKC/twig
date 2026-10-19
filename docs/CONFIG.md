@@ -211,6 +211,41 @@ post_create  = ["dotnet ef database update"]
 - The per-repo `post_create` field below is unchanged (it only runs with `--install` /
   `worktree.auto_install`, after `install`); the hook `post_create` always runs.
 
+### `[templates]` and `templates.toml`
+
+Card templates are named presets for `twig new <id> --template NAME`. They live in their **own
+file**, `~/.config/twig/templates.toml` (next to `config.toml`; `TWIG_TEMPLATES` overrides the
+path). The file is optional: without it nothing changes. The config only holds the optional default:
+
+```toml
+[templates]
+default = "fullstack"   # used by `twig new` when --template is omitted
+```
+
+`templates.toml` has one table per template (see [`examples/templates.toml`](../examples/templates.toml)):
+
+```toml
+[fullstack]
+repos         = ["api", "ui"]   # repos from [repos.*]; used when --repos is not given
+agent         = "claude"        # "claude" | "codex": context file and agent command for the card
+install       = true            # run each repo's install/post_create (false = skip, like --no-setup)
+branch_prefix = "feat"          # optional; replaces git.branch_prefix (--fix still wins)
+base          = "main"          # optional; replaces git.base_branch
+
+[fullstack.hooks]               # same keys as [hooks]; only for cards created from this template
+post_create = ["echo created $TWIG_CARD_ID"]
+```
+
+- **Precedence.** Explicit flags (`--repos`, `--branch`, `--base`, `--install`/`--no-setup`, `--fix`)
+  beat the template, which beats the config.
+- **Hooks.** Template hooks are card-level and run **after** the config's `[hooks]` of the same event.
+- **Remembered.** The template name is stored in the card folder (`.twig-template`), so `refresh`,
+  `add-repo`, `open`, `rm`... keep using its hooks, agent, `install`, `branch_prefix` and `base`.
+- **Validation.** `twig doctor` and `twig template edit` report empty names, repos that are not in the
+  config, an unknown `agent`, empty hook commands and a `templates.default` that does not exist.
+- Choosing the template automatically from the work item type/tags is not supported yet
+  (follow-up on [#14](https://github.com/RafaelKC/twig/issues/14)).
+
 ### `[repos.<name>]`
 
 `<name>` is what the repo is called in `--repos`.

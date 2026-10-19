@@ -8,6 +8,7 @@
 |---|---|
 | `twig new <id> [slug]` | creates the card: worktrees, herdr workspace and, if enabled, `.code-workspace` |
 | `twig add-repo <id> <repo,...>` | adds more repos to an existing card |
+| `twig template ls` / `show NAME` / `edit` | lists, shows and edits the card templates (`templates.toml`) |
 | `twig open [id] [default\|herdr\|code]` | opens the card in the chosen target (default: `[open] default`, herdr) |
 | `twig open-card [id]` (`opcd`) | opens the card's page in the browser (Azure DevOps only for now) |
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
@@ -64,7 +65,8 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 | Option | Description |
 |---|---|
-| `--repos a,b` | the card's repos; without it, uses the repos with `default = true` |
+| `--template NAME` | applies a preset from `templates.toml` (repos, agent, install, branch prefix/base, hooks); without it, `[templates] default`. Explicit flags below override it |
+| `--repos a,b` | the card's repos; without it, the template's, else the repos with `default = true` |
 | `--branch NAME` | forces this branch in every repo |
 | `--base NAME` | base for the new branch (default: `git.base_branch`) |
 | `--fix` | new branch with the `fix/` prefix (a story that turned into a fix) |
@@ -329,6 +331,16 @@ messages are the human-readable ones and may change, the keys and levels are the
 
 ADO access is tested with a real call because `az account show` fails for
 users of `az devops login` (PAT), even though `az boards` still works.
+
+## `twig template ls` / `show NAME` / `edit`
+
+Card templates live in `templates.toml` next to the config (`TWIG_TEMPLATES` overrides the path);
+format in [CONFIG.md](CONFIG.md#templates-and-templatestoml).
+
+- `ls` prints each template and its repos (no file = a hint, exit 0).
+- `show NAME` prints repos, agent, install, branch prefix/base and hooks; an unknown name lists the available ones.
+- `edit` works like `config edit`: opens `$VISUAL`/`$EDITOR`, creates a commented file if missing and
+  validates on save (repo names must exist in the config).
 
 ## `twig config edit`
 

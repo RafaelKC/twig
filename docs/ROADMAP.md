@@ -16,7 +16,7 @@ Not scheduled yet; grouped by theme.
 
 - **Ports and run:** [#3](https://github.com/RafaelKC/twig/issues/3) per-card dev server ports (card A front on 4200, card B on 4201)
 - **GitHub provider:** [#4](https://github.com/RafaelKC/twig/issues/4) `owner/repo#123` ids (unblocks `open-card` for `gh`)
-- **Automation:** [#5](https://github.com/RafaelKC/twig/issues/5) run a skill after creating a workspace; [#15](https://github.com/RafaelKC/twig/issues/15) lifecycle hooks (done, unreleased); [#14](https://github.com/RafaelKC/twig/issues/14) card templates
+- **Automation:** [#5](https://github.com/RafaelKC/twig/issues/5) run a skill after creating a workspace; [#15](https://github.com/RafaelKC/twig/issues/15) lifecycle hooks (done, unreleased); [#14](https://github.com/RafaelKC/twig/issues/14) card templates (done, unreleased; choosing the template automatically from the work item type/tags is a follow-up)
 - **Day-to-day commands:** [#9](https://github.com/RafaelKC/twig/issues/9) `status`; [#10](https://github.com/RafaelKC/twig/issues/10) `clean` (merged/closed cards); [#12](https://github.com/RafaelKC/twig/issues/12) `pr`; [#13](https://github.com/RafaelKC/twig/issues/13) `sync`; [#11](https://github.com/RafaelKC/twig/issues/11) `--json`
 - **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
 - **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `.twig.toml`, per-card and env overrides (`config get/set` done); [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
@@ -67,7 +67,8 @@ Current: v0.2.5 (`status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hi
 - [x] `twig config edit`
 - [x] `twig config get/set`: dotted keys, validated, comments preserved ([#19](https://github.com/RafaelKC/twig/issues/19), first bullet; `.twig.toml`, per-card and env overrides remain open on the issue)
 - [x] `[open] default` target for `twig open` ([#1](https://github.com/RafaelKC/twig/issues/1))
-- [ ] Card templates ([#14](https://github.com/RafaelKC/twig/issues/14))
+- [x] Card templates in `templates.toml`, `twig new --template`, `[templates] default`, `twig template ls/show/edit` ([#14](https://github.com/RafaelKC/twig/issues/14))
+- [ ] Pick the template automatically from the work item type/tags (follow-up on [#14](https://github.com/RafaelKC/twig/issues/14))
 - [x] Lifecycle hooks `post_create`, `pre_rm`, `post_rm`, `post_open`, `post_refresh`, card-wide or per repo, global `--no-hooks` ([#15](https://github.com/RafaelKC/twig/issues/15)); user-defined commands only, which is the safe part of [#5](https://github.com/RafaelKC/twig/issues/5)
 - [ ] Agent choice: Codex ([#2](https://github.com/RafaelKC/twig/issues/2)), more agents ([#8](https://github.com/RafaelKC/twig/issues/8))
 

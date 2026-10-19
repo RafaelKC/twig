@@ -12,6 +12,7 @@ mod selfmgmt;
 mod status;
 mod sync;
 mod sys;
+mod templates;
 mod ui;
 mod updatecheck;
 mod workspace;
@@ -50,7 +51,10 @@ enum Cmd {
         id: String,
         /// Only used when the branch must be CREATED; defaults to the card title.
         slug: Option<String>,
-        /// Card repos; defaults to the repos with `default = true`.
+        /// Preset from templates.toml (repos, agent, install, hooks); default: `[templates] default`.
+        #[arg(long)]
+        template: Option<String>,
+        /// Card repos; defaults to the template's, else the repos with `default = true`.
         #[arg(long, value_delimiter = ',')]
         repos: Option<Vec<String>>,
         /// Force this branch in every repo.
@@ -197,6 +201,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: ConfigCmd,
     },
+    /// Manage card templates (templates.toml).
+    Template {
+        #[command(subcommand)]
+        cmd: TemplateCmd,
+    },
     /// Update twig (and its herdr plugin and skill) to the latest release.
     Update {
         /// Only report whether a new version exists.
@@ -243,6 +252,16 @@ enum ConfigCmd {
     },
 }
 
+#[derive(Subcommand)]
+enum TemplateCmd {
+    /// List the templates and their repos.
+    Ls,
+    /// Show one template.
+    Show { name: String },
+    /// Open templates.toml in $VISUAL/$EDITOR (creates it if missing) and validate on save.
+    Edit,
+}
+
 fn run(cli: Cli) -> Result<()> {
     if cli.no_hooks {
         hooks::disable();
@@ -265,11 +284,35 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Config {
             cmd: ConfigCmd::Set { key, value },
         } => return config_kv::set(&key, &value),
+        Cmd::Template { cmd } => {
+            return match cmd {
+                TemplateCmd::Ls => templates::ls(),
+                TemplateCmd::Show { name } => templates::show(&name),
+                TemplateCmd::Edit => config_edit::edit_file(
+                    &templates::templates_path()?,
+                    templates::EDIT_TEMPLATE,
+                    "templates",
+                    templates::check_file,
+                ),
+            }
+        }
         _ => {}
     }
 
     let mut cfg = Config::load()?;
     let update = cfg.update.clone();
+    // existing cards keep the agent and hooks of the template they were created from
+    let card_id = match &cli.cmd {
+        Cmd::AddRepo { id, .. }
+        | Cmd::Herdr { id }
+        | Cmd::Refresh { id, .. }
+        | Cmd::Rm { id, .. } => Some(id.as_str()),
+        Cmd::Open { id: Some(id), .. } | Cmd::Code { id: Some(id) } => Some(id.as_str()),
+        _ => None,
+    };
+    if let Some(id) = card_id {
+        templates::activate(&mut cfg, id);
+    }
     let json = matches!(
         cli.cmd,
         Cmd::Ls { json: true } | Cmd::Status { json: true, .. }
@@ -278,6 +321,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::New {
             id,
             slug,
+            template,
             repos,
             branch,
             base,
@@ -292,6 +336,7 @@ fn run(cli: Cli) -> Result<()> {
             commands::NewArgs {
                 id,
                 slug,
+                template,
                 repos,
                 branch,
                 base,
@@ -370,6 +415,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Completions { .. }
         | Cmd::Doctor { .. }
         | Cmd::Config { .. }
+        | Cmd::Template { .. }
         | Cmd::Update { .. }
         | Cmd::Uninstall { .. } => {
             unreachable!()

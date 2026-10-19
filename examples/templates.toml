@@ -1,0 +1,24 @@
+# twig card templates: ~/.config/twig/templates.toml (or the path in TWIG_TEMPLATES).
+# Use with `twig new <id> --template NAME`, or set `[templates] default = "NAME"` in config.toml.
+# Explicit flags (--repos, --branch, --base, --install, --fix) override the template.
+# Format: docs/CONFIG.md. Validate with `twig doctor` or `twig template edit`.
+
+# One table per template. Repo names must exist in config.toml ([repos.*]).
+[fullstack]
+repos         = ["my-back", "my-front"]  # used when --repos is not given
+agent         = "claude"                 # optional: "claude" | "codex" (CLAUDE.md / AGENTS.md + agent command)
+install       = true                     # optional: run each repo's install/post_create (false skips them)
+branch_prefix = "feat"                   # optional: replaces git.branch_prefix (--fix still wins)
+base          = "main"                   # optional: replaces git.base_branch
+
+# Card-level hooks, only for cards created from this template. Same keys as [hooks] in the
+# config: post_create, pre_rm, post_rm, post_open, post_refresh. They run after the config's hooks.
+[fullstack.hooks]
+post_create = ["echo \"fullstack card $TWIG_CARD_ID created in $TWIG_CARD_DIR\""]
+
+# A small template for fixes in a single repo, driven by Codex.
+[hotfix]
+repos         = ["my-back"]
+agent         = "codex"
+branch_prefix = "fix"
+install       = false

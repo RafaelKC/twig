@@ -111,7 +111,20 @@ pub fn run(cfg: &Config, ev: Event, id: &str, card_cwd: &Path, repos: &[RepoCtx]
             &card_dir,
             card_cwd,
             None,
-        )
+        )?;
+        // hooks of the template the card was created from run after the config's
+        match &cfg.template {
+            Some(t) => run_list(
+                list(&t.hooks, ev),
+                ev,
+                "template",
+                id,
+                &card_dir,
+                card_cwd,
+                None,
+            ),
+            None => Ok(()),
+        }
     };
     if ev.is_pre() {
         card_level()?;
@@ -172,19 +185,37 @@ fn run_list(
     Ok(())
 }
 
+/// Non-empty hook lists of a `Hooks` table, by event name (for display).
+pub fn entries(h: &Hooks) -> Vec<(&'static str, &[String])> {
+    ALL.iter()
+        .map(|ev| (ev.name(), list(h, *ev)))
+        .filter(|(_, c)| !c.is_empty())
+        .collect()
+}
+
+/// Number of commands in one hooks table and its problems.
+pub fn validate_hooks(scope: &str, h: &Hooks) -> (usize, Vec<String>) {
+    let mut count = 0;
+    let mut errors = vec![];
+    for ev in ALL {
+        for (i, c) in list(h, ev).iter().enumerate() {
+            count += 1;
+            if c.trim().is_empty() {
+                errors.push(format!("{scope}.{}[{i}] is an empty command", ev.name()));
+            }
+        }
+    }
+    (count, errors)
+}
+
 /// Number of configured hook commands and the problems found in them (for `twig doctor`).
 pub fn validate(cfg: &Config) -> (usize, Vec<String>) {
     let mut count = 0;
     let mut errors = vec![];
     let mut check = |scope: &str, h: &Hooks| {
-        for ev in ALL {
-            for (i, c) in list(h, ev).iter().enumerate() {
-                count += 1;
-                if c.trim().is_empty() {
-                    errors.push(format!("{scope}.{}[{i}] is an empty command", ev.name()));
-                }
-            }
-        }
+        let (c, e) = validate_hooks(scope, h);
+        count += c;
+        errors.extend(e);
     };
     check("hooks", &cfg.hooks);
     for (name, r) in &cfg.repos {

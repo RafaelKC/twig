@@ -61,6 +61,7 @@ Your main clones stay on `main`. Two cards never step on each other.
 - **Local files.** Gitignored files (`appsettings.Development.json`, `.env.local`, …) are copied
   from the main clone into each worktree.
 - **Lifecycle hooks.** Your own shell commands on `post_create`, `pre_rm`, `post_rm`, `post_open` and `post_refresh`, card-wide or per repo; `--no-hooks` skips them.
+- **Card templates.** Named presets in `~/.config/twig/templates.toml` (repos, agent, install, hooks): `twig new 123 --template fullstack`; flags override them.
 - **One config.** Everything team-specific lives in `~/.config/twig/config.toml`.
 - **Self-check.** `twig doctor` checks tools, logins, config and repos, and finds orphaned worktrees.
 
@@ -162,6 +163,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `rm <id> [-f]` | remove the card and its herdr workspace (refuses with uncommitted changes or a running agent; `-f` overrides) |
 | `prune` | clean orphaned worktree records |
 | `doctor` | check dependencies, logins, config and repos (`--json` for scripts) |
+| `template ls` / `show NAME` / `edit` | list, show and edit the card templates (`new --template NAME` applies one) |
 | `config edit` | edit the config and validate it on save |
 | `config get <key>` / `config set <key> <value>` | read / write one value by dotted key (`git.base_branch`), validated, comments kept |
 | `update` | update to the latest release |

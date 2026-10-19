@@ -75,24 +75,35 @@ fn open_editor(editor: &str, file: &Path) -> Result<()> {
 }
 
 pub fn edit() -> Result<()> {
-    let file = config_path()?;
+    edit_file(&config_path()?, TEMPLATE, "config", |f| {
+        Config::load_from(f).map(|_| ())
+    })
+}
+
+/// Open `file` in the editor (creating it from `initial` if missing) until `validate` passes.
+pub fn edit_file(
+    file: &Path,
+    initial: &str,
+    what: &str,
+    validate: impl Fn(&Path) -> Result<()>,
+) -> Result<()> {
     if !file.exists() {
         if let Some(dir) = file.parent() {
             fs::create_dir_all(dir)?;
         }
-        fs::write(&file, TEMPLATE)?;
+        fs::write(file, initial)?;
         ui::ok(format!(
-            "config created from the template: {}",
+            "{what} created from the template: {}",
             file.display()
         ));
     }
 
     let editor = editor();
     loop {
-        open_editor(&editor, &file)?;
-        match Config::load_from(&file) {
-            Ok(_) => {
-                ui::ok(format!("config valid: {}", file.display()));
+        open_editor(&editor, file)?;
+        match validate(file) {
+            Ok(()) => {
+                ui::ok(format!("{what} valid: {}", file.display()));
                 return Ok(());
             }
             Err(e) => {
@@ -104,7 +115,7 @@ pub fn edit() -> Result<()> {
                     a => matches!(a, "y" | "Y" | "s" | "S"),
                 };
                 if !again {
-                    bail!("config left invalid: {}", file.display());
+                    bail!("{what} left invalid: {}", file.display());
                 }
             }
         }
