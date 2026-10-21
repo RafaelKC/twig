@@ -12,6 +12,7 @@ mod memo;
 mod overrides;
 mod ports;
 mod pr;
+mod procenv;
 mod provider;
 mod selfmgmt;
 mod status;

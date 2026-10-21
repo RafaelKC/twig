@@ -7,7 +7,7 @@ use serde_json::{json, Map, Value};
 
 use crate::card;
 use crate::config::Config;
-use crate::{ports, ui};
+use crate::{procenv, ui};
 
 pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
     let dir = cfg.card_dir(id);
@@ -39,7 +39,7 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
             "command": r.run,
             "options": {
                 "cwd": dir.join(repo),
-                "env": env_map(&ports::env(cfg, id, Some(repo))),
+                "env": env_map(&procenv::of(cfg, id, Some(repo))),
             },
             "isBackground": true,
             "problemMatcher": []
@@ -56,7 +56,7 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
         }));
     }
 
-    let mut terminal_env = env_map(&ports::env(cfg, id, None));
+    let mut terminal_env = env_map(&procenv::of(cfg, id, None));
     terminal_env.insert("CARD_ID".into(), json!(id));
 
     let mut ws = Map::new();

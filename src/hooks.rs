@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{bail, Result};
 
 use crate::config::{Config, Hooks};
-use crate::{card, ports, sys, ui};
+use crate::{card, procenv, sys, ui};
 
 static DISABLED: AtomicBool = AtomicBool::new(false);
 
@@ -176,7 +176,7 @@ fn run_list(
                 repo.map(|r| r.dir.as_path()).unwrap_or(Path::new("")),
             )
             .env("TWIG_BRANCH", repo.map(|r| r.branch.as_str()).unwrap_or(""))
-            .envs(ports::env(cfg, id, repo.map(|r| r.name.as_str())));
+            .envs(procenv::of(cfg, id, repo.map(|r| r.name.as_str())));
         if let Err(e) = sys::run(&mut cmd) {
             if ev.is_pre() {
                 bail!(
