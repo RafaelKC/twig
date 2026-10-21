@@ -2,6 +2,7 @@ mod card;
 mod claude_md;
 mod clean;
 mod commands;
+mod complete;
 mod config;
 mod config_edit;
 mod config_kv;
@@ -27,7 +28,7 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
-use clap_complete::Shell;
+use clap_complete::{ArgValueCandidates, Shell};
 
 use config::{Config, OpenTarget};
 
@@ -59,10 +60,10 @@ enum Cmd {
         /// Only used when the branch must be CREATED; defaults to the card title.
         slug: Option<String>,
         /// Preset from templates.toml (repos, agent, install, hooks); default: `[templates] default`.
-        #[arg(long)]
+        #[arg(long, add = ArgValueCandidates::new(complete::templates))]
         template: Option<String>,
         /// Card repos; defaults to the template's, else the repos with `default = true`.
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, value_delimiter = ',', add = ArgValueCandidates::new(complete::repos))]
         repos: Option<Vec<String>>,
         /// Force this branch in every repo.
         #[arg(long)]
@@ -95,9 +96,10 @@ enum Cmd {
     },
     /// Add more repos to an existing card (safe to re-run).
     AddRepo {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
         /// Repos to add (comma- or space-separated).
-        #[arg(required = true, value_delimiter = ',')]
+        #[arg(required = true, value_delimiter = ',', add = ArgValueCandidates::new(complete::repos))]
         repos: Vec<String>,
         /// Force this branch in the new repos.
         #[arg(long)]
@@ -127,6 +129,7 @@ enum Cmd {
     /// is read as the target. `twig herdr` and `twig code`
     /// are aliases of `twig open <id> herdr` / `twig open [id] code`.
     Open {
+        #[arg(add = ArgValueCandidates::new(complete::cards_or_targets))]
         id: Option<String>,
         /// Where to open it: `default` uses `[open] default` from the config.
         #[arg(value_enum)]
@@ -137,14 +140,23 @@ enum Cmd {
     /// Without <ID>, the card is inferred from the current directory; outside a card, it is a
     /// usage error.
     #[command(name = "open-card", alias = "opcd")]
-    OpenCard { id: Option<String> },
+    OpenCard {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
+        id: Option<String>,
+    },
     /// Open the card's herdr workspace (creates whatever is missing).
-    Herdr { id: String },
+    Herdr {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
+        id: String,
+    },
     /// Open the card in VS Code (generates the .code-workspace if missing).
     ///
     /// Without <ID>, the card is inferred from the herdr plugin context
     /// (HERDR_PLUGIN_CONTEXT_JSON) or the current directory; outside a card, opens that folder.
-    Code { id: Option<String> },
+    Code {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
+        id: Option<String>,
+    },
     /// List active cards and each repo's branch (* = uncommitted changes).
     #[command(alias = "list")]
     Ls {
@@ -156,6 +168,7 @@ enum Cmd {
     ///
     /// Without <ID>, every card (compact); with an id, the details of that card.
     Status {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
         /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
         #[arg(long)]
@@ -166,6 +179,7 @@ enum Cmd {
     /// Without <ID>, the card of the current directory. `--env` prints `export` lines, for a
     /// terminal outside herdr: `eval "$(twig ports --env)"`.
     Ports {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
         /// Print `export TWIG_PORT_<REPO>=<port>` lines.
         #[arg(long)]
@@ -173,6 +187,7 @@ enum Cmd {
     },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
         /// Drop the cache and fetch the card data from the provider again.
         #[arg(long)]
@@ -190,7 +205,7 @@ enum Cmd {
         /// Entry to append (newlines become spaces). Without it, prints the memo path and content.
         text: Vec<String>,
         /// Card to use instead of the one inferred from the current directory.
-        #[arg(short, long)]
+        #[arg(short, long, add = ArgValueCandidates::new(complete::cards))]
         card: Option<String>,
     },
     /// Fetch the base branch and rebase/merge it into every repo of the card.
@@ -198,6 +213,7 @@ enum Cmd {
     /// Repos with uncommitted changes are skipped and reported; a conflict stops the run
     /// and names the repo and files. Default strategy: `[git] sync` (rebase).
     Sync {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
         /// Merge the base branch instead of rebasing.
         #[arg(long, conflicts_with = "rebase")]
@@ -215,6 +231,7 @@ enum Cmd {
     /// the work item is linked on Azure DevOps), the sibling PRs linked to each other. A branch
     /// that already has an open PR just prints it. Without <ID>, the card of the current directory.
     Pr {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
         /// Open the PRs as drafts.
         #[arg(long)]
@@ -226,6 +243,7 @@ enum Cmd {
     /// Remove the card's worktrees, folder and herdr workspace (refuses with uncommitted changes or a running agent).
     #[command(alias = "remove")]
     Rm {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
         /// Also delete the local branches.
         #[arg(long)]
@@ -289,7 +307,10 @@ enum Cmd {
         #[arg(short, long)]
         yes: bool,
     },
-    /// Generate the shell completion script (e.g. twig completions bash > ~/.local/share/bash-completion/completions/twig).
+    /// Print the shell completion hook (e.g. `source <(twig completions bash)` in ~/.bashrc).
+    ///
+    /// The hook is a few lines that ask twig itself for the completions, so they follow updates
+    /// and complete card ids, repos and templates. The installer adds it to your shell's rc file.
     Completions { shell: Shell },
 }
 
@@ -325,7 +346,10 @@ enum TemplateCmd {
     /// List the templates and their repos.
     Ls,
     /// Show one template.
-    Show { name: String },
+    Show {
+        #[arg(add = ArgValueCandidates::new(complete::templates))]
+        name: String,
+    },
     /// Open templates.toml in $VISUAL/$EDITOR (creates it if missing) and validate on save.
     Edit,
 }
@@ -336,10 +360,7 @@ fn run(cli: Cli) -> Result<()> {
     }
     // these work without a valid config
     match cli.cmd {
-        Cmd::Completions { shell } => {
-            clap_complete::generate(shell, &mut Cli::command(), "twig", &mut std::io::stdout());
-            return Ok(());
-        }
+        Cmd::Completions { shell } => return complete::registration(shell),
         Cmd::Doctor { json } => return doctor::run(json),
         Cmd::Update { check, version } => return selfmgmt::update(check, version),
         Cmd::Uninstall { yes } => return selfmgmt::uninstall(yes),
@@ -575,6 +596,8 @@ fn main() -> ExitCode {
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
+    // `COMPLETE=<shell> twig ...`: answer the shell's completion request and exit
+    clap_complete::CompleteEnv::with_factory(Cli::command).complete();
     match run(Cli::parse()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

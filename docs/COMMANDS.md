@@ -28,7 +28,7 @@
 | `twig config get <key>` / `twig config set <key> <value>` | reads / writes one config value by dotted key, validated, comments preserved |
 | `twig update [--check] [--version vX.Y.Z]` | updates twig, its herdr plugin and skill to the latest release |
 | `twig uninstall [--yes]` | removes twig, its herdr plugin, skill and completions |
-| `twig completions <shell>` | generates the completion script (bash, zsh, fish, powershell, elvish) |
+| `twig completions <shell>` | prints the shell completion hook (bash, zsh, fish, powershell, elvish) |
 | `twig help [command]` | general help or help for one command |
 
 ## Global options
@@ -575,7 +575,8 @@ Removes what the installer put in place:
 - the herdr plugin (`herdr plugin unlink twig`, `~/.local/share/twig`) and the shortcut
   block between `# twig:begin` / `# twig:end` in herdr's `config.toml`;
 - the AI skill `~/.claude/skills/twig` or `~/.agents/skills/twig` (only if it's twig's);
-- shell completions and the `PATH` line the installer added to `~/.bashrc` / `~/.zshrc`;
+- shell completions: the `# twig completions` line and the `PATH` line the installer added to
+  `~/.bashrc` / `~/.zshrc`, the fish file, and the static scripts older versions wrote;
 - the `twig` binary on the `PATH`.
 
 Then asks (default no) whether to also remove the config and `az`, `gh` and `herdr`.
@@ -589,6 +590,26 @@ Card folders (`paths.worktrees`) are never touched; run `twig rm` first if you w
 
 Without a terminal and without `--yes`, it cancels.
 
+## `twig completions <shell>`
+
+Prints the completion hook for `bash`, `zsh`, `fish`, `powershell` or `elvish`. The hook is a
+few lines that call back into twig (`COMPLETE=<shell> twig -- <words>`), so the completions are
+answered by the installed binary: they never go stale after `twig update`, and besides commands
+and options they complete **values**: card ids (with the card title in shells that show
+descriptions) for every command that takes one, repos for `--repos` / `add-repo`, templates for
+`--template` / `template show`, targets for `open`. Values never query the provider.
+
+The installer enables it on its own (also on `twig update`, replacing the large static script
+older versions wrote):
+
+| Shell | Where |
+|---|---|
+| bash | `~/.bashrc`: `command -v twig >/dev/null 2>&1 && source <(COMPLETE=bash twig)  # twig completions` |
+| zsh | `~/.zshrc`: the same with `COMPLETE=zsh`, guarded by `compdef` (it must come after `compinit`, which zsh frameworks load earlier in the file) |
+| fish | `~/.config/fish/completions/twig.fish`: `COMPLETE=fish twig \| source` |
+
+`twig uninstall` removes those lines and files. By hand: `source <(twig completions bash)`.
+
 ## `twig help [command]`
 
 General help, or detailed help for one command. Every command also accepts `-h` / `--help`.
@@ -597,7 +618,7 @@ General help, or detailed help for one command. Every command also accepts `-h` 
 
 | Item | What it does |
 |---|---|
-| Completions | commands and options (`twig completions <shell>`) |
+| Completions | commands, options, card ids, repos and templates (see [`twig completions`](#twig-completions-shell)) |
 | herdr plugin | `open-code` action (`prefix+shift+o`): opens the focused card in VS Code |
 | Claude Code skill | `skills/twig/`: teaches the agent the card workflow and custom herdr layouts |
 

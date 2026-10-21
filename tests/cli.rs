@@ -590,16 +590,69 @@ fn herdr_and_code_aliases_still_work() {
     assert_eq!(opened(&code_log), workspace_file(&s));
 }
 
+/// What bash would offer for the last word of `twig <words>` (dynamic completion).
+fn complete(s: &Sandbox, words: &[&str]) -> Vec<String> {
+    let mut args = vec!["--", "twig"];
+    args.extend_from_slice(words);
+    let mut c = s.cmd(&args);
+    c.env("COMPLETE", "bash")
+        .env("_CLAP_COMPLETE_INDEX", words.len().to_string())
+        .env("_CLAP_COMPLETE_COMP_TYPE", "9")
+        .env("_CLAP_COMPLETE_SPACE", "true")
+        .env("_CLAP_IFS", "\n");
+    let o = s.run_with(c, "");
+    assert_exit(&o, 0);
+    // with an empty word bash also gets the flags; the tests look at the values
+    stdout(&o)
+        .lines()
+        .filter(|l| !l.starts_with('-'))
+        .map(String::from)
+        .collect()
+}
+
 #[test]
-fn completions_list_the_open_targets() {
+fn completions_hook_is_small_and_calls_back_into_twig() {
     let s = Sandbox::new();
     let o = s.run(&["completions", "bash"]);
     assert_exit(&o, 0);
-    let out = text(&o);
+    let out = stdout(&o);
+    assert!(out.lines().count() < 60, "{out}");
     assert!(
-        out.contains("opts=\"-h --no-hooks --help default herdr code\""),
+        out.contains("COMPLETE=\"bash\"") && out.contains("complete -o nospace"),
         "{out}"
     );
+    assert!(stdout(&s.run(&["completions", "zsh"])).contains("compdef"));
+    assert_eq!(stdout(&s.run(&["completions", "fish"])).lines().count(), 1);
+}
+
+#[test]
+fn completions_list_the_open_targets() {
+    let s = Sandbox::new();
+    let got = complete(&s, &["open", ""]);
+    for t in ["default", "herdr", "code"] {
+        assert!(got.iter().any(|g| g == t), "{got:?}");
+    }
+}
+
+#[test]
+fn completions_offer_cards_repos_and_templates() {
+    let s = new_sandbox();
+    fs::create_dir_all(s.path("wt/52644/a/.git")).unwrap();
+    fs::create_dir_all(s.path("wt/52700/a/.git")).unwrap();
+    fs::create_dir_all(s.path("wt/memos")).unwrap();
+    write_templates(
+        &s,
+        "[fullstack]\nrepos = [\"a\"]\n[hotfix]\nrepos = [\"b\"]\n",
+    );
+    assert_eq!(complete(&s, &["rm", "52"]), ["52644", "52700"]);
+    assert_eq!(complete(&s, &["status", "526"]), ["52644"]);
+    assert_eq!(complete(&s, &["new", "1", "--repos", ""]), ["a", "b"]);
+    assert_eq!(complete(&s, &["add-repo", "52644", ""]), ["a", "b"]);
+    assert_eq!(
+        complete(&s, &["new", "1", "--template", ""]),
+        ["fullstack", "hotfix"]
+    );
+    assert_eq!(complete(&s, &["template", "show", "h"]), ["hotfix"]);
 }
 
 // ───────────────────────── config get / set ─────────────────────────
@@ -732,15 +785,10 @@ fn config_set_can_fix_an_invalid_config() {
 #[test]
 fn completions_list_the_config_subcommands() {
     let s = Sandbox::new();
-    let o = s.run(&["completions", "bash"]);
-    assert_exit(&o, 0);
-    let out = text(&o);
-    // global flags (e.g. --no-hooks) also land in this list, so only check the subcommands
-    assert!(
-        out.lines()
-            .any(|l| l.contains("opts=\"") && l.contains(" edit get set help\"")),
-        "{out}"
-    );
+    let got = complete(&s, &["config", ""]);
+    for sub in ["edit", "get", "set"] {
+        assert!(got.iter().any(|g| g == sub), "{got:?}");
+    }
 }
 
 // ───────────────────────── update / uninstall ─────────────────────────
@@ -828,6 +876,12 @@ fn uninstall_removes_twigs_pieces() {
         "[ui]\nx = 1\n\n# twig:begin (managed)\n[[keys.command]]\nkey = \"prefix+shift+o\"\n# twig:end\n",
     )
     .unwrap();
+    let bashrc = s.path(".bashrc");
+    fs::write(
+        &bashrc,
+        "alias ll='ls -l'\nexport PATH=\"/x/bin:$PATH\"  # twig\ncommand -v twig >/dev/null 2>&1 && source <(COMPLETE=bash twig)  # twig completions\n",
+    )
+    .unwrap();
 
     let mut c = Command::new(&bin);
     c.args(["uninstall", "--yes"])
@@ -842,6 +896,7 @@ fn uninstall_removes_twigs_pieces() {
     assert!(!skill.exists() && other_skill.exists());
     assert!(!s.path(".local/share/twig").exists());
     assert!(!completion.exists());
+    assert_eq!(fs::read_to_string(&bashrc).unwrap(), "alias ll='ls -l'\n");
     assert_eq!(fs::read_to_string(&herdr_cfg).unwrap(), "[ui]\nx = 1\n");
     assert!(s.config.exists(), "--yes keeps the config");
     let herdr_calls = fs::read_to_string(&herdr_log).unwrap();
