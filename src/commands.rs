@@ -210,6 +210,8 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         }
     }
 
+    // the worktrees exist now: their `.twig.toml` (and the card's) apply from here on
+    apply_overrides(cfg, &id);
     card::copy_local_files(cfg, &dir);
     ports::write(cfg, &id)?;
     if cfg.vscode.enabled {
@@ -230,6 +232,14 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
 
     let ws = sync_herdr(cfg, &id);
     open_after(cfg, &id, ws.as_deref(), a.code, a.herdr)
+}
+
+/// A broken `.twig.toml` only warns here (the card is already created); the next command on
+/// the card reports it as an error.
+fn apply_overrides(cfg: &mut Config, id: &str) {
+    if let Err(e) = cfg.apply_card(id) {
+        ui::warn(format!("{e:#}"));
+    }
 }
 
 fn wants_setup(cfg: &Config, install: bool, no_setup: bool) -> bool {
@@ -318,6 +328,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
         created.push(repo.clone());
     }
 
+    apply_overrides(cfg, &a.id);
     card::copy_local_files(cfg, &dir);
     if wants_setup(cfg, install, no_setup) {
         setup(cfg, &a.id, &created);

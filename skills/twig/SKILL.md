@@ -48,6 +48,7 @@ a card.
 | `twig status [id] [--json]` | per repo: branch, uncommitted files (`*N`), ahead/behind vs base and origin; herdr workspace and running agent. No id = all cards, compact |
 | `twig refresh <id> [--refetch]` | regenerate the context file (`CLAUDE.md`/`AGENTS.md`) and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
 | `twig clean [-n] [-y]` | remove finished cards (every branch merged, or the work item closed); `-n` lists them. Never pass `--yes`/`--force` unless the user asked for it |
+| (config) | repo settings can come from a `.twig.toml` versioned in the repo, a card-only `<card>/.twig.toml` (`[repos.<name>]`) or `TWIG__SECTION__KEY` env vars; `twig config get` shows only the user file. To change how a repo runs in one card, write the card's `.twig.toml` and `twig refresh` |
 | `twig ports [id] [--env]` | the card's dev server ports. Never hardcode 4200/5000 in a card: use `$PORT` / `$TWIG_PORT_<REPO>` (already set in the herdr panes) or `eval "$(twig ports --env)"` |
 | `twig pr [id] [--draft] [-n]` | the work is ready for review: pushes each repo's branch and opens one PR per repo with commits ahead of the base (an open PR is just printed), linked to the card and to each other. Run `-n` first when unsure |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase (default, `git.sync`) or merge it into every repo of the card; skips repos with uncommitted changes, stops on a conflict naming repo/files; `-n` = dry run |

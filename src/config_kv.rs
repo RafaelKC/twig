@@ -102,7 +102,7 @@ fn list(inner: &str) -> Value {
 /// Possible readings of the text, most natural first. The first one that passes the config
 /// validation wins, so `short = 123` still works as a string and `local_files = .env` as a
 /// one-element list.
-fn candidates(raw: &str) -> Vec<Value> {
+pub(crate) fn candidates(raw: &str) -> Vec<Value> {
     let raw = raw.trim();
     if raw.starts_with('[') && raw.ends_with(']') {
         // real TOML first (quoted strings), then the loose `[a, b]` form
@@ -126,7 +126,7 @@ fn candidates(raw: &str) -> Vec<Value> {
     out
 }
 
-fn set_in(item: &mut Item, parts: &[&str], mut value: Value, path: &str) -> Result<()> {
+pub(crate) fn set_in(item: &mut Item, parts: &[&str], mut value: Value, path: &str) -> Result<()> {
     if item.is_none() {
         *item = Item::Table(Table::new());
     }

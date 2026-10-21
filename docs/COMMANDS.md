@@ -443,7 +443,7 @@ Works even with a missing or invalid config (checks that depend on it are skippe
 
 | Item | How it checks | On failure |
 |---|---|---|
-| config | file exists and is valid | error |
+| config | file exists and is valid; `TWIG__*` overrides in effect (info); each repo's `.twig.toml` in its main clone is valid | error |
 | `git` | on the PATH | error |
 | git identity | `git config --global user.name` / `user.email` | warning |
 | `herdr` | on the PATH; if the server doesn't respond, it just reports it (twig starts it on its own) | error |

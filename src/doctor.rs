@@ -190,6 +190,21 @@ pub fn run(json: bool) -> Result<()> {
         r.error("open.default = \"code\" but vscode.enabled = false");
     }
 
+    for e in &cfg.env {
+        r.info(format!("overridden by {} (environment)", e.var));
+    }
+    for (name, _) in &cfg.repos {
+        let Some(clone) = cfg.repo_path(name) else {
+            continue;
+        };
+        let file = clone.join(crate::overrides::FILE);
+        match crate::overrides::check_repo_file(&file) {
+            Ok(true) => r.ok(format!("{name}: {} valid", file.display())),
+            Ok(false) => {}
+            Err(e) => r.error(format!("{name}: {e:#}")),
+        }
+    }
+
     r.section("update check");
     if crate::updatecheck::env_disabled() {
         r.info("disabled by TWIG_NO_UPDATE_CHECK");

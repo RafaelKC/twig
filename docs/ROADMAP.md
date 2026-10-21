@@ -14,7 +14,7 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 2. [#12](https://github.com/RafaelKC/twig/issues/12) `twig pr` (done, unreleased)
 3. [#10](https://github.com/RafaelKC/twig/issues/10) `twig clean` (done, unreleased)
 4. [#3](https://github.com/RafaelKC/twig/issues/3) per-card ports, deterministic per card, as environment variables of the herdr panes (done, unreleased)
-5. [#19](https://github.com/RafaelKC/twig/issues/19) per-repo `.twig.toml`, per-card and environment overrides
+5. [#19](https://github.com/RafaelKC/twig/issues/19) per-repo `.twig.toml`, per-card and environment overrides (done, unreleased)
 6. [#5](https://github.com/RafaelKC/twig/issues/5) start the agent with a prompt (a skill/command) when the card is created
 
 ### In development
@@ -70,10 +70,10 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 - [x] Config file (`~/.config/twig/config.toml`, or `TWIG_CONFIG`)
   - [x] Folders, repos, labels, provider, base branch, branch prefixes, run/install commands, local files, debug configs
   - [x] Repos passed with `--repos` that aren't in the config get registered automatically
-  - [ ] Per-repo override (versioned `.twig.toml` in the repo) and per-card override ([#19](https://github.com/RafaelKC/twig/issues/19))
-  - [ ] Environment variable overrides and their precedence ([#19](https://github.com/RafaelKC/twig/issues/19))
+  - [x] Per-repo override (versioned `.twig.toml` in the repo) and per-card override ([#19](https://github.com/RafaelKC/twig/issues/19))
+  - [x] Environment variable overrides (`TWIG__SECTION__KEY`) and their precedence ([#19](https://github.com/RafaelKC/twig/issues/19))
 - [x] `twig config edit`
-- [x] `twig config get/set`: dotted keys, validated, comments preserved ([#19](https://github.com/RafaelKC/twig/issues/19), first bullet; `.twig.toml`, per-card and env overrides remain open on the issue)
+- [x] `twig config get/set`: dotted keys, validated, comments preserved ([#19](https://github.com/RafaelKC/twig/issues/19))
 - [x] `[open] default` target for `twig open` ([#1](https://github.com/RafaelKC/twig/issues/1))
 - [x] Card templates in `templates.toml`, `twig new --template`, `[templates] default`, `twig template ls/show/edit` ([#14](https://github.com/RafaelKC/twig/issues/14))
 - [ ] Pick the template automatically from the work item type/tags (follow-up on [#14](https://github.com/RafaelKC/twig/issues/14))
