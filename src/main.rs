@@ -1,5 +1,6 @@
 mod card;
 mod claude_md;
+mod clean;
 mod commands;
 mod config;
 mod config_edit;
@@ -209,6 +210,24 @@ enum Cmd {
     #[command(alias = "remove")]
     Rm {
         id: String,
+        /// Also delete the local branches.
+        #[arg(long)]
+        branches: bool,
+        /// Remove even with uncommitted changes or a running agent.
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Remove finished cards: every branch merged into the base, or the work item closed.
+    ///
+    /// Lists the candidates and asks per card (or --yes). Removal is `twig rm`: it refuses
+    /// uncommitted changes or a running agent unless --force.
+    Clean {
+        /// Only list the finished cards.
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+        /// Don't ask: remove every finished card.
+        #[arg(short, long)]
+        yes: bool,
         /// Also delete the local branches.
         #[arg(long)]
         branches: bool,
@@ -448,6 +467,12 @@ fn run(cli: Cli) -> Result<()> {
             sync::run(&cfg, &id, mode, dry_run)
         }
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
+        Cmd::Clean {
+            dry_run,
+            yes,
+            branches,
+            force,
+        } => clean::run(&cfg, dry_run, yes, branches, force),
         Cmd::Pr { id, draft, dry_run } => match id {
             Some(id) => pr::run(&cfg, &id, draft, dry_run),
             None => match card::infer(&cfg) {

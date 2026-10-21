@@ -12,7 +12,7 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 
 1. [#4](https://github.com/RafaelKC/twig/issues/4) GitHub `owner/repo#123` ids, `open-card` for `gh` (done, unreleased)
 2. [#12](https://github.com/RafaelKC/twig/issues/12) `twig pr` (done, unreleased)
-3. [#10](https://github.com/RafaelKC/twig/issues/10) `twig clean`
+3. [#10](https://github.com/RafaelKC/twig/issues/10) `twig clean` (done, unreleased)
 4. [#3](https://github.com/RafaelKC/twig/issues/3) per-card ports, as environment variables of the herdr panes
 5. [#19](https://github.com/RafaelKC/twig/issues/19) per-repo `.twig.toml`, per-card and environment overrides
 6. [#5](https://github.com/RafaelKC/twig/issues/5) start the agent with a prompt (a skill/command) when the card is created
@@ -99,7 +99,7 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 - [x] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9); ports and PR info pending #3/#12)
 - [x] `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
 - [x] `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12))
-- [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10))
+- [x] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10))
 - [x] `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
 - [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5); a `post_create` hook can already run a command you wrote, see [#15](https://github.com/RafaelKC/twig/issues/15)),
 - [x] `twig memo` card memory ([#16](https://github.com/RafaelKC/twig/issues/16)), still experimental; follow-ups in [#30](https://github.com/RafaelKC/twig/issues/30). See [MEMORY.md](MEMORY.md)
