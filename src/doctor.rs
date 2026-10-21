@@ -129,7 +129,7 @@ fn git_global(key: &str) -> String {
 }
 
 pub fn succeeds(bin: &str, args: &[&str]) -> bool {
-    sys::quiet(Command::new(bin).args(args))
+    sys::quiet(sys::tool(bin).args(args))
 }
 
 /// First existing folder walking up from `p`.
@@ -167,6 +167,9 @@ pub fn run(json: bool) -> Result<()> {
     }
 
     r.section("herdr");
+    if cfg!(windows) {
+        r.warn("native Windows support in herdr is beta (the stable path on Windows is WSL)");
+    }
     if r.require_bin("herdr", "required") {
         if succeeds("herdr", &["workspace", "list"]) {
             r.ok("herdr server responding");

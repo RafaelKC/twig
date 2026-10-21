@@ -22,7 +22,7 @@ impl<'a> AzureDevOps<'a> {
     }
 
     fn az(&self, wt: Option<&Path>) -> Command {
-        let mut cmd = Command::new("az");
+        let mut cmd = sys::tool("az");
         if let Some(wt) = wt {
             cmd.current_dir(wt);
         }

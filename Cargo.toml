@@ -25,7 +25,7 @@ toml = "0.8"
 toml_edit = "0.22"
 unicode-normalization = "0.1"
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(any(unix, windows))'.dependencies]
 libc = "0.2"
 
 [profile.release]

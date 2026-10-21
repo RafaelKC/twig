@@ -37,3 +37,68 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked
+
+  # Native Windows (herdr's Windows support is beta). The integration tests are Unix-only
+  # (fake tools are sh scripts), so this runs the unit tests, a build, and checks the
+  # PowerShell scripts; the built twig.exe is kept as an artifact for manual smoke tests.
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --bins --locked -- -D warnings
+      - run: cargo test --locked --bins
+      - run: cargo build --release --locked
+      - name: PowerShell scripts parse and pass PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $files = 'install.ps1', 'herdr-plugins/twig/open-code.ps1'
+          foreach ($f in $files) {
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs) | Out-Null
+            if ($errs) { $errs; exit 1 }
+          }
+          $issues = $files | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Severity Error }
+          if ($issues) { $issues | Format-Table -AutoSize; exit 1 }
+      - name: smoke test
+        shell: pwsh
+        run: |
+          $exe = 'target/release/twig.exe'
+          & $exe --version
+          $out = & $exe completions powershell | Out-String
+          if ($out -notmatch 'Register-ArgumentCompleter') { $out; exit 1 }
+      - name: install.ps1 end to end (local release files, -Update)
+        shell: pwsh
+        run: |
+          $target = 'x86_64-pc-windows-msvc'
+          $dist = Join-Path $env:RUNNER_TEMP 'dist'
+          $pkg = Join-Path $env:RUNNER_TEMP "twig-$target"
+          New-Item -ItemType Directory -Force $dist, "$pkg/skills", "$pkg/herdr-plugins" | Out-Null
+          Copy-Item target/release/twig.exe $pkg
+          Copy-Item -Recurse skills/twig "$pkg/skills/"
+          Copy-Item -Recurse herdr-plugins/twig "$pkg/herdr-plugins/"
+          Compress-Archive -Path $pkg -DestinationPath "$dist/twig-$target.zip"
+          $hash = (Get-FileHash -Algorithm SHA256 "$dist/twig-$target.zip").Hash.ToLower()
+          Set-Content "$dist/SHA256SUMS" "$hash  twig-$target.zip"
+          $bin = Join-Path $env:RUNNER_TEMP 'bin'
+          # an existing skill must be refreshed by -Update
+          New-Item -ItemType Directory -Force "$HOME/.claude/skills/twig" | Out-Null
+          Set-Content "$HOME/.claude/skills/twig/SKILL.md" 'old'
+          $env:TWIG_DIST_DIR = $dist
+          ./install.ps1 -Update -Yes -Version v0.0.0-ci -BinDir $bin
+          & "$bin/twig.exe" --version
+          if ((Get-Content "$HOME/.claude/skills/twig/SKILL.md" -Raw) -notmatch 'name: twig') { 'skill not refreshed'; exit 1 }
+          # a second run replaces the binary even though the first one is in place
+          ./install.ps1 -Update -Yes -Version v0.0.0-ci -BinDir $bin
+          if (-not (Test-Path "$bin/twig.exe.old")) { 'old binary was not parked'; exit 1 }
+          $profiles = Get-ChildItem ([Environment]::GetFolderPath('MyDocuments')) -Recurse -Filter Microsoft.PowerShell_profile.ps1
+          if (-not ($profiles | Select-String '# twig completions')) { 'completions not enabled'; exit 1 }
+          if (($profiles | Select-String '# twig completions').Count -ne $profiles.Count) { 'completion line duplicated or missing'; exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: twig-windows-ci
+          path: target/release/twig.exe
+          retention-days: 7

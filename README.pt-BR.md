@@ -121,6 +121,38 @@ checksum e a [assinatura Sigstore](docs/RELEASING.md#signing-and-verification) e
 twig, a skill de IA, o plugin do herdr e os completions do shell. Rodar de novo atualiza.
 Detalhes: [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
+### Windows
+
+Duas opções:
+
+- **WSL (recomendado, estável):** abra sua distro WSL e rode o comando de Linux acima. O twig,
+  o herdr e os agentes rodam dentro do WSL; o VS Code do Windows abre os cards pela extensão
+  WSL.
+- **Windows nativo (beta):** no PowerShell (5.1 ou 7):
+
+  ```powershell
+  irm https://github.com/RafaelKC/twig/releases/latest/download/install.ps1 | iex
+  ```
+
+  > **O suporte nativo do herdr a Windows está em beta.** O twig funciona nele, mas painéis,
+  > detecção de agentes e o plugin do herdr podem falhar. O instalador avisa antes de mudar
+  > qualquer coisa, e o `twig doctor` continua lembrando.
+
+  Ele instala as dependências que faltam com o winget (Git, GitHub CLI ou Azure CLI, VS Code)
+  e os instaladores oficiais (herdr, Claude Code), coloca o `twig.exe` em
+  `%LOCALAPPDATA%\Programs\twig` (adicionado ao PATH do usuário), a skill, o plugin do herdr
+  (`prefix+shift+o`) e os completions no seu perfil do PowerShell. A config fica em
+  `%APPDATA%\twig\config.toml`. **Não precisa de admin** para o twig em si (só pastas do
+  usuário e o PATH do usuário); as dependências que faltam são instaladas por usuário quando dá
+  (Git, VS Code, gh, herdr, Claude Code). Só a Azure CLI é instalada para a máquina toda, então
+  instalá-la mostra o pedido de admin do Windows (UAC). Com `irm | iex`, as opções vão por variável de ambiente
+  (`$env:TWIG_VERSION = "v0.4.0"`), ou como parâmetros se você salvar o script
+  (`.\install.ps1 -Version v0.4.0`). `twig update` e `twig uninstall` funcionam igual ao Linux.
+
+  No Windows, `install`/`post_create` e os hooks rodam via `cmd /C` e o `run` no shell do
+  painel do herdr (PowerShell), então prefira o [`env`](docs/CONFIG.md#repo-environment-env)
+  do repo (resolvido pelo twig em qualquer SO) a `${PORT:-4200}`, que é sintaxe de `sh`.
+
 Depois registre seus repos e confira tudo:
 
 ```bash
@@ -131,7 +163,7 @@ twig doctor
 | | |
 |---|---|
 | Atualizar | `twig update` (o twig avisa no stderr quando há release nova; desative com `TWIG_NO_UPDATE_CHECK=1` ou `[update] check = false`) |
-| Versão específica | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0` |
+| Versão específica | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0`; Windows: `$env:TWIG_VERSION = "v0.4.0"` antes do `irm \| iex` |
 | Desinstalar | `twig uninstall` |
 
 <details>
@@ -269,7 +301,7 @@ cargo test        # testes unitários + de integração
 
 Inicial e opinativo: feito para um fluxo diário com Azure DevOps + .NET + Angular em
 Linux/WSL, agora generalizado pela config. Veja o [roadmap](docs/ROADMAP.md) para o que vem
-a seguir (mais ações do herdr, Windows nativo).
+a seguir (mais ações do herdr, Windows nativo fora do beta junto com o herdr).
 
 ## Licença
 

@@ -39,6 +39,11 @@ environment variables.
 The repos' main clones stay elsewhere, on the base branch. Never touch them from
 a card.
 
+On **native Windows** (beta, like herdr's Windows support) the card folder is
+`%USERPROFILE%\.wt\<id>\` by default, the config is `%APPDATA%\twig\config.toml`, herdr panes run
+PowerShell, and `install`/hooks run through `cmd /C`: write commands for that shell, and use
+`$env:PORT` / the repo's `env` instead of `${PORT:-4200}`. On WSL everything is as on Linux.
+
 ## Before anything else
 
 1. **Inside `~/.wt/<id>/`?** Read `~/.wt/<id>/CLAUDE.md` (or `AGENTS.md` for Codex) first. It says what the

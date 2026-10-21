@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, IsTerminal, Write};
+use std::io::{self, BufRead, Write};
 
 pub fn info(msg: impl AsRef<str>) {
     println!("\x1b[36m→ {}\x1b[0m", msg.as_ref());
@@ -20,7 +20,7 @@ pub fn ask(prompt: &str) -> String {
     let _ = io::stderr().flush();
 
     #[cfg(unix)]
-    if io::stdout().is_terminal() {
+    if std::io::IsTerminal::is_terminal(&io::stdout()) {
         if let Ok(tty) = std::fs::File::open("/dev/tty") {
             let mut line = String::new();
             let _ = io::BufReader::new(tty).read_line(&mut line);

@@ -121,6 +121,39 @@ checksum and [Sigstore signature](docs/RELEASING.md#signing-and-verification), a
 installs twig, the AI skill, the herdr plugin and shell completions. Running it again
 updates. Details: [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
+### Windows
+
+Two options:
+
+- **WSL (recommended, stable):** open your WSL distro and run the Linux command above. twig,
+  herdr and the agents run inside WSL; VS Code on Windows opens the cards through its WSL
+  extension.
+- **Native Windows (beta):** in PowerShell (5.1 or 7):
+
+  ```powershell
+  irm https://github.com/RafaelKC/twig/releases/latest/download/install.ps1 | iex
+  ```
+
+  > **herdr's native Windows support is in beta.** twig works on it, but panes, agent
+  > detection and the herdr plugin may misbehave. The installer warns about it before
+  > changing anything, and `twig doctor` keeps reminding you.
+
+  It installs the missing dependencies with winget (Git, GitHub CLI or Azure CLI, VS Code)
+  and the official installers (herdr, Claude Code), puts `twig.exe` in
+  `%LOCALAPPDATA%\Programs\twig` (added to your user PATH), the skill, the herdr plugin
+  (`prefix+shift+o`) and the completions in your PowerShell profile. The config lives in
+  `%APPDATA%\twig\config.toml`. **No admin needed** for twig itself (only per-user folders
+  and the user PATH); missing dependencies are installed per user when possible (Git, VS Code,
+  gh, herdr, Claude Code). Only the Azure CLI is machine-wide, so installing it shows a Windows
+  admin prompt (UAC). Options go through environment variables with `irm | iex`
+  (`$env:TWIG_VERSION = "v0.4.0"`), or as parameters when you save the script
+  (`.\install.ps1 -Version v0.4.0`). `twig update` and `twig uninstall` work the same as on
+  Linux.
+
+  On Windows, `install`/`post_create` and hooks run through `cmd /C` and `run` in the herdr
+  pane's shell (PowerShell), so prefer the repo's [`env`](docs/CONFIG.md#repo-environment-env)
+  (expanded by twig on every OS) over `${PORT:-4200}`, which is `sh` syntax.
+
 Then register your repos and check everything:
 
 ```bash
@@ -131,7 +164,7 @@ twig doctor
 | | |
 |---|---|
 | Update | `twig update` (twig hints on stderr when a new release exists; disable with `TWIG_NO_UPDATE_CHECK=1` or `[update] check = false`) |
-| Specific version | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0` |
+| Specific version | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0`; Windows: `$env:TWIG_VERSION = "v0.4.0"` before `irm \| iex` |
 | Uninstall | `twig uninstall` |
 
 <details>
@@ -268,7 +301,7 @@ cargo test        # unit + integration tests
 
 Early and opinionated: built for a daily Azure DevOps + .NET + Angular workflow on
 Linux/WSL, now generalized through the config. See the [roadmap](docs/ROADMAP.md) for what's next
-(more herdr actions, native Windows).
+(more herdr actions, native Windows out of beta along with herdr's).
 
 ## License
 

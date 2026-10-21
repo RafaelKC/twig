@@ -1,6 +1,7 @@
 # Dependencies
 
-External tools `twig` uses and how [`install.sh`](../install.sh) handles each one.
+External tools `twig` uses and how [`install.sh`](../install.sh) (Linux, macOS, WSL) and
+[`install.ps1`](../install.ps1) (native Windows, beta) handle each one.
 
 `twig` ships as a native binary, so the machine **doesn't need Rust**. The tools below
 are programs `twig` calls and must be installed.
@@ -31,6 +32,31 @@ and uses `sudo` when not root.
 | `az` | `brew install azure-cli` | `curl -fsSL https://aka.ms/InstallAzureCLIDeb \| sudo bash` | — | — | link to Microsoft docs |
 | VS Code | `brew install --cask visual-studio-code` | `snap install code --classic` | same | same | link; on WSL, install on Windows |
 | Claude Code | `curl -fsSL https://claude.ai/install.sh \| bash` | same | same | same | — |
+
+On **native Windows** (`install.ps1`; herdr's Windows support is **beta**, and the installer says
+so before changing anything) there is no package-manager detection: it uses winget and the
+official Windows installers. It needs PowerShell 5.1+ (built in) and, for the dependencies,
+winget (App Installer).
+
+| Tool | Windows | Admin (UAC)? |
+|---|---|---|
+| `git` | `winget install Git.Git --scope user` | no |
+| `herdr` | `irm https://herdr.dev/install.ps1 \| iex` (beta; `%LOCALAPPDATA%\Programs\Herdr`) | no |
+| `gh` | `winget install GitHub.cli --scope user` (portable build) | no |
+| `az` | `winget install Microsoft.AzureCLI` (machine-wide MSI only) | **yes** |
+| VS Code | `winget install Microsoft.VisualStudioCode --scope user` | no |
+| Claude Code | `irm https://claude.ai/install.ps1 \| iex` | no |
+| Codex | `npm install -g @openai/codex` (needs Node.js) | no |
+
+twig's own pieces never need admin. `install.ps1` tries `--scope user` first and only falls back
+to winget's default (which may prompt for elevation) when a package has no per-user installer,
+saying so before it happens.
+
+Where it puts twig's pieces: `twig.exe` in `%LOCALAPPDATA%\Programs\twig` (added to the user
+`PATH`), the herdr plugin in `%LOCALAPPDATA%\twig\herdr-plugins\twig` (shortcut in
+`%APPDATA%\herdr\config.toml`, bound to `twig.open-code-windows`), the skill in
+`~\.claude\skills\twig` (or `~\.agents\skills\twig`), the completion line in the PowerShell
+profiles (5.1 and, if installed, 7), the config in `%APPDATA%\twig\config.toml`.
 
 ## Installer flow
 

@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 
 use anyhow::{bail, Result};
 
@@ -412,17 +411,10 @@ pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
             let cli = provider::current(cfg).cli();
             anyhow::anyhow!("no URL for card {id}: not cached and the provider returned nothing (is `{cli}` installed and logged in?)")
         })?;
-    let opener = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    if sys::which(opener).is_some() && sys::quiet(Command::new(opener).arg(&url)) {
+    if sys::open_url(&url) {
         ui::ok(format!("opening #{id}: {url}"));
     } else {
-        ui::warn(format!(
-            "could not launch `{opener}`; open this URL manually"
-        ));
+        ui::warn("could not launch a browser; open this URL manually");
         println!("{url}");
     }
     Ok(())
@@ -479,7 +471,7 @@ pub fn code(cfg: &Config, id: Option<&str>) -> Result<()> {
 }
 
 fn launch_code(target: &Path) -> Result<()> {
-    let mut cmd = Command::new("code");
+    let mut cmd = sys::tool("code");
     cmd.arg(target);
     // without this VS Code's integrated terminal inherits HERDR_* and refuses to run `herdr` (nested)
     for (k, _) in std::env::vars().filter(|(k, _)| k.starts_with("HERDR_")) {

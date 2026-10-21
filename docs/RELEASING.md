@@ -56,14 +56,17 @@ The tag triggers [`.github/workflows/release.yml`](../.github/workflows/release.
 | `aarch64-unknown-linux-musl` | `ubuntu-24.04-arm` | static binary |
 | `x86_64-apple-darwin` | `macos-14` | Intel Macs |
 | `aarch64-apple-darwin` | `macos-14` | Apple Silicon |
+| `x86_64-pc-windows-msvc` | `windows-2025` | native Windows (beta, like herdr's); also runs on Windows on ARM under emulation |
 
 ## Release assets
 
 | File | Content |
 |---|---|
 | `twig-<target>.tar.gz` | `twig-<target>/` with the `twig` binary, `skills/twig`, `herdr-plugins/twig`, `LICENSE`, `README.md` |
+| `twig-x86_64-pc-windows-msvc.zip` | the same layout with `twig.exe` |
 | `install.sh` | the installer at that version |
-| `SHA256SUMS` | checksums of the archives and `install.sh` |
+| `install.ps1` | the Windows installer at that version (`releases/latest/download/install.ps1` is the latest one) |
+| `SHA256SUMS` | checksums of the archives, `install.sh` and `install.ps1` |
 | `SHA256SUMS.sigstore.json` | Sigstore bundle signing `SHA256SUMS` |
 
 ## Signing and verification
@@ -89,6 +92,10 @@ Each archive also has a build provenance attestation:
 ```bash
 gh attestation verify twig-x86_64-unknown-linux-musl.tar.gz --repo RafaelKC/twig
 ```
+
+On Windows, `install.ps1` checks the checksum with `Get-FileHash` (and the signature when
+`cosign` is on the PATH). `twig.exe` has no Authenticode signature yet: downloaded through a
+browser, SmartScreen may warn on the first run; the installer's download isn't flagged.
 
 macOS binaries are not signed or notarized with an Apple Developer ID. Files downloaded
 with `curl` (as the installer does) don't get the quarantine flag, so Gatekeeper doesn't

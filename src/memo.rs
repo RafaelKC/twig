@@ -33,13 +33,17 @@ pub fn tail_lines(content: &str, n: usize) -> Vec<&str> {
     lines[lines.len().saturating_sub(n)..].to_vec()
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn now_stamp() -> Result<String> {
     // SAFETY: plain libc calls on a zeroed `tm` owned by this frame.
     let tm = unsafe {
         let t = libc::time(std::ptr::null_mut());
         let mut tm: libc::tm = std::mem::zeroed();
-        if libc::localtime_r(&t, &mut tm).is_null() {
+        #[cfg(unix)]
+        let failed = libc::localtime_r(&t, &mut tm).is_null();
+        #[cfg(windows)]
+        let failed = libc::localtime_s(&mut tm, &t) != 0;
+        if failed {
             bail!("could not read the local time");
         }
         tm
@@ -54,9 +58,9 @@ fn now_stamp() -> Result<String> {
     ))
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn now_stamp() -> Result<String> {
-    bail!("twig memo needs a Unix system for the local time")
+    bail!("twig memo can't read the local time on this system")
 }
 
 /// Number of entries in the card's memo (0 when there is none).
@@ -103,13 +107,15 @@ fn try_link(cfg: &Config, id: &str) -> Result<()> {
             }
             fs::remove_file(&link)?;
         }
+        // Windows without symlink rights: an earlier run made it a hard link to the memo
+        Ok(_) if cfg!(windows) => return Ok(()),
         Ok(_) => bail!(
             "{} exists and is not a symlink, leaving it alone",
             link.display()
         ),
         Err(_) => {}
     }
-    make_symlink(&target, &link)?;
+    make_link(&target, &memo, &link)?;
     let n = entries(cfg, id);
     if existed && n > 0 {
         ui::ok(format!(
@@ -121,13 +127,23 @@ fn try_link(cfg: &Config, id: &str) -> Result<()> {
 }
 
 #[cfg(unix)]
-fn make_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+fn make_link(target: &Path, _memo: &Path, link: &Path) -> std::io::Result<()> {
     std::os::unix::fs::symlink(target, link)
 }
 
-#[cfg(not(unix))]
-fn make_symlink(_: &Path, _: &Path) -> std::io::Result<()> {
-    Err(std::io::Error::other("symlinks are only supported on Unix"))
+/// A symlink needs Developer Mode (or admin) on Windows; without it, a hard link to the memo
+/// (same volume, no rights needed) is still the same file, and deleting the card folder only
+/// removes that link. `twig memo` appends in place, so both names keep showing the same text.
+#[cfg(windows)]
+fn make_link(target: &Path, memo: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(target, link).or_else(|_| fs::hard_link(memo, link))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn make_link(_: &Path, _: &Path, _: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::other(
+        "links are not supported on this system",
+    ))
 }
 
 /// Markdown section with the latest entries for the context file; None without a memo.
