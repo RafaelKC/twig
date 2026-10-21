@@ -2,7 +2,7 @@
 //! `run` tab (one pane per repo with `run` and `autorun`). The workspace is found by label = id.
 
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
 
@@ -13,13 +13,13 @@ use crate::config::Config;
 use crate::{card, procenv, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
-    let out = sys::output(Command::new("herdr").args(args))?;
+    let out = sys::output(sys::tool("herdr").args(args))?;
     serde_json::from_str(&out)
         .with_context(|| format!("unexpected response from herdr: herdr {}", args.join(" ")))
 }
 
 fn herdr_quiet(args: &[&str]) {
-    sys::quiet(Command::new("herdr").args(args));
+    sys::quiet(sys::tool("herdr").args(args));
 }
 
 fn str_at(v: &Value, ptr: &str) -> Result<String> {
@@ -30,7 +30,7 @@ fn str_at(v: &Value, ptr: &str) -> Result<String> {
 }
 
 fn server_up() -> bool {
-    sys::quiet(Command::new("herdr").args(["workspace", "list"]))
+    sys::quiet(sys::tool("herdr").args(["workspace", "list"]))
 }
 
 /// Make sure the herdr server is up (the workspace/pane CLI talks to it).
@@ -42,7 +42,7 @@ pub fn ensure_server() -> Result<()> {
         return Ok(());
     }
     ui::info("starting the herdr server...");
-    let mut cmd = Command::new("herdr");
+    let mut cmd = sys::tool("herdr");
     cmd.arg("server")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -51,6 +51,14 @@ pub fn ensure_server() -> Result<()> {
     {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
+    }
+    // detached, so closing the terminal that started it doesn't stop the server
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
     }
     cmd.spawn().context("could not start the herdr server")?;
     for _ in 0..20 {
@@ -120,7 +128,7 @@ pub fn close_workspace(id: &str) {
     }
     match find_workspace(id) {
         Ok(Some(ws)) => {
-            if sys::quiet(Command::new("herdr").args(["workspace", "close", &ws])) {
+            if sys::quiet(sys::tool("herdr").args(["workspace", "close", &ws])) {
                 ui::ok(format!("herdr workspace #{id} closed"));
             } else {
                 ui::warn(format!("could not close the herdr workspace #{id}"));
@@ -245,9 +253,13 @@ fn ensure_panel(
     Ok(())
 }
 
-/// Quote for a POSIX shell (the panes run the command through the user's shell).
+/// Quote for the pane's shell: POSIX sh, or PowerShell on Windows (`'` doubled inside).
 fn shell_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', r"'\''"))
+    if cfg!(windows) {
+        format!("'{}'", s.replace('\'', "''"))
+    } else {
+        format!("'{}'", s.replace('\'', r"'\''"))
+    }
 }
 
 /// The agent command for a new pane: with a prompt, `<command> '<prompt>'` (Claude Code and
@@ -324,7 +336,7 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
 pub fn open(ws: &str) -> Result<()> {
     herdr_quiet(&["workspace", "focus", ws]);
     if std::env::var("HERDR_ENV").as_deref() != Ok("1") {
-        sys::run(&mut Command::new("herdr"))?;
+        sys::run(&mut sys::tool("herdr"))?;
     }
     Ok(())
 }
@@ -347,7 +359,11 @@ mod tests {
 
     #[test]
     fn prompt_is_quoted_and_expanded() {
-        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+        if cfg!(windows) {
+            assert_eq!(shell_quote("it's"), "'it''s'");
+        } else {
+            assert_eq!(shell_quote("it's"), r"'it'\''s'");
+        }
         let tmp = tempfile::tempdir().unwrap();
         let file = tmp.path().join("config.toml");
         std::fs::write(&file, "version = 1\n").unwrap();

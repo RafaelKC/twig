@@ -480,7 +480,7 @@ mod tests {
         fs::write(
             &file,
             format!(
-                "version = 1\n{provider}\n[paths]\nworktrees = \"{}\"\n",
+                "version = 1\n{provider}\n[paths]\nworktrees = '{}'\n",
                 tmp.path().join("wt").display()
             ),
         )

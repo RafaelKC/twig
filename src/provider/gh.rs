@@ -24,7 +24,7 @@ impl<'a> GitHub<'a> {
 }
 
 fn gh(wt: &Path) -> Command {
-    let mut cmd = Command::new("gh");
+    let mut cmd = sys::tool("gh");
     cmd.current_dir(wt);
     cmd
 }
@@ -91,7 +91,7 @@ impl Provider for GitHub<'_> {
 
     fn fetch_card(&self, card: &CardRef, repo_dir: Option<&Path>) -> Option<String> {
         sys::which("gh")?;
-        let mut cmd = Command::new("gh");
+        let mut cmd = sys::tool("gh");
         cmd.args([
             "issue",
             "view",

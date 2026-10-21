@@ -560,6 +560,11 @@ The skill is refreshed in every place a previous install put it (`~/.claude/skil
 Claude Code, `~/.agents/skills/twig` or `~/.codex/skills/twig` for Codex); `--update` never
 creates a skill where there was none.
 
+On Windows it downloads that tag's `install.ps1` instead and runs it with `-Update` through
+`powershell -ExecutionPolicy Bypass -File`. The running `twig.exe` can't be overwritten, so the
+installer renames it to `twig.exe.old` (removed on the next update) and puts the new one in
+its place.
+
 | Option | Description |
 |---|---|
 | `--check` | only reports whether a new version exists |
@@ -578,6 +583,11 @@ Removes what the installer put in place:
 - shell completions: the `# twig completions` line and the `PATH` line the installer added to
   `~/.bashrc` / `~/.zshrc`, the fish file, and the static scripts older versions wrote;
 - the `twig` binary on the `PATH`.
+
+On Windows: the plugin folder is `%LOCALAPPDATA%\twig`, herdr's config `%APPDATA%\herdr\config.toml`,
+the completion line is removed from the PowerShell profiles, the install folder from the user
+`PATH`, and `twig.exe` (which is running) is moved to the temp folder instead of deleted.
+`az` and `gh` are removed with `winget uninstall` when winget owns them.
 
 Then asks (default no) whether to also remove the config and `az`, `gh` and `herdr`.
 Tools are removed the way they were installed: Homebrew, apt, dnf or pacman when one of

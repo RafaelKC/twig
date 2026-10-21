@@ -1,5 +1,5 @@
 //! `twig update` and `twig uninstall`: managing twig's own installation.
-//! Paths here mirror what install.sh writes.
+//! Paths here mirror what install.sh (Linux, macOS) and install.ps1 (Windows) write.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,11 @@ fn repo() -> String {
 }
 
 fn data_dir() -> Result<PathBuf> {
+    if cfg!(windows) {
+        return Ok(dirs::data_local_dir()
+            .context("%LOCALAPPDATA% not found")?
+            .join("twig"));
+    }
     let base = match std::env::var("XDG_DATA_HOME") {
         Ok(d) if !d.is_empty() => PathBuf::from(d),
         _ => home()?.join(".local/share"),
@@ -32,6 +37,10 @@ fn data_dir() -> Result<PathBuf> {
 fn herdr_config() -> Result<PathBuf> {
     match std::env::var("HERDR_CONFIG_PATH") {
         Ok(p) if !p.is_empty() => Ok(PathBuf::from(p)),
+        _ if cfg!(windows) => Ok(dirs::config_dir()
+            .context("%APPDATA% not found")?
+            .join("herdr")
+            .join("config.toml")),
         _ => Ok(home()?.join(".config/herdr/config.toml")),
     }
 }
@@ -40,7 +49,8 @@ fn curl() -> Result<Command> {
     if sys::which("curl").is_none() {
         bail!("curl not found on PATH");
     }
-    let mut cmd = Command::new("curl");
+    // Windows 10+ ships curl.exe
+    let mut cmd = sys::tool("curl");
     cmd.args(["-fsSL", "--retry", "2"]);
     Ok(cmd)
 }
@@ -107,6 +117,9 @@ pub fn update(check: bool, version: Option<String>) -> Result<()> {
     }
 
     ui::info(format!("updating twig {current} → {tag}"));
+    if cfg!(windows) {
+        return update_windows(&tag);
+    }
     let script = std::env::temp_dir().join(format!("twig-install-{}.sh", std::process::id()));
     let url = format!(
         "https://raw.githubusercontent.com/{}/{tag}/install.sh",
@@ -123,6 +136,77 @@ pub fn update(check: bool, version: Option<String>) -> Result<()> {
         });
     let _ = fs::remove_file(&script);
     result
+}
+
+/// Windows: install.ps1 replaces the running twig.exe by renaming it first (Windows can't
+/// overwrite a running executable, but it can rename it).
+fn update_windows(tag: &str) -> Result<()> {
+    let script = std::env::temp_dir().join(format!("twig-install-{}.ps1", std::process::id()));
+    let url = format!(
+        "https://raw.githubusercontent.com/{}/{tag}/install.ps1",
+        repo()
+    );
+    let result = sys::run(curl()?.arg("-o").arg(&script).arg(&url))
+        .with_context(|| format!("could not download {url}"))
+        .and_then(|_| {
+            sys::run(sys::tool("powershell").args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                &script.to_string_lossy(),
+                "-Update",
+                "-Version",
+                tag,
+            ]))
+        });
+    let _ = fs::remove_file(&script);
+    result
+}
+
+/// PowerShell profiles install.ps1 may have added the completion line to (5.1 and 7+).
+fn powershell_profiles() -> Vec<PathBuf> {
+    let Some(docs) = dirs::document_dir() else {
+        return vec![];
+    };
+    ["WindowsPowerShell", "PowerShell"]
+        .iter()
+        .map(|d| docs.join(d).join("Microsoft.PowerShell_profile.ps1"))
+        .collect()
+}
+
+/// Drop `dir` from the user PATH (where install.ps1 put it).
+fn remove_from_user_path(dir: &Path) {
+    let script = format!(
+        "$d = '{}'; $p = [Environment]::GetEnvironmentVariable('Path', 'User'); \
+         if ($p) {{ $n = ($p -split ';' | Where-Object {{ $_ -and ($_.TrimEnd('\\') -ne $d.TrimEnd('\\')) }}) -join ';'; \
+         if ($n -ne $p) {{ [Environment]::SetEnvironmentVariable('Path', $n, 'User'); 'removed' }} }}",
+        dir.display().to_string().replace('\'', "''")
+    );
+    match sys::output(sys::tool("powershell").args(["-NoProfile", "-Command", &script])) {
+        Ok(out) if out.trim() == "removed" => {
+            ui::ok(format!("{} removed from the user PATH", dir.display()))
+        }
+        Ok(_) => {}
+        Err(e) => ui::warn(format!("could not update the user PATH: {e:#}")),
+    }
+}
+
+/// Windows can't delete a running executable, but it can move it: out of the PATH, into the
+/// temp folder, where it is cleaned up later.
+fn remove_running_exe(exe: &Path) {
+    let parked = std::env::temp_dir().join(format!("twig-uninstalled-{}.exe", std::process::id()));
+    match fs::rename(exe, &parked) {
+        Ok(()) => ui::ok(format!(
+            "binary removed: {} (parked in {} until the temp folder is cleaned)",
+            exe.display(),
+            parked.display()
+        )),
+        Err(e) => ui::warn(format!(
+            "could not remove {} ({e}); delete it after this command ends",
+            exe.display()
+        )),
+    }
 }
 
 // ───────────────────────── uninstall ─────────────────────────
@@ -198,8 +282,9 @@ fn run_maybe_sudo(args: &[&str]) -> Result<()> {
     sys::run(&mut cmd)
 }
 
-/// Package names per manager: (brew, apt/dpkg, dnf/rpm, pacman).
+/// Package names per manager: (brew, apt/dpkg, dnf/rpm, pacman, winget id).
 struct Packages {
+    winget: Option<&'static str>,
     brew: &'static str,
     deb: &'static str,
     rpm: &'static str,
@@ -208,6 +293,11 @@ struct Packages {
 
 /// Uninstalls a tool the way it was installed: package manager if one owns it, else the binary file.
 fn remove_tool(bin: &str, pkgs: &Packages) -> Result<()> {
+    if let Some(id) = pkgs.winget.filter(|_| sys::which("winget").is_some()) {
+        if sys::quiet(sys::tool("winget").args(["list", "--id", id, "-e"])) {
+            return sys::run(sys::tool("winget").args(["uninstall", "--id", id, "-e"]));
+        }
+    }
     if sys::which("brew").is_some()
         && sys::quiet(Command::new("brew").args(["list", "--formula", pkgs.brew]))
     {
@@ -249,7 +339,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
 
     // herdr plugin and shortcut
     if sys::which("herdr").is_some()
-        && sys::quiet(Command::new("herdr").args(["plugin", "unlink", "twig"]))
+        && sys::quiet(sys::tool("herdr").args(["plugin", "unlink", "twig"]))
     {
         ui::ok("twig plugin unlinked from herdr");
     }
@@ -259,7 +349,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
             fs::write(&hc, stripped)?;
             ui::ok(format!("twig shortcut removed from {}", hc.display()));
             if sys::which("herdr").is_some() {
-                sys::quiet(Command::new("herdr").args(["server", "reload-config"]));
+                sys::quiet(sys::tool("herdr").args(["server", "reload-config"]));
             }
         }
     }
@@ -284,9 +374,15 @@ pub fn uninstall(yes: bool) -> Result<()> {
         remove_path(&f, "completion");
     }
 
-    // lines install.sh appended: PATH (`export PATH="...:$PATH"  # twig`) and the completion hook
-    for rc in [".bashrc", ".zshrc"] {
-        let rc = home()?.join(rc);
+    // lines the installer appended: PATH (`export PATH="...:$PATH"  # twig`) and the completion
+    // hook, in the shell rc files or the PowerShell profiles
+    let rcs = [".bashrc", ".zshrc"]
+        .iter()
+        .map(|rc| home().map(|h| h.join(rc)))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .chain(powershell_profiles());
+    for rc in rcs {
         let Ok(text) = fs::read_to_string(&rc) else {
             continue;
         };
@@ -321,6 +417,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
                 "az",
                 "Azure CLI",
                 Packages {
+                    winget: Some("Microsoft.AzureCLI"),
                     brew: "azure-cli",
                     deb: "azure-cli",
                     rpm: "azure-cli",
@@ -331,6 +428,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
                 "gh",
                 "GitHub CLI",
                 Packages {
+                    winget: Some("GitHub.cli"),
                     brew: "gh",
                     deb: "gh",
                     rpm: "gh",
@@ -341,6 +439,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
                 "herdr",
                 "herdr",
                 Packages {
+                    winget: None,
                     brew: "herdr",
                     deb: "herdr",
                     rpm: "herdr",
@@ -356,7 +455,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
                 continue;
             }
             if *bin == "herdr" {
-                sys::quiet(Command::new("herdr").args(["server", "stop"]));
+                sys::quiet(sys::tool("herdr").args(["server", "stop"]));
             }
             if let Err(e) = remove_tool(bin, pkgs) {
                 ui::warn(format!("{bin}: {e:#}"));
@@ -367,6 +466,12 @@ pub fn uninstall(yes: bool) -> Result<()> {
     // last: the binary itself (the PATH entry, symlink or file)
     let bin = sys::which("twig").or_else(|| std::env::current_exe().ok());
     match bin {
+        Some(b) if cfg!(windows) => {
+            if let Some(dir) = b.parent() {
+                remove_from_user_path(dir);
+            }
+            remove_running_exe(&b);
+        }
         Some(b) => remove_path(&b, "binary"),
         None => ui::warn("twig binary not found on PATH"),
     }

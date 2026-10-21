@@ -30,6 +30,7 @@ jobs:
           - { target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
           - { target: x86_64-apple-darwin, os: macos-14 }
           - { target: aarch64-apple-darwin, os: macos-14 }
+          - { target: x86_64-pc-windows-msvc, os: windows-2025 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +43,7 @@ jobs:
       - name: build
         run: cargo build --release --locked --target ${{ matrix.target }}
       - name: package
+        if: ${{ !contains(matrix.target, 'windows') }}
         run: |
           pkg=twig-${{ matrix.target }}
           mkdir -p "$pkg/skills" "$pkg/herdr-plugins"
@@ -50,10 +52,21 @@ jobs:
           cp -R herdr-plugins/twig "$pkg/herdr-plugins/"
           cp LICENSE README.md "$pkg/"
           tar -czf "$pkg.tar.gz" "$pkg"
+      - name: package (Windows)
+        if: ${{ contains(matrix.target, 'windows') }}
+        shell: pwsh
+        run: |
+          $pkg = "twig-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force "$pkg/skills", "$pkg/herdr-plugins" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/twig.exe" "$pkg/"
+          Copy-Item -Recurse skills/twig "$pkg/skills/"
+          Copy-Item -Recurse herdr-plugins/twig "$pkg/herdr-plugins/"
+          Copy-Item LICENSE, README.md "$pkg/"
+          Compress-Archive -Path $pkg -DestinationPath "$pkg.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: twig-${{ matrix.target }}
-          path: twig-${{ matrix.target }}.tar.gz
+          path: twig-${{ matrix.target }}.*
           if-no-files-found: error
 
   release:
@@ -72,8 +85,8 @@ jobs:
       - name: checksums
         working-directory: dist
         run: |
-          cp ../install.sh .
-          sha256sum *.tar.gz install.sh > SHA256SUMS
+          cp ../install.sh ../install.ps1 .
+          sha256sum *.tar.gz *.zip install.sh install.ps1 > SHA256SUMS
           cat SHA256SUMS
       - uses: sigstore/cosign-installer@v3
       - name: sign checksums (Sigstore keyless)
@@ -84,7 +97,9 @@ jobs:
         with:
           subject-path: |
             dist/*.tar.gz
+            dist/*.zip
             dist/install.sh
+            dist/install.ps1
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

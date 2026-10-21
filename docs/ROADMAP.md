@@ -52,7 +52,7 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 ## Install and update
 
 - [x] Prebuilt, signed binaries for Linux and macOS on GitHub Releases on every `v*` tag ([RELEASING.md](RELEASING.md))
-- [ ] Windows binaries and a PowerShell installer (see [Native Windows](#native-windows))
+- [x] Windows binaries and a PowerShell installer, in beta (see [Native Windows](#native-windows))
 - [x] Installer (`curl ... | sh`) that:
   - [x] Puts `twig` on the PATH and installs shell completions (dynamic since v0.4.0: a one-line hook in the shell rc that completes card ids, repos and templates)
   - [x] Checks and installs dependencies (see [DEPENDENCIES.md](DEPENDENCIES.md))
@@ -142,20 +142,23 @@ Use [herdr-reviewr](https://github.com/persiyanov/herdr-reviewr) to review PRs w
 
 ## Native Windows
 
-Windows works today through WSL (Linux binary and `install.sh`). Native Windows depends on
-herdr's native Windows support, which is still in beta, so this waits until it's stable.
+Native Windows is supported in **beta**, following herdr's native Windows support (also beta):
+`install.ps1` warns about it before changing anything and `twig doctor` reminds it. WSL (Linux
+binary and `install.sh`) stays the stable path on Windows.
 
-- [ ] Build `x86_64-pc-windows-msvc` in the release workflow and publish a `.zip` (signed checksums like the other targets)
-- [ ] `install.ps1` (`irm …/install.ps1 | iex`), mirroring `install.sh`:
-  - [ ] Dependencies via winget: `Git.Git`, `GitHub.cli`, `Microsoft.AzureCLI`, `Microsoft.VisualStudioCode`
-  - [ ] herdr via its installer (`irm https://herdr.dev/install.ps1 | iex`) and Claude Code via its Windows installer
-  - [ ] Binary in `%LOCALAPPDATA%\Programs\twig`, added to the user `PATH`; skill, herdr plugin and PowerShell completions
-- [ ] `twig update` runs `install.ps1` on Windows
-- [ ] `twig uninstall` removes dependencies with `winget uninstall`
-- [ ] herdr plugin: Windows variant of `open-code` (`.cmd`/`.ps1`) and `windows` in `platforms`
-- [ ] `.code-workspace`: also set `terminal.integrated.env.windows`
-- [ ] Review Unix-only assumptions (paths, `sh -c` in `run`/`install` commands, process groups when starting the herdr server)
-- [ ] Integration tests on a Windows runner in CI
+- [x] Build `x86_64-pc-windows-msvc` in the release workflow and publish a `.zip` (signed checksums like the other targets)
+- [x] `install.ps1` (`irm …/install.ps1 | iex`), mirroring `install.sh`:
+  - [x] Dependencies via winget: `Git.Git`, `GitHub.cli`, `Microsoft.AzureCLI`, `Microsoft.VisualStudioCode`
+  - [x] herdr via its installer (`irm https://herdr.dev/install.ps1 | iex`) and Claude Code via its Windows installer
+  - [x] Binary in `%LOCALAPPDATA%\Programs\twig`, added to the user `PATH`; skill, herdr plugin and PowerShell completions
+- [x] `twig update` runs `install.ps1` on Windows (the running `twig.exe` is renamed, then replaced)
+- [x] `twig uninstall` removes dependencies with `winget uninstall`, the user `PATH` entry and the profile line
+- [x] herdr plugin: Windows variant of `open-code` (`open-code.ps1`) and `windows` in `platforms`
+- [x] `.code-workspace`: also set `terminal.integrated.env.windows` (and `.osx`)
+- [x] Review Unix-only assumptions: `.cmd` tools (`az`, `code`) resolved through PATHEXT, `cmd /C start` for URLs, detached herdr server, memo hard link when symlinks need Developer Mode, PowerShell quoting of `--prompt`
+- [x] Windows runner in CI: clippy, unit tests, build, PowerShell parse + PSScriptAnalyzer, `install.ps1 -Update` end to end
+- [ ] Integration tests (`tests/cli.rs`) on Windows: the fake tools are `sh` scripts today
+- [ ] Out of beta once herdr's native Windows support is stable
 - [ ] Optional: Authenticode signing, so SmartScreen doesn't warn on first run
 
 ## Quality

@@ -98,7 +98,9 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
                 "**/.nx/**": true
             },
             "git.openRepositoryInParentFolders": "never",
-            "terminal.integrated.env.linux": terminal_env
+            "terminal.integrated.env.linux": terminal_env,
+            "terminal.integrated.env.osx": terminal_env,
+            "terminal.integrated.env.windows": terminal_env
         }),
     );
     ws.insert(

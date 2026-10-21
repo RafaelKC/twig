@@ -234,7 +234,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let wt = tmp.path().join("wt");
         let text = format!(
-            "version = 1\n{agent_section}\n[paths]\nworktrees = \"{}\"\n",
+            "version = 1\n{agent_section}\n[paths]\nworktrees = '{}'\n",
             wt.display()
         );
         let file = tmp.path().join("config.toml");

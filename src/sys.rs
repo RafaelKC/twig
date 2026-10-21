@@ -22,6 +22,32 @@ pub fn which(bin: &str) -> Option<PathBuf> {
     })
 }
 
+/// A command for an external tool. On Windows, `az`, `code`, `claude`... are `.cmd` files that
+/// `Command::new("az")` doesn't find (it only adds `.exe`): resolve them through PATHEXT.
+pub fn tool(bin: &str) -> Command {
+    if cfg!(windows) {
+        if let Some(path) = which(bin) {
+            return Command::new(path);
+        }
+    }
+    Command::new(bin)
+}
+
+/// Open a URL with the desktop's default handler. False when no opener could run.
+pub fn open_url(url: &str) -> bool {
+    if cfg!(windows) {
+        // `start` is a cmd builtin; the empty "" is the window title
+        quiet(Command::new("cmd").args(["/C", "start", "", url]))
+    } else {
+        let opener = if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
+        which(opener).is_some() && quiet(Command::new(opener).arg(url))
+    }
+}
+
 /// Run and return stdout; error with stderr if the command fails.
 pub fn output(cmd: &mut Command) -> Result<String> {
     let out = cmd
