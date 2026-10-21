@@ -33,13 +33,17 @@ pub fn tail_lines(content: &str, n: usize) -> Vec<&str> {
     lines[lines.len().saturating_sub(n)..].to_vec()
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn now_stamp() -> Result<String> {
     // SAFETY: plain libc calls on a zeroed `tm` owned by this frame.
     let tm = unsafe {
         let t = libc::time(std::ptr::null_mut());
         let mut tm: libc::tm = std::mem::zeroed();
-        if libc::localtime_r(&t, &mut tm).is_null() {
+        #[cfg(unix)]
+        let failed = libc::localtime_r(&t, &mut tm).is_null();
+        #[cfg(windows)]
+        let failed = libc::localtime_s(&mut tm, &t) != 0;
+        if failed {
             bail!("could not read the local time");
         }
         tm
@@ -54,9 +58,9 @@ fn now_stamp() -> Result<String> {
     ))
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn now_stamp() -> Result<String> {
-    bail!("twig memo needs a Unix system for the local time")
+    bail!("twig memo can't read the local time on this system")
 }
 
 /// Number of entries in the card's memo (0 when there is none).
