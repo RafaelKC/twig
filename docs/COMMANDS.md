@@ -15,6 +15,7 @@
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls [--json]` | lists active cards and each repo's branch |
 | `twig status [id] [--json]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
+| `twig ports [id] [--env]` | shows the card's dev server ports; `--env` prints `export` lines |
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
 | `twig memo [text] [-c id]` (in development) | appends a dated line to the card memory (`MEMORY.md`, survives `rm`); without text, shows it. See [MEMORY.md](MEMORY.md) |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
@@ -229,7 +230,8 @@ info are not shown yet.
 With `--json`, stdout is only this JSON document (no colors, no emoji, no update hint).
 It is always `{"cards": [...]}`: one entry per active card, or just the requested one with
 `<id>` (an unknown card still fails with exit 1 and nothing on stdout). `base_ref`,
-`vs_base`, `origin_ref` and `vs_origin` are `null` when there is nothing to compare against.
+`vs_base`, `origin_ref` and `vs_origin` are `null` when there is nothing to compare against;
+`port` is the card's dev server port for the repo (`null` without `port` in the config).
 
 ```json
 {
@@ -244,7 +246,8 @@ It is always `{"cards": [...]}`: one entry per active card, or just the requeste
           "base_ref": "origin/main",
           "vs_base": { "ahead": 2, "behind": 0 },
           "origin_ref": "origin/card-123",
-          "vs_origin": { "ahead": 1, "behind": 0 }
+          "vs_origin": { "ahead": 1, "behind": 0 },
+          "port": null
         }
       ],
       "herdr": { "workspace": true, "agents_running": 1 }
@@ -255,6 +258,20 @@ It is always `{"cards": [...]}`: one entry per active card, or just the requeste
 
 `dirty` is the number of files with uncommitted changes; `agents_running` counts panes
 that are `working` or `blocked`.
+
+## `twig ports [id] [--env]`
+
+Shows the card's dev server ports: one line per repo with `port` in the config, with its
+variable and whether something is already listening on it. The ports are deterministic per
+card (see [CONFIG.md → `[ports]`](CONFIG.md#ports)). Without `<id>`, the card of the current
+directory.
+
+`--env` prints `export TWIG_PORT_<REPO>=<port>` lines instead, for a terminal outside herdr:
+
+```bash
+twig ports 52644
+eval "$(twig ports --env)"     # inside the card folder
+```
 
 ## `twig refresh <id> [--refetch]`
 

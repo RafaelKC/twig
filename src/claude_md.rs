@@ -55,10 +55,27 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
         );
         if let Some(r) = cfg.repo(repo).filter(|r| !r.run.is_empty()) {
             runs += &format!("- `{repo}`: `{}`\n", r.run);
+            let env: Vec<String> = crate::procenv::of(cfg, id, Some(repo))
+                .into_iter()
+                .filter(|(k, _)| r.env.contains_key(k))
+                .map(|(k, v)| format!("`{k}={v}`"))
+                .collect();
+            if !env.is_empty() {
+                runs += &format!("  with {}\n", env.join(", "));
+            }
         }
     }
     if runs.is_empty() {
         runs = "_(no run command configured for these repos)_\n".into();
+    }
+    let card_ports = crate::ports::of(cfg, id);
+    if !card_ports.is_empty() {
+        runs += "\nPorts of this card (same every time; other cards use other ports). The herdr\n\
+                 panes and the hooks get them as environment variables, `PORT` being the\n\
+                 repo's own; elsewhere, `twig ports --env` prints them:\n\n";
+        for (r, p) in &card_ports {
+            runs += &format!("- `{r}`: {p} (`${}`)\n", crate::ports::var_name(r));
+        }
     }
 
     let cref = card::CardRef::of(cfg, id);

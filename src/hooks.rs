@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{bail, Result};
 
 use crate::config::{Config, Hooks};
-use crate::{card, sys, ui};
+use crate::{card, procenv, sys, ui};
 
 static DISABLED: AtomicBool = AtomicBool::new(false);
 
@@ -104,6 +104,7 @@ pub fn run(cfg: &Config, ev: Event, id: &str, card_cwd: &Path, repos: &[RepoCtx]
     let card_dir = cfg.card_dir(id);
     let card_level = || {
         run_list(
+            cfg,
             list(&cfg.hooks, ev),
             ev,
             "card",
@@ -115,6 +116,7 @@ pub fn run(cfg: &Config, ev: Event, id: &str, card_cwd: &Path, repos: &[RepoCtx]
         // hooks of the template the card was created from run after the config's
         match &cfg.template {
             Some(t) => run_list(
+                cfg,
                 list(&t.hooks, ev),
                 ev,
                 "template",
@@ -134,6 +136,7 @@ pub fn run(cfg: &Config, ev: Event, id: &str, card_cwd: &Path, repos: &[RepoCtx]
             continue;
         };
         run_list(
+            cfg,
             list(&repo.hooks, ev),
             ev,
             &r.name,
@@ -149,7 +152,9 @@ pub fn run(cfg: &Config, ev: Event, id: &str, card_cwd: &Path, repos: &[RepoCtx]
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_list(
+    cfg: &Config,
     cmds: &[String],
     ev: Event,
     scope: &str,
@@ -170,7 +175,8 @@ fn run_list(
                 "TWIG_REPO_DIR",
                 repo.map(|r| r.dir.as_path()).unwrap_or(Path::new("")),
             )
-            .env("TWIG_BRANCH", repo.map(|r| r.branch.as_str()).unwrap_or(""));
+            .env("TWIG_BRANCH", repo.map(|r| r.branch.as_str()).unwrap_or(""))
+            .envs(procenv::of(cfg, id, repo.map(|r| r.name.as_str())));
         if let Err(e) = sys::run(&mut cmd) {
             if ev.is_pre() {
                 bail!(

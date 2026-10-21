@@ -2520,3 +2520,182 @@ esac"#,
     assert_has(&o, "#6");
     assert!(!text(&o).contains("#8"), "{}", text(&o));
 }
+
+// ───────────────────────── ports ─────────────────────────
+
+/// Fake `herdr` that logs its calls and answers just enough for `twig herdr` to build a card.
+fn herdr_builder_stub(s: &Sandbox) -> PathBuf {
+    let log = s.path("herdr.log");
+    s.stub(
+        "herdr",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[]}}}}' ;;
+  "workspace create") echo '{{"result":{{"workspace":{{"workspace_id":"w1"}},"tab":{{"tab_id":"t1"}}}}}}' ;;
+  "tab list") echo '{{"result":{{"tabs":[{{"label":"agent","tab_id":"t1"}}]}}}}' ;;
+  "pane list") echo '{{"result":{{"panes":[{{"pane_id":"p1","tab_id":"t1","cwd":"","foreground_cwd":""}}]}}}}' ;;
+  "tab create") echo '{{"result":{{"root_pane":{{"pane_id":"p9"}}}}}}' ;;
+  "pane split") echo '{{"result":{{"pane":{{"pane_id":"p2"}}}}}}' ;;
+esac"#,
+            log = log.display()
+        ),
+    );
+    log
+}
+
+/// Repos `a` (port 4200, with a run command) and `b` (port 5000).
+fn ports_sandbox() -> Sandbox {
+    let s = new_sandbox();
+    let cfg = fs::read_to_string(&s.config)
+        .unwrap()
+        .replace(
+            "[repos.a]\ndefault = true\n",
+            "[repos.a]\ndefault = true\nrun = \"serve\"\nport = 4200\n",
+        )
+        .replace("[repos.b]\n", "[repos.b]\nport = 5000\n");
+    fs::write(&s.config, cfg).unwrap();
+    s
+}
+
+#[test]
+fn ports_are_deterministic_per_card_and_written_to_the_card() {
+    let s = ports_sandbox();
+    assert_exit(
+        &s.run(&["new", "52644", "x", "--repos", "a,b", "--no-ado"]),
+        0,
+    );
+    let env = fs::read_to_string(s.path("wt/52644/.twig-ports.env")).unwrap();
+    assert!(
+        env.contains("TWIG_PORT_A=4244\nTWIG_PORT_B=5044\n"),
+        "{env}"
+    );
+    let ctx = fs::read_to_string(s.path("wt/52644/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("- `a`: 4244 (`$TWIG_PORT_A`)"), "{ctx}");
+
+    // same card again → same ports
+    assert_exit(&s.run(&["rm", "52644"]), 0);
+    assert_exit(
+        &s.run(&["new", "52644", "x", "--repos", "a,b", "--no-ado"]),
+        0,
+    );
+    let again = fs::read_to_string(s.path("wt/52644/.twig-ports.env")).unwrap();
+    assert_eq!(env, again);
+
+    let o = s.run(&["ports", "52644", "--env"]);
+    assert_exit(&o, 0);
+    assert_eq!(
+        stdout(&o),
+        "export TWIG_PORT_A=4244\nexport TWIG_PORT_B=5044\n"
+    );
+    let o = s.run(&["ports", "52644"]);
+    assert_has(&o, "base port + 44");
+}
+
+#[test]
+fn ports_reach_herdr_panes_hooks_and_vscode() {
+    let s = ports_sandbox();
+    let log = herdr_builder_stub(&s);
+    let hook_log = s.path("hook.log");
+    append_config(
+        &s,
+        &format!(
+            "\n[repos.b.hooks]\npost_create = [\"echo \\\"$PORT $TWIG_PORT_A\\\" >> {}\"]\n",
+            hook_log.display()
+        ),
+    );
+    assert_exit(&s.run(&["new", "7", "x", "--repos", "a,b", "--no-ado"]), 0);
+    let calls = fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.contains("workspace create")
+            && calls.contains("--env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"),
+        "{calls}"
+    );
+    assert!(
+        calls.contains(
+            "--label run --no-focus --env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"
+        ),
+        "{calls}"
+    );
+    assert_eq!(fs::read_to_string(&hook_log).unwrap(), "5007 4207\n");
+    let ws: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(s.path("wt/7/7.code-workspace")).unwrap())
+            .unwrap();
+    assert_eq!(ws["tasks"]["tasks"][0]["options"]["env"]["PORT"], "4207");
+    assert_eq!(
+        ws["settings"]["terminal.integrated.env.linux"]["TWIG_PORT_B"],
+        "5007"
+    );
+}
+
+#[test]
+fn ports_shared_with_another_card_only_warn() {
+    let s = ports_sandbox();
+    assert_exit(&s.run(&["new", "44", "x", "--no-ado"]), 0);
+    let o = s.run(&["new", "144", "x", "--no-ado"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "card 44 uses the same ports (a 4244)");
+}
+
+#[test]
+fn cards_without_ports_have_no_ports_file_and_span_is_validated() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado"]), 0);
+    assert!(!s.path("wt/7/.twig-ports.env").exists());
+    assert_has(&s.run(&["ports", "7"]), "has no ports");
+    append_config(&s, "\n[ports]\nspan = 0\n");
+    assert_has(&s.run(&["ls"]), "ports.span must be at least 1");
+}
+
+// ───────────────────────── repo env ─────────────────────────
+
+#[test]
+fn repo_env_is_expanded_per_card_and_reaches_panes_hooks_and_vscode() {
+    let s = ports_sandbox();
+    let log = herdr_builder_stub(&s);
+    let hook_log = s.path("hook.log");
+    let cfg = fs::read_to_string(&s.config).unwrap().replace(
+        "[repos.b]\nport = 5000\n",
+        &format!(
+            "[repos.b]\nport = 5000\nrun = \"api\"\nenv = {{ Cors__Origins__0 = \"http://localhost:$TWIG_PORT_A\", Front = \"${{TWIG_PORT_NOPE:-4200}}\", Card = \"$TWIG_CARD\" }}\n\n[repos.b.hooks]\npost_create = [\"echo \\\"$Cors__Origins__0 $Front $Card\\\" >> {}\"]\n",
+            hook_log.display()
+        ),
+    );
+    fs::write(&s.config, cfg).unwrap();
+    assert_exit(
+        &s.run(&["new", "52644", "x", "--repos", "a,b", "--no-ado"]),
+        0,
+    );
+
+    assert_eq!(
+        fs::read_to_string(&hook_log).unwrap(),
+        "http://localhost:4244 4200 52644\n"
+    );
+    let calls = fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.contains("--env PORT=5044 --env Cors__Origins__0=http://localhost:4244 --env Front=4200 --env Card=52644"),
+        "{calls}"
+    );
+    let ws: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(s.path("wt/52644/52644.code-workspace")).unwrap())
+            .unwrap();
+    let task_env = &ws["tasks"]["tasks"][1]["options"]["env"];
+    assert_eq!(task_env["Cors__Origins__0"], "http://localhost:4244");
+    let ctx = fs::read_to_string(s.path("wt/52644/CLAUDE.md")).unwrap();
+    assert!(
+        ctx.contains("with `Cors__Origins__0=http://localhost:4244`"),
+        "{ctx}"
+    );
+}
+
+#[test]
+fn repo_env_with_an_invalid_name_is_a_config_error() {
+    let s = new_sandbox();
+    append_config(&s, "\n[repos.a.env]\n\"BAD-NAME\" = \"x\"\n");
+    let o = s.run(&["ls"]);
+    assert_exit(&o, 1);
+    assert_has(
+        &o,
+        "repos.a.env: `BAD-NAME` is not a valid environment variable name",
+    );
+}

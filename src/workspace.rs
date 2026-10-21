@@ -7,7 +7,7 @@ use serde_json::{json, Map, Value};
 
 use crate::card;
 use crate::config::Config;
-use crate::ui;
+use crate::{procenv, ui};
 
 pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
     let dir = cfg.card_dir(id);
@@ -37,7 +37,10 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
             "label": task_label,
             "type": "shell",
             "command": r.run,
-            "options": { "cwd": dir.join(repo) },
+            "options": {
+                "cwd": dir.join(repo),
+                "env": env_map(&procenv::of(cfg, id, Some(repo))),
+            },
             "isBackground": true,
             "problemMatcher": []
         }));
@@ -52,6 +55,9 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
             "problemMatcher": []
         }));
     }
+
+    let mut terminal_env = env_map(&procenv::of(cfg, id, None));
+    terminal_env.insert("CARD_ID".into(), json!(id));
 
     let mut ws = Map::new();
     ws.insert("folders".into(), Value::Array(folders));
@@ -92,7 +98,7 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
                 "**/.nx/**": true
             },
             "git.openRepositoryInParentFolders": "never",
-            "terminal.integrated.env.linux": { "CARD_ID": id }
+            "terminal.integrated.env.linux": terminal_env
         }),
     );
     ws.insert(
@@ -130,6 +136,10 @@ pub fn write(cfg: &Config, id: &str, title: &str) -> Result<()> {
         ui::ok(format!("VS Code workspace generated (color {color})"));
     }
     Ok(())
+}
+
+fn env_map(env: &[(String, String)]) -> Map<String, Value> {
+    env.iter().map(|(k, v)| (k.clone(), json!(v))).collect()
 }
 
 pub fn debug_count(cfg: &Config, repos: &[String]) -> usize {

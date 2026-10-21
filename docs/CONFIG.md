@@ -55,7 +55,8 @@ path        = ""                  # empty = <paths.repos>/api
 label       = "⚙️ API"            # name in VS Code
 short       = "api"               # tab/pane name in herdr
 default     = true                # included when --repos isn't passed
-run         = "dotnet watch run --project src/Api"
+run         = "dotnet watch run --project src/Api --urls http://localhost:$PORT"
+port        = 5000                # base port; each card gets its own (see [ports])
 debug       = ["Debug: Api"]
 local_files = ["src/*/appsettings.Development.json"]
 
@@ -63,7 +64,8 @@ local_files = ["src/*/appsettings.Development.json"]
 label   = "🌐 Web"
 short   = "web"
 default = true
-run     = "pnpm start"
+run     = "pnpm start -- --port $TWIG_PORT_WEB"
+port    = 4200
 ```
 
 ## Changing it from the command line
@@ -163,6 +165,79 @@ it from the environment. `twig doctor` reports the setting.
 | `branch_prefix` | `{ default = "feat" }` | new branch prefix per work item type; `default` for the rest |
 | `sync` | `"rebase"` | how `twig sync` brings the base branch in: `"rebase"` or `"merge"` (overridden by `--rebase`/`--merge`) |
 
+### `[ports]`
+
+Per-card dev server ports, so two cards on the same repo can run at the same time. A repo
+opts in with `port = <base>` in `[repos.<name>]`; in a card it gets `base + offset`.
+
+| Field | Default | Description |
+|---|---|---|
+| `span` | `100` | the offset is `1 + (card number - 1) % span`, so it is in `1..=span` |
+
+The offset is **deterministic**: it only depends on the card number (ids that aren't numbers
+use a stable hash of the id), so the same card always gets the same ports, after `rm` + `new`
+or on another machine, and there is no allocation state to keep. With the default span, card
+`52644` gets offset `44`: `ui` with `port = 4200` runs on `4244`, `api` with `port = 5000` on
+`5044`. The offset is never `0`, so a card never takes the base port of the main clone.
+
+Two cards whose numbers are equal modulo `span` share ports: `new`/`add-repo`/`refresh` warn
+about it (and about a port some other process is already listening on), but don't change them.
+
+The ports reach the processes as **environment variables**, and the project's `run` command
+(or its own config) decides how to use them, falling back to its default when they are unset:
+
+| Variable | Value |
+|---|---|
+| `TWIG_PORT_<REPO>` | the port of each repo of the card (name upper-cased, non-alphanumerics as `_`: `my-api` → `TWIG_PORT_MY_API`), so a front end can point at the same card's back end |
+| `PORT` | the repo's own port (many dev servers read it by themselves) |
+
+For variables named the way your project expects (`ASPNETCORE_URLS`, `Cors__Origins__0`,
+`VITE_API_URL`...), use the repo's [`env`](#repo-environment-env). They are set on every herdr
+pane twig creates for the card (`agent` and `run` tabs), on the
+`install`/`post_create` commands and hooks, on the VS Code tasks (`run: <repo>`, `PORT` too) and
+terminals, and written to `<card>/.twig-ports.env`. Outside those, `twig ports --env` prints
+`export` lines. A herdr pane that already existed keeps its old environment: close it and run
+`twig herdr <id>` to recreate it.
+
+```toml
+[repos.web]
+run  = "ng serve --port ${TWIG_PORT_WEB:-4200}"
+port = 4200
+
+[repos.api]
+run  = "dotnet run --urls http://localhost:${PORT:-5000}"
+port = 5000
+```
+
+### Repo environment (`env`)
+
+`[repos.<name>] env` is a table of environment variables that twig gives to every process of
+that repo in a card: its herdr panes (`agent` and `run`), `install`/`post_create`, its hooks and
+its VS Code task. It is the bridge between twig's variables and the names **your project**
+already reads, so the project's code never needs to know about twig:
+
+```toml
+[repos.frota-api]
+port = 5000
+run  = "dotnet watch run"
+env  = { ASPNETCORE_URLS = "http://localhost:$PORT", Cors__Origins__0 = "http://localhost:${TWIG_PORT_FROTA_WEB:-4200}" }
+```
+
+In card `52644` the API listens on `5044` and allows the same card's front end
+(`http://localhost:4244`) in CORS; in a card without the front end, `TWIG_PORT_FROTA_WEB` is
+unset and the default (`4200`, the main clone's front end) is used.
+
+- Values are expanded **by twig, per card**: `$VAR`, `${VAR}`, `${VAR:-default}` (default also
+  when the variable is empty), `$$` for a literal `$`. An unknown variable without a default
+  becomes empty, like in the shell.
+- Available: `PORT`, every `TWIG_PORT_<REPO>`, `TWIG_CARD`, the entries above in the same table,
+  then the environment twig runs in (`$HOME`...).
+- Names must be valid variable names (`[A-Za-z_][A-Za-z0-9_]*`); the config is rejected otherwise.
+- The context file shows each repo's expanded `env` under "How to run", so the agent knows it.
+- Like `run`, it can come from the repo's `.twig.toml` or be changed for one card in the card's
+  `.twig.toml`. A pane that already existed keeps its old environment: close it and run
+  `twig herdr <id>`.
+
 ### `[worktree]`
 
 | Field | Default | Description |
@@ -258,6 +333,8 @@ post_create = ["echo created $TWIG_CARD_ID"]
 | `default` | `false` | included in the card when the user doesn't pass `--repos` |
 | `run` | — | command to start the project: becomes a VS Code task and a pane in herdr's `run` tab |
 | `autorun` | `true` | `false` = don't start it in herdr's `run` tab (still a VS Code task); only applies with `run` |
+| `port` | — | base dev server port; each card gets `port + offset` as `TWIG_PORT_<REPO>` / `PORT` (see [`[ports]`](#ports)) |
+| `env` | `{}` | extra environment variables of the repo's processes in a card; values may use `$VAR`, `${VAR}`, `${VAR:-default}` (see [Repo environment](#repo-environment-env)) |
 | `install` | — | dependency install command (e.g. `pnpm install`), used by `--install` or `worktree.auto_install`; without it, the repo is skipped |
 | `post_create` | `[]` | extra shell commands run in the worktree after `install` (e.g. `["cp .env.example .env", "dotnet ef database update"]`). Env: `TWIG_CARD`, `TWIG_REPO`. Stops at the first failure (warns only) |
 | `hooks` | — | per-repo lifecycle hooks, see [`[hooks]`](#hooks-and-reposnamehooks) |
@@ -302,4 +379,5 @@ When the user passes `--repos x` and `x` isn't registered, `twig` registers it:
 
 - Per-repo override (versioned file such as `.twig.toml`) and via environment variable,
   and the precedence order between them.
-- Per-project-type strategies (run and ports), once the `type` field comes back.
+- Per-project-type strategies (detect Angular/.NET/Node and set the port without touching
+  `run`), once the `type` field comes back.

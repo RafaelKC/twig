@@ -7,7 +7,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::config::Config;
-use crate::{card, herdr, sys, ui};
+use crate::{card, herdr, ports, sys, ui};
 
 /// Commits ahead/behind of a reference.
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -28,6 +28,8 @@ pub struct RepoStatus {
     /// The remote branch compared against (upstream, else `origin/<branch>`), if any.
     pub origin_ref: Option<String>,
     pub vs_origin: Option<AheadBehind>,
+    /// The card's dev server port for this repo (`port` in the config + the card's offset).
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -68,7 +70,7 @@ fn ahead_behind(wt: &Path, reference: &str) -> Option<AheadBehind> {
     })
 }
 
-fn repo_status(cfg: &Config, dir: &Path, repo: &str) -> RepoStatus {
+fn repo_status(cfg: &Config, dir: &Path, repo: &str, port: Option<u16>) -> RepoStatus {
     let wt = dir.join(repo);
     let branch = sys::git_current_branch(&wt).filter(|b| b != "HEAD");
     let dirty = sys::output(sys::git(&wt).args(["status", "--porcelain"]))
@@ -103,14 +105,19 @@ fn repo_status(cfg: &Config, dir: &Path, repo: &str) -> RepoStatus {
         vs_base,
         origin_ref,
         vs_origin,
+        port,
     }
 }
 
 pub fn collect(cfg: &Config, id: &str) -> CardStatus {
     let dir = cfg.card_dir(id);
+    let ports = ports::of(cfg, id);
     let repos = card::repos_ordered(cfg, &dir)
         .iter()
-        .map(|r| repo_status(cfg, &dir, r))
+        .map(|r| {
+            let port = ports.iter().find(|(p, _)| p == r).map(|(_, n)| *n);
+            repo_status(cfg, &dir, r, port)
+        })
         .collect();
     let (workspace, agents_running) = herdr::card_presence(id);
     CardStatus {
@@ -151,8 +158,9 @@ fn print_card(s: &CardStatus, detailed: bool) {
         } else {
             String::new()
         };
+        let port = r.port.map(|p| format!("  :{p}")).unwrap_or_default();
         println!(
-            "      {:<18} {branch}{dirty}  base {}  origin {}",
+            "      {:<18} {branch}{dirty}  base {}  origin {}{port}",
             r.repo,
             fmt_ab(r.vs_base),
             fmt_ab(r.vs_origin)
