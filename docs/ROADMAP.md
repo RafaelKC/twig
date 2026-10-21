@@ -25,7 +25,7 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 
 Not scheduled yet; grouped by theme.
 
-- **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
+- **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab (each one an implementation of the `Provider` trait in `src/provider/`)
 - **Editor:** [#29](https://github.com/RafaelKC/twig/issues/29) Neovim as a first-class editor target
 - **Templates:** pick the template automatically from the work item type/tags (follow-up on [#14](https://github.com/RafaelKC/twig/issues/14))
 

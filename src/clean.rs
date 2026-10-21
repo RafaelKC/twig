@@ -7,8 +7,9 @@ use anyhow::{bail, Result};
 
 use crate::card::{self, CardRef};
 use crate::config::Config;
-use crate::pr::{self, PrState};
-use crate::{commands, provider, sys, templates, ui};
+use crate::pr;
+use crate::provider::{self, PrState};
+use crate::{commands, sys, templates, ui};
 
 /// Why a card can go.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,7 +52,10 @@ fn repo_merged(cfg: &Config, wt: &Path, base: &str) -> bool {
     let Some(branch) = sys::git_current_branch(wt).filter(|b| b != "HEAD") else {
         return false;
     };
-    if pr::find(cfg, wt, &branch, PrState::Merged).is_some() {
+    if provider::current(cfg)
+        .find_pr(wt, &branch, PrState::Merged)
+        .is_some()
+    {
         return true;
     }
     let _ = sys::output(sys::git(wt).args(["fetch", "origin", base, "--quiet"]));
@@ -76,7 +80,7 @@ fn reason(cfg: &Config, id: &str) -> Option<Reason> {
     let first = repos.first().and_then(|r| cfg.repo_path(r));
     // the cached state is from when the card was created: ask the provider again
     if let Some(info) = provider::refetch(cfg, &cref, first.as_deref()) {
-        if provider::is_finished(cfg.provider.default, &info.state) {
+        if provider::current(cfg).is_finished(&info.state) {
             return Some(Reason::Closed(info.state));
         }
     }

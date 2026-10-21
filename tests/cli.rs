@@ -123,12 +123,21 @@ impl Sandbox {
     }
 
     fn run_with(&self, mut c: Command, stdin: &str) -> Output {
-        let mut child = c
-            .stdin(Stdio::piped())
+        c.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
+            .stderr(Stdio::piped());
+        // a file just written as executable (stub, copied binary) can still be open for writing
+        // in a child another test thread is forking: ETXTBSY until that child execs
+        let mut tries = 0;
+        let mut child = loop {
+            match c.spawn() {
+                Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 50 => {
+                    tries += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                r => break r.unwrap(),
+            }
+        };
         child
             .stdin
             .take()
