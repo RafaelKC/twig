@@ -11,6 +11,7 @@ mod hooks;
 mod memo;
 mod ports;
 mod pr;
+mod procenv;
 mod provider;
 mod selfmgmt;
 mod status;

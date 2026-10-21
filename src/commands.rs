@@ -7,7 +7,7 @@ use anyhow::{bail, Result};
 use crate::config::{Config, OpenTarget};
 use crate::hooks::{self, Event};
 use crate::provider::{self, CardInfo};
-use crate::{card, claude_md, herdr, memo, ports, sys, templates, ui, workspace};
+use crate::{card, claude_md, herdr, memo, ports, procenv, sys, templates, ui, workspace};
 
 pub struct NewArgs {
     pub id: String,
@@ -252,7 +252,7 @@ fn setup(cfg: &Config, id: &str, repos: &[String]) {
             let mut cmd = sys::shell(c, &dir.join(repo));
             cmd.env("TWIG_CARD", id)
                 .env("TWIG_REPO", repo)
-                .envs(ports::env(cfg, id, Some(repo)));
+                .envs(procenv::of(cfg, id, Some(repo)));
             if let Err(e) = sys::run(&mut cmd) {
                 ui::warn(format!("[{repo}] `{c}` failed: {e:#}"));
                 break;
