@@ -3,7 +3,7 @@
 #
 #   scripts/release.sh 0.2.0          1. on main: branch release/v0.2.0, bump the version, run the
 #                                        tests, commit "release v0.2.0", push the branch, open a PR
-#   (merge the PR once `check` and `test-macos` pass)
+#   (merge the PR once `check`, `test-macos` and `windows` pass)
 #   scripts/release.sh --tag 0.2.0    2. on updated main: verify the release commit is there, create
 #                                        the annotated tag v0.2.0 and push only the tag
 #
