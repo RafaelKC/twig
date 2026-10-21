@@ -43,6 +43,12 @@ pub struct Config {
     /// Template of the card being operated on (see `templates.rs`); not part of the file.
     #[serde(skip)]
     pub template: Option<crate::templates::Template>,
+    /// The config document with the env overrides applied, the base for a card's layers.
+    #[serde(skip)]
+    doc: toml_edit::DocumentMut,
+    /// `TWIG__*` variables in effect (see `overrides.rs`).
+    #[serde(skip)]
+    pub env: Vec<crate::overrides::EnvOverride>,
 }
 
 /// `[ports]`: how far apart the cards' ports are (see `ports.rs`).
@@ -391,8 +397,23 @@ impl Config {
                 file.display()
             )
         })?;
-        let mut cfg: Config =
-            toml::from_str(&text).with_context(|| format!("invalid config: {}", file.display()))?;
+        let mut doc: toml_edit::DocumentMut = text
+            .parse()
+            .with_context(|| format!("invalid config: {}", file.display()))?;
+        let env = crate::overrides::from_env();
+        crate::overrides::apply_env(&mut doc, &env, false, |d| {
+            toml::from_str::<Config>(&d.to_string()).is_ok()
+        })?;
+        let env_note = if env.is_empty() {
+            String::new()
+        } else {
+            let vars: Vec<&str> = env.iter().map(|e| e.var.as_str()).collect();
+            format!(" (with {})", vars.join(", "))
+        };
+        let mut cfg: Config = toml::from_str(&doc.to_string())
+            .with_context(|| format!("invalid config: {}{env_note}", file.display()))?;
+        cfg.doc = doc;
+        cfg.env = env;
         if cfg.version != 1 {
             bail!("unsupported config version: {} (expected 1)", cfg.version);
         }
@@ -414,6 +435,37 @@ impl Config {
         }
         cfg.file = file;
         Ok(cfg)
+    }
+
+    /// Layer the card's overrides on its repos: each worktree's `.twig.toml`, then the card's
+    /// own `.twig.toml`, then the `TWIG__REPOS__*` variables again (env beats both files).
+    pub fn apply_card(&mut self, id: &str) -> Result<()> {
+        use crate::overrides;
+        let dir = self.card_dir(id);
+        if !dir.is_dir() {
+            return Ok(());
+        }
+        let mut doc = self.doc.clone();
+        for repo in crate::card::repos_in(&dir) {
+            overrides::merge_repo_file(&mut doc, &repo, &dir.join(&repo).join(overrides::FILE))?;
+        }
+        overrides::merge_card_file(&mut doc, &dir.join(overrides::FILE))?;
+        overrides::apply_env(&mut doc, &self.env, true, |d| {
+            toml::from_str::<Config>(&d.to_string()).is_ok()
+        })?;
+        #[derive(Deserialize)]
+        struct Repos {
+            #[serde(default)]
+            repos: IndexMap<String, Repo>,
+        }
+        let layered: Repos = toml::from_str(&doc.to_string()).with_context(|| {
+            format!(
+                "invalid {} override in card {id} (a repo's or the card's)",
+                overrides::FILE
+            )
+        })?;
+        self.repos = layered.repos;
+        Ok(())
     }
 
     pub fn worktrees(&self) -> PathBuf {
@@ -521,7 +573,13 @@ impl Config {
             repos.set_implicit(true);
             doc["repos"] = toml_edit::Item::Table(repos);
         }
-        doc["repos"][name] = toml_edit::Item::Table(table);
+        doc["repos"][name] = toml_edit::Item::Table(table.clone());
+        if self.doc.get("repos").is_none() {
+            let mut repos = toml_edit::Table::new();
+            repos.set_implicit(true);
+            self.doc["repos"] = toml_edit::Item::Table(repos);
+        }
+        self.doc["repos"][name] = toml_edit::Item::Table(table);
         fs::write(&self.file, doc.to_string())
             .with_context(|| format!("could not write {}", self.file.display()))?;
 

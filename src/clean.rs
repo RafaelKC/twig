@@ -93,6 +93,7 @@ fn reason(cfg: &Config, id: &str) -> Option<Reason> {
 fn card_config(id: &str) -> Result<Config> {
     let mut cfg = Config::load()?;
     templates::activate(&mut cfg, id);
+    cfg.apply_card(id)?;
     Ok(cfg)
 }
 

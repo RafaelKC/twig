@@ -177,6 +177,13 @@ fn print_card(s: &CardStatus, detailed: bool) {
     }
 }
 
+/// The config with this card's overrides (ports may differ per card); `None` if they are broken.
+fn card_config(id: &str) -> Option<Config> {
+    let mut c = Config::load().ok()?;
+    c.apply_card(id).ok()?;
+    Some(c)
+}
+
 /// Top-level `--json` shape: always `{"cards": [...]}`, even for a single card.
 #[derive(Debug, Serialize)]
 struct StatusOutput {
@@ -193,7 +200,10 @@ pub fn run(cfg: &Config, id: Option<&str>, json: bool) -> Result<()> {
         None => (
             card::list_cards(cfg)
                 .iter()
-                .map(|id| collect(cfg, id))
+                .map(|id| match card_config(id) {
+                    Some(c) => collect(&c, id),
+                    None => collect(cfg, id),
+                })
                 .collect(),
             false,
         ),

@@ -9,6 +9,7 @@ mod doctor;
 mod herdr;
 mod hooks;
 mod memo;
+mod overrides;
 mod ports;
 mod pr;
 mod procenv;
@@ -367,17 +368,34 @@ fn run(cli: Cli) -> Result<()> {
     let mut cli = cli;
     normalize_ids(&cfg, &mut cli.cmd)?;
     // existing cards keep the agent and hooks of the template they were created from
+    // an existing card brings its template (agent, hooks) and its config overrides
     let card_id = match &cli.cmd {
         Cmd::AddRepo { id, .. }
         | Cmd::Herdr { id }
         | Cmd::Refresh { id, .. }
-        | Cmd::Rm { id, .. } => Some(id.as_str()),
-        Cmd::Pr { id: Some(id), .. } => Some(id.as_str()),
-        Cmd::Open { id: Some(id), .. } | Cmd::Code { id: Some(id) } => Some(id.as_str()),
+        | Cmd::Sync { id, .. }
+        | Cmd::Rm { id, .. }
+        | Cmd::Pr { id: Some(id), .. }
+        | Cmd::Ports { id: Some(id), .. }
+        | Cmd::Status { id: Some(id), .. }
+        | Cmd::OpenCard { id: Some(id) }
+        | Cmd::Memo { card: Some(id), .. }
+        | Cmd::Open { id: Some(id), .. }
+        | Cmd::Code { id: Some(id) } => Some(id.clone()),
+        Cmd::Open { id: None, .. }
+        | Cmd::Code { id: None }
+        | Cmd::Pr { id: None, .. }
+        | Cmd::Ports { id: None, .. }
+        | Cmd::OpenCard { id: None }
+        | Cmd::Memo { card: None, .. } => match card::infer(&cfg) {
+            card::Current::Card(id) => Some(id),
+            card::Current::Dir(_) => None,
+        },
         _ => None,
     };
-    if let Some(id) = card_id {
+    if let Some(id) = &card_id {
         templates::activate(&mut cfg, id);
+        cfg.apply_card(id)?;
     }
     let json = matches!(
         cli.cmd,
@@ -498,10 +516,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Pr { id, draft, dry_run } => match id {
             Some(id) => pr::run(&cfg, &id, draft, dry_run),
             None => match card::infer(&cfg) {
-                card::Current::Card(id) => {
-                    templates::activate(&mut cfg, &id);
-                    pr::run(&cfg, &id, draft, dry_run)
-                }
+                card::Current::Card(id) => pr::run(&cfg, &id, draft, dry_run),
                 card::Current::Dir(dir) => Err(anyhow::anyhow!(
                     "{} is not inside a card; usage: twig pr <id>",
                     dir.display()

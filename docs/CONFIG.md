@@ -73,8 +73,70 @@ port    = 4200
 `twig config get <key>` and `twig config set <key> <value>` read and write one value by dotted
 key (`git.base_branch`, `repos.my-back.run`), validated with the same rules as `twig config edit`
 and keeping comments and formatting. Details: [COMMANDS.md](COMMANDS.md#twig-config-get-key--twig-config-set-key-value).
-Per-repo `.twig.toml`, per-card overrides and env overrides are not implemented yet
-([#19](https://github.com/RafaelKC/twig/issues/19)).
+They work on the file only: the [overrides](#overrides-and-precedence) below are not shown or
+changed by them.
+
+## Overrides and precedence
+
+On top of this file, three layers can change settings. From strongest to weakest:
+
+1. **CLI flags** (`--base`, `--repos`, `--merge`...), for one command;
+2. **environment variables** `TWIG__<SECTION>__<KEY>`;
+3. **the card's `.twig.toml`** (`<worktrees>/<id>/.twig.toml`);
+4. **a repo's `.twig.toml`**, versioned in the repo;
+5. **this file** (the user config), then the built-in defaults.
+
+Every layer goes through the same validation as the config file, so a bad value is an error
+that names the file or the variable.
+
+### A repo's `.twig.toml`
+
+A `.twig.toml` at the root of a repo, committed with it, sets **that repo's** settings for
+everyone on the team, so each person's config doesn't have to repeat them. Keys at the root:
+
+```toml
+# .twig.toml in the repo
+run         = "ng serve --port ${TWIG_PORT_WEB:-4200}"
+install     = "pnpm install"
+port        = 4200
+local_files = [".env.local"]
+env         = { NG_API_URL = "http://localhost:${TWIG_PORT_API:-5000}" }
+```
+
+Allowed: `label`, `short`, `run`, `autorun`, `port`, `env`, `install`, `post_create`,
+`local_files`, `debug`. A key replaces the same key of the user config as a whole (an `env` table
+in the file replaces the config's `env` table, it isn't merged entry by entry). Not allowed: `path` and `default` (they are about your machine and your cards) and
+`hooks` (personal workflow, kept in your own config). In a card, the file is read from the
+card's **worktree**, so a branch that changes it takes effect in that card only; outside cards
+(e.g. `twig doctor`) from the main clone.
+
+### A card's `.twig.toml`
+
+`<worktrees>/<id>/.twig.toml`, written by hand, changes repo settings for one card only (it is
+not versioned, and `twig rm` deletes it with the card). Only `[repos.<name>]` tables, with the
+same keys as a repo's file:
+
+```toml
+[repos.api]
+run  = "dotnet run --launch-profile Mock"
+port = 6000
+```
+
+### Environment variables
+
+`TWIG__<SECTION>__<KEY>=value` overrides any key of this file, for whatever runs with it (a
+shell, a CI job, a herdr pane). Segments are separated by a double underscore and matched
+against the existing keys ignoring case and treating `_` like `-`, so repo names with dashes
+work. Values are read like `twig config set` reads them (numbers, booleans, `a,b` lists).
+
+```bash
+TWIG__GIT__BASE_BRANCH=develop twig new 123     # this card branches from develop
+export TWIG__REPOS__MY_API__RUN="dotnet watch"  # repos.my-api.run
+export TWIG__VSCODE__ENABLED=false
+```
+
+`twig doctor` lists the variables in effect and validates each repo's `.twig.toml` in its main
+clone.
 
 ## Fields
 
@@ -377,7 +439,5 @@ When the user passes `--repos x` and `x` isn't registered, `twig` registers it:
 
 ## Open questions
 
-- Per-repo override (versioned file such as `.twig.toml`) and via environment variable,
-  and the precedence order between them.
 - Per-project-type strategies (detect Angular/.NET/Node and set the port without touching
   `run`), once the `type` field comes back.

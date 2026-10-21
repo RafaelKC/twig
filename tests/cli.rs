@@ -2647,6 +2647,83 @@ fn cards_without_ports_have_no_ports_file_and_span_is_validated() {
     assert_has(&s.run(&["ls"]), "ports.span must be at least 1");
 }
 
+// ───────────────────────── overrides (.twig.toml, env) ─────────────────────────
+
+/// `ports_sandbox` whose repo `a` versions a `.twig.toml` on origin's main.
+fn overrides_sandbox(repo_file: &str) -> Sandbox {
+    let s = ports_sandbox();
+    let main = s.path("repos/a");
+    commit_file(&main, ".twig.toml", repo_file, "twig settings");
+    git_in(&main, &["push", "-q", "origin", "main"]);
+    s
+}
+
+fn ports_env(s: &Sandbox, extra_env: &[(&str, &str)]) -> Output {
+    let mut c = s.cmd(&["ports", "7", "--env"]);
+    for (k, v) in extra_env {
+        c.env(k, v);
+    }
+    s.run_with(c, "")
+}
+
+#[test]
+fn overrides_follow_repo_then_card_then_env() {
+    let s = overrides_sandbox("port = 4300\nrun = \"repo-run\"\n");
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado"]), 0);
+    // the repo's .twig.toml beats the user config
+    assert_eq!(stdout(&ports_env(&s, &[])), "export TWIG_PORT_A=4307\n");
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("`repo-run`"), "{ctx}");
+
+    // the card's .twig.toml beats the repo's
+    fs::write(s.path("wt/7/.twig.toml"), "[repos.a]\nport = 4400\n").unwrap();
+    assert_eq!(stdout(&ports_env(&s, &[])), "export TWIG_PORT_A=4407\n");
+    assert_exit(&s.run(&["refresh", "7"]), 0);
+    let env = fs::read_to_string(s.path("wt/7/.twig-ports.env")).unwrap();
+    assert!(env.contains("TWIG_PORT_A=4407"), "{env}");
+
+    // the environment beats both
+    let o = ports_env(&s, &[("TWIG__REPOS__A__PORT", "4500")]);
+    assert_eq!(stdout(&o), "export TWIG_PORT_A=4507\n");
+}
+
+#[test]
+fn env_override_of_a_global_key_and_invalid_values() {
+    let s = new_sandbox();
+    let mut c = s.cmd(&["new", "7", "x", "--no-ado"]);
+    c.env("TWIG__GIT__BASE_BRANCH", "nope");
+    let o = s.run_with(c, "");
+    // the override is in effect: the branch is created from origin/nope, which doesn't exist
+    assert_exit(&o, 1);
+    assert_has(&o, "origin/nope");
+
+    let mut c = s.cmd(&["ls"]);
+    c.env("TWIG__REPOS__A__PORT", "not-a-port");
+    let o = s.run_with(c, "");
+    assert_exit(&o, 1);
+    assert_has(&o, "TWIG__REPOS__A__PORT");
+
+    let mut c = s.cmd(&["doctor"]);
+    c.env("TWIG__OPEN__DEFAULT", "code");
+    assert_has(
+        &s.run_with(c, ""),
+        "overridden by TWIG__OPEN__DEFAULT (environment)",
+    );
+}
+
+#[test]
+fn repo_file_with_a_forbidden_key_is_an_error_and_doctor_reports_it() {
+    let s = overrides_sandbox("path = \"/tmp\"\n");
+    let o = s.run(&["new", "7", "x", "--no-ado"]);
+    assert_has(&o, "`path` can't be overridden");
+    let o = s.run(&["ports", "7"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "`path` can't be overridden");
+    let d = s.run(&["doctor"]);
+    assert_has(&d, "a: ");
+    assert_has(&d, "`path` can't be overridden");
+}
+
 // ───────────────────────── repo env ─────────────────────────
 
 #[test]
@@ -2698,4 +2775,20 @@ fn repo_env_with_an_invalid_name_is_a_config_error() {
         &o,
         "repos.a.env: `BAD-NAME` is not a valid environment variable name",
     );
+}
+
+#[test]
+fn repo_env_can_come_from_the_repo_and_card_twig_toml() {
+    let s = overrides_sandbox("env = { API = \"x:$PORT\" }\n");
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado"]), 0);
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("with `API=x:4207`"), "{ctx}");
+    fs::write(
+        s.path("wt/7/.twig.toml"),
+        "[repos.a]\nenv = { API = \"card:$TWIG_CARD\" }\n",
+    )
+    .unwrap();
+    assert_exit(&s.run(&["refresh", "7"]), 0);
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("with `API=card:7`"), "{ctx}");
 }
