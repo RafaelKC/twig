@@ -7,7 +7,7 @@ use anyhow::{bail, Result};
 use crate::config::{Config, OpenTarget};
 use crate::hooks::{self, Event};
 use crate::provider::{self, CardInfo};
-use crate::{card, claude_md, herdr, memo, sys, templates, ui, workspace};
+use crate::{card, claude_md, herdr, memo, ports, sys, templates, ui, workspace};
 
 pub struct NewArgs {
     pub id: String,
@@ -211,6 +211,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     }
 
     card::copy_local_files(cfg, &dir);
+    ports::write(cfg, &id)?;
     if cfg.vscode.enabled {
         workspace::write(cfg, &id, &title)?;
     }
@@ -249,7 +250,9 @@ fn setup(cfg: &Config, id: &str, repos: &[String]) {
             any = true;
             ui::info(format!("[{repo}] {c}"));
             let mut cmd = sys::shell(c, &dir.join(repo));
-            cmd.env("TWIG_CARD", id).env("TWIG_REPO", repo);
+            cmd.env("TWIG_CARD", id)
+                .env("TWIG_REPO", repo)
+                .envs(ports::env(cfg, id, Some(repo)));
             if let Err(e) = sys::run(&mut cmd) {
                 ui::warn(format!("[{repo}] `{c}` failed: {e:#}"));
                 break;
@@ -342,6 +345,7 @@ fn regenerate(cfg: &Config, id: &str, info: Option<&CardInfo>) -> Result<()> {
         .first()
         .and_then(|r| sys::git_current_branch(&dir.join(r)))
         .unwrap_or_default();
+    ports::write(cfg, id)?;
     if cfg.vscode.enabled {
         workspace::write(cfg, id, &title)?;
     }

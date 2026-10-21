@@ -13,7 +13,7 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 1. [#4](https://github.com/RafaelKC/twig/issues/4) GitHub `owner/repo#123` ids, `open-card` for `gh` (done, unreleased)
 2. [#12](https://github.com/RafaelKC/twig/issues/12) `twig pr` (done, unreleased)
 3. [#10](https://github.com/RafaelKC/twig/issues/10) `twig clean` (done, unreleased)
-4. [#3](https://github.com/RafaelKC/twig/issues/3) per-card ports, as environment variables of the herdr panes
+4. [#3](https://github.com/RafaelKC/twig/issues/3) per-card ports, deterministic per card, as environment variables of the herdr panes (done, unreleased)
 5. [#19](https://github.com/RafaelKC/twig/issues/19) per-repo `.twig.toml`, per-card and environment overrides
 6. [#5](https://github.com/RafaelKC/twig/issues/5) start the agent with a prompt (a skill/command) when the card is created
 
@@ -87,16 +87,16 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
   - [ ] Angular (`angular.json` / `ng serve --port` / `environment.ts`)
   - [ ] Generic Node (`package.json` scripts, `PORT`)
   - [ ] Others: Vite, Next, Python, Go…
-- [ ] Per-card ports, so two cards can run at the same time ([#3](https://github.com/RafaelKC/twig/issues/3))
+- [x] Per-card ports, so two cards can run at the same time ([#3](https://github.com/RafaelKC/twig/issues/3)): `port` per repo, deterministic offset from the card number, `TWIG_PORT_<REPO>`/`PORT` in herdr panes, hooks and VS Code, `twig ports`
 - [ ] Users can write their own strategy (script/plugin in the config folder, with a contract: `detect`, `run_cmd`, `apply_port`, `default_port_base`)
-- [ ] Wire front ↔ back automatically (front pointing at the same card's back-end port)
+- [ ] Wire front ↔ back automatically (front pointing at the same card's back-end port; today by hand through `$TWIG_PORT_<BACK>`)
 
 ## Commands (ideas, see issues)
 
 - [x] `twig rm` also removes the herdr workspace, blocks on a running agent, `-f` ([#6](https://github.com/RafaelKC/twig/issues/6))
 - [x] `twig open [id] [default|herdr|code]` ([#1](https://github.com/RafaelKC/twig/issues/1))
 - [x] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7); `gh` since [#4](https://github.com/RafaelKC/twig/issues/4))
-- [x] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9); ports and PR info pending #3/#12)
+- [x] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9); ports since [#3](https://github.com/RafaelKC/twig/issues/3); PR info pending)
 - [x] `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
 - [x] `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12))
 - [x] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10))

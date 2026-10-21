@@ -9,6 +9,7 @@ mod doctor;
 mod herdr;
 mod hooks;
 mod memo;
+mod ports;
 mod pr;
 mod provider;
 mod selfmgmt;
@@ -153,6 +154,16 @@ enum Cmd {
         /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
         #[arg(long)]
         json: bool,
+    },
+    /// Show the card's dev server ports (`port` of each repo + the card's offset).
+    ///
+    /// Without <ID>, the card of the current directory. `--env` prints `export` lines, for a
+    /// terminal outside herdr: `eval "$(twig ports --env)"`.
+    Ports {
+        id: Option<String>,
+        /// Print `export TWIG_PORT_<REPO>=<port>` lines.
+        #[arg(long)]
+        env: bool,
     },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
@@ -467,6 +478,16 @@ fn run(cli: Cli) -> Result<()> {
             sync::run(&cfg, &id, mode, dry_run)
         }
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
+        Cmd::Ports { id, env } => match id {
+            Some(id) => ports::show(&cfg, &id, env),
+            None => match card::infer(&cfg) {
+                card::Current::Card(id) => ports::show(&cfg, &id, env),
+                card::Current::Dir(dir) => Err(anyhow::anyhow!(
+                    "{} is not inside a card; usage: twig ports <id>",
+                    dir.display()
+                )),
+            },
+        },
         Cmd::Clean {
             dry_run,
             yes,
@@ -516,6 +537,7 @@ fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
         | Cmd::Code { id: Some(id) }
         | Cmd::Status { id: Some(id), .. }
         | Cmd::Pr { id: Some(id), .. }
+        | Cmd::Ports { id: Some(id), .. }
         | Cmd::Memo { card: Some(id), .. } => Some(id),
         _ => None,
     };

@@ -34,6 +34,8 @@ pub struct Config {
     #[serde(default)]
     pub templates: TemplatesCfg,
     #[serde(default)]
+    pub ports: Ports,
+    #[serde(default)]
     pub repos: IndexMap<String, Repo>,
 
     #[serde(skip)]
@@ -41,6 +43,20 @@ pub struct Config {
     /// Template of the card being operated on (see `templates.rs`); not part of the file.
     #[serde(skip)]
     pub template: Option<crate::templates::Template>,
+}
+
+/// `[ports]`: how far apart the cards' ports are (see `ports.rs`).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Ports {
+    /// A card's offset is in `1..=span`; cards whose numbers match modulo `span` share ports.
+    pub span: u16,
+}
+
+impl Default for Ports {
+    fn default() -> Self {
+        Self { span: 100 }
+    }
 }
 
 /// `[templates]`: only the default; the templates themselves live in `templates.toml`.
@@ -290,6 +306,8 @@ pub struct Repo {
     pub default: bool,
     pub run: String,
     pub autorun: bool,
+    /// Base dev server port; each card gets `port + offset` (see `ports.rs`).
+    pub port: Option<u16>,
     pub install: String,
     pub post_create: Vec<String>,
     pub hooks: Hooks,
@@ -306,6 +324,7 @@ impl Default for Repo {
             default: false,
             run: String::new(),
             autorun: true,
+            port: None,
             install: String::new(),
             post_create: vec![],
             hooks: Hooks::default(),
@@ -367,6 +386,9 @@ impl Config {
         let cf = cfg.ai.context_file();
         if cf.contains(['/', '\\']) {
             bail!("agent.context_file must be a file name, not a path: {cf}");
+        }
+        if cfg.ports.span == 0 {
+            bail!("ports.span must be at least 1");
         }
         if cfg
             .templates

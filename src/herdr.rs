@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::{card, sys, ui};
+use crate::{card, ports, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
     let out = sys::output(Command::new("herdr").args(args))?;
@@ -156,10 +156,27 @@ fn tab_panes(ws: &str, tab: &str) -> Result<Vec<(String, String, String)>> {
         .collect())
 }
 
+/// `--env K=V` arguments for a new pane of `repo` (the card's ports, see `ports.rs`).
+fn env_args(cfg: &Config, id: &str, repo: &str) -> Vec<String> {
+    ports::env(cfg, id, Some(repo))
+        .into_iter()
+        .flat_map(|(k, v)| ["--env".to_string(), format!("{k}={v}")])
+        .collect()
+}
+
+fn with_env<'a>(args: &[&'a str], env: &'a [String]) -> Vec<&'a str> {
+    let mut all = args.to_vec();
+    all.extend(env.iter().map(String::as_str));
+    all
+}
+
 /// Make sure a repo has a pane in a tab. Creates the tab if missing; an existing pane
 /// is left alone unless `force` (root pane just created along with the workspace).
+/// New panes get the card's ports as environment variables.
+#[allow(clippy::too_many_arguments)]
 fn ensure_panel(
     cfg: &Config,
+    id: &str,
     ws: &str,
     tab_label: &str,
     repo: &str,
@@ -168,19 +185,23 @@ fn ensure_panel(
     mut force: bool,
 ) -> Result<()> {
     let cwd_s = cwd.to_string_lossy().into_owned();
+    let env = env_args(cfg, id, repo);
     let pane = match find_tab(ws, tab_label)? {
         None => {
-            let v = herdr(&[
-                "tab",
-                "create",
-                "--workspace",
-                ws,
-                "--cwd",
-                &cwd_s,
-                "--label",
-                tab_label,
-                "--no-focus",
-            ])?;
+            let v = herdr(&with_env(
+                &[
+                    "tab",
+                    "create",
+                    "--workspace",
+                    ws,
+                    "--cwd",
+                    &cwd_s,
+                    "--label",
+                    tab_label,
+                    "--no-focus",
+                ],
+                &env,
+            ))?;
             force = true;
             str_at(&v, "/result/root_pane/pane_id")?
         }
@@ -196,16 +217,19 @@ fn ensure_panel(
                         .map(|p| p.0.clone())
                         .context("herdr tab without panes")?;
                     let dir = if panes.len() <= 1 { "right" } else { "down" };
-                    let v = herdr(&[
-                        "pane",
-                        "split",
-                        &last,
-                        "--direction",
-                        dir,
-                        "--cwd",
-                        &cwd_s,
-                        "--no-focus",
-                    ])?;
+                    let v = herdr(&with_env(
+                        &[
+                            "pane",
+                            "split",
+                            &last,
+                            "--direction",
+                            dir,
+                            "--cwd",
+                            &cwd_s,
+                            "--no-focus",
+                        ],
+                        &env,
+                    ))?;
                     force = true;
                     str_at(&v, "/result/pane/pane_id")?
                 }
@@ -235,15 +259,19 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
         Some(ws) => (ws, false),
         None => {
             let cwd = dir.join(first).to_string_lossy().into_owned();
-            let v = herdr(&[
-                "workspace",
-                "create",
-                "--cwd",
-                &cwd,
-                "--label",
-                id,
-                "--no-focus",
-            ])?;
+            let env = env_args(cfg, id, first);
+            let v = herdr(&with_env(
+                &[
+                    "workspace",
+                    "create",
+                    "--cwd",
+                    &cwd,
+                    "--label",
+                    id,
+                    "--no-focus",
+                ],
+                &env,
+            ))?;
             let ws = str_at(&v, "/result/workspace/workspace_id")?;
             herdr_quiet(&["tab", "rename", &str_at(&v, "/result/tab/tab_id")?, "agent"]);
             ui::ok(format!("herdr workspace #{id} created"));
@@ -254,6 +282,7 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
     for (i, repo) in repos.iter().enumerate() {
         ensure_panel(
             cfg,
+            id,
             &ws,
             "agent",
             repo,
@@ -267,7 +296,7 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
         if r.run.is_empty() || !r.autorun {
             continue;
         }
-        ensure_panel(cfg, &ws, "run", repo, &r.run, &dir.join(repo), false)?;
+        ensure_panel(cfg, id, &ws, "run", repo, &r.run, &dir.join(repo), false)?;
     }
     Ok(ws)
 }
