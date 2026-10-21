@@ -6,16 +6,9 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 
 ## Releases
 
-### Next: v0.4.0
+### Next: v0.5.0
 
-"GitHub end to end, close the card's loop, run several cards at once". In order:
-
-1. [#4](https://github.com/RafaelKC/twig/issues/4) GitHub `owner/repo#123` ids, `open-card` for `gh` (done, unreleased)
-2. [#12](https://github.com/RafaelKC/twig/issues/12) `twig pr` (done, unreleased)
-3. [#10](https://github.com/RafaelKC/twig/issues/10) `twig clean` (done, unreleased)
-4. [#3](https://github.com/RafaelKC/twig/issues/3) per-card ports, deterministic per card, as environment variables of the herdr panes (done, unreleased)
-5. [#19](https://github.com/RafaelKC/twig/issues/19) per-repo `.twig.toml`, per-card and environment overrides (done, unreleased)
-6. [#5](https://github.com/RafaelKC/twig/issues/5) start the agent with a prompt (a skill/command) when the card is created (done, unreleased)
+Not planned yet; pick from [Later](#later).
 
 ### In development
 
@@ -29,7 +22,7 @@ Not scheduled yet; grouped by theme.
 - **Editor:** [#29](https://github.com/RafaelKC/twig/issues/29) Neovim as a first-class editor target
 - **Templates:** pick the template automatically from the work item type/tags (follow-up on [#14](https://github.com/RafaelKC/twig/issues/14))
 
-Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates.toml`, `twig memo` in development; on top of v0.2.5's `status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hint, CI on PRs and branch rules on `main`, PR-based release flow; on top of v0.2.0's `rm` that closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
+Current: v0.4.0 (GitHub `owner/repo#123` ids and `open-card` for `gh` ([#4](https://github.com/RafaelKC/twig/issues/4)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12)), `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), per-card deterministic ports with named ports and the repo `env` ([#3](https://github.com/RafaelKC/twig/issues/3)), `.twig.toml` / card / `TWIG__*` overrides ([#19](https://github.com/RafaelKC/twig/issues/19)), `--prompt` / `agent_prompt` ([#5](https://github.com/RafaelKC/twig/issues/5)), the `Provider` trait, dynamic shell completions enabled in the shell rc, `twig update` refreshing the Codex skill, native Windows in beta with `install.ps1`; on top of v0.3.0's `config get/set`, lifecycle hooks, card templates in `templates.toml`, `twig memo` in development; on top of v0.2.5's `status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hint, CI on PRs and branch rules on `main`, PR-based release flow; on top of v0.2.0's `rm` that closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
 
 ## Product and name
 

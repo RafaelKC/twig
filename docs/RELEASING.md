@@ -6,7 +6,7 @@
 
 ```bash
 scripts/release.sh 0.2.0          # 1. open the release PR
-# wait for `check` and `test-macos`, then merge the PR
+# wait for `check`, `test-macos` and `windows`, then merge the PR
 git switch main && git pull
 scripts/release.sh --tag 0.2.0    # 2. tag the merged release commit
 ```
@@ -32,7 +32,7 @@ Both steps refuse to run if the tag already exists locally or on `origin`.
 Recommended ruleset (Settings > Rules > Rulesets), configured by hand in GitHub:
 
 - **Branch `main`**: require a pull request before merging; require the status checks
-  `check` and `test-macos` (from [`ci.yml`](../.github/workflows/ci.yml)), with the branch up to date;
+  `check`, `test-macos` and `windows` (from [`ci.yml`](../.github/workflows/ci.yml)), with the branch up to date;
   block force pushes and deletion.
 - **Tags `v*`**: restrict updates and deletion, so a published release tag can't be moved or
   re-created. Tag creation must stay allowed for whoever runs `--tag`.
