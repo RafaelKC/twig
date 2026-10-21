@@ -41,6 +41,8 @@ DevOps ou uma issue do GitHub) o seu próprio sandbox:
 ├── web/                    git worktree na branch do card
 ├── CLAUDE.md               (AGENTS.md no Codex) título, descrição, critérios de aceite, repos e regras do card
 ├── 52644.code-workspace    workspace do VS Code, colorido por card, com tasks de run e um compound de debug
+├── MEMORY.md               memória do card (symlink; sobrevive ao `twig rm`)
+├── .twig-ports.env         as portas de dev do card (4244, 5044: as mesmas para este card, sempre)
 └── .ado.json               work item em cache
 ```
 
@@ -55,14 +57,26 @@ Seus clones principais ficam na `main`. Dois cards nunca pisam um no outro.
   puxados do Azure DevOps (`az`) ou do GitHub (`gh`) para o `CLAUDE.md` do card (`AGENTS.md` no Codex), junto com uma
   seção de "contexto do card" que sobrevive à regeneração.
 - **Workspace no herdr.** Uma aba `agent` com um agente de IA por repo e uma aba `run` que
-  inicia cada projeto. Fechou um painel sem querer? `twig add-repo` traz de volta.
+  inicia cada projeto. Fechou um painel sem querer? `twig add-repo` traz de volta. `twig new
+  --prompt "/entregar {id}"` (ou `agent_prompt` num template) já inicia os agentes trabalhando.
+- **Portas por card.** Um repo com `port = 4200` roda numa porta própria em cada card,
+  determinística por card (card 52644 → `4244`), então vários cards rodam ao mesmo tempo. Todo
+  processo do card recebe a porta de todos os repos (`TWIG_PORT_<REPO>`, `PORT`), e o `env` do
+  repo as traduz para o que o projeto lê: o front chama a API do mesmo card, a API libera esse
+  front no CORS.
+- **Pull requests e limpeza.** `twig pr` faz push e abre um PR por repo, ligados ao card e entre
+  si; `twig clean` remove os cards com branches mergeadas ou work item fechado.
+- **GitHub ou Azure DevOps.** `twig new 52644` ou `twig new acme/web#12`; os dois providers
+  ficam atrás de uma mesma interface.
 - **Workspace no VS Code.** Nomes de pasta amigáveis, cor da barra de título por card, tasks
   `run:` e um compound que depura todos os repos de uma vez.
 - **Arquivos locais.** Arquivos no gitignore (`appsettings.Development.json`, `.env.local`, …)
   são copiados do clone principal para cada worktree.
 - **Hooks de ciclo de vida.** Seus próprios comandos de shell em `post_create`, `pre_rm`, `post_rm`, `post_open` e `post_refresh`, no card todo ou por repo; `--no-hooks` ignora todos.
 - **Templates de card.** Presets nomeados em `~/.config/twig/templates.toml` (repos, agente, install, hooks): `twig new 123 --template fullstack`; as flags têm precedência.
-- **Uma só config.** Tudo que é específico do time fica em `~/.config/twig/config.toml`.
+- **Uma config, mais a do repo.** Suas configurações ficam em `~/.config/twig/config.toml`; um
+  repo pode versionar as dele (`run`, `install`, `port`, `env`) num `.twig.toml`, um card pode
+  sobrescrevê-las em `<card>/.twig.toml`, e variáveis `TWIG__SECAO__CHAVE` sobrescrevem tudo.
 - **Autodiagnóstico.** `twig doctor` verifica ferramentas, logins, config e repos, e encontra
   worktrees órfãos.
 
@@ -208,13 +222,19 @@ short   = "api"                     # nome do painel no herdr
 default = true                      # faz parte de todo card novo
 run     = "dotnet watch run --project src/Api"
 install = "dotnet restore"
+port    = 5000                      # 5000 + o offset do card, em cada card
+env     = { ASPNETCORE_URLS = "http://localhost:$PORT", Cors__Origins__0 = "http://localhost:${TWIG_PORT_WEB:-4200}" }
 local_files = ["src/*/appsettings.Development.json"]
 
 [repos.web]
 label   = "🌐 Web"
 default = true
-run     = "pnpm start"
+run     = "ng serve --port ${PORT:-4200} --proxy-config proxy.conf.js"   # o proxy lê $TWIG_PORT_API
+port    = 4200
 ```
+
+As mesmas configurações de repo podem morar no próprio repo, versionadas, num `.twig.toml`
+([exemplo](examples/repo.twig.toml)).
 
 Exemplo completo: [examples/config.toml](examples/config.toml). Todos os campos:
 [docs/CONFIG.md](docs/CONFIG.md).
@@ -249,7 +269,7 @@ cargo test        # testes unitários + de integração
 
 Inicial e opinativo: feito para um fluxo diário com Azure DevOps + .NET + Angular em
 Linux/WSL, agora generalizado pela config. Veja o [roadmap](docs/ROADMAP.md) para o que vem
-a seguir (portas por card, mais ações do herdr, Windows nativo).
+a seguir (mais ações do herdr, Windows nativo).
 
 ## Licença
 

@@ -176,7 +176,13 @@ Opens the card's workspace in herdr. If it doesn't exist, creates:
 - `agent` tab: one pane per repo running `agent.command` (`claude` or `codex` by default);
 - `run` tab: one pane per repo that has `run` in the config, already starting the project.
 
-If the workspace already exists, it just focuses it. To recreate a closed pane: `twig add-repo <id> <repo>`.
+Every pane it creates gets the card's ports (`TWIG_PORT_<REPO>`, `PORT`) and the repo's `env` as
+environment variables (see [CONFIG.md → `[ports]`](CONFIG.md#ports)). On `twig new`, the agents
+can start with a first message (`--prompt` / the template's `agent_prompt`).
+
+If the workspace already exists, it just focuses it and recreates the panes that are missing
+(a closed pane comes back; `twig add-repo <id> <repo>` does the same). An existing pane keeps the
+environment it was created with: after changing `port`/`env`, close it and run `twig herdr <id>`.
 
 ## `twig code [id]`
 

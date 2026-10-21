@@ -267,6 +267,12 @@ mod tests {
     }
 
     #[test]
+    fn the_example_repo_file_is_valid() {
+        let f = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/repo.twig.toml");
+        assert!(check_repo_file(&f).unwrap());
+    }
+
+    #[test]
     fn card_file_only_takes_repo_tables() {
         let tmp = tempfile::tempdir().unwrap();
         let f = tmp.path().join(FILE);

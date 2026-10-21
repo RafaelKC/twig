@@ -222,3 +222,18 @@ pub const EDIT_TEMPLATE: &str = r#"# twig templates. Format documented in docs/C
 # [fullstack.hooks]                # only for cards created from this template
 # post_create = ["echo created $TWIG_CARD"]
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_example_templates_file_is_valid() {
+        let f = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/templates.toml");
+        let t = parse_file(&f).unwrap();
+        assert!(t.contains_key("fullstack"));
+        assert!(hooks::validate_hooks("x", &t["fullstack"].hooks)
+            .1
+            .is_empty());
+    }
+}
