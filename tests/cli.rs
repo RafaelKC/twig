@@ -2264,3 +2264,154 @@ fn template_edit_creates_and_validates() {
     assert_exit(&s.run_with(c, ""), 0);
     assert_has(&s.run(&["template", "ls"]), "t");
 }
+
+// ───────────────────────── pr ─────────────────────────
+
+/// Card `7` with repos `a` and `b` (local bare origins). `commit_in` get one commit each.
+fn pr_sandbox(provider: &str, commit_in: &[&str]) -> Sandbox {
+    let s = new_sandbox();
+    append_config(&s, &format!("\n[provider]\ndefault = \"{provider}\"\n"));
+    assert_exit(&s.run(&["new", "7", "x", "--repos", "a,b", "--no-ado"]), 0);
+    for r in commit_in {
+        commit_file(&s.path(&format!("wt/7/{r}")), "f.txt", r, "work");
+    }
+    s
+}
+
+/// Fake `gh`: logs `<repo dir> <args>`; `pr list` answers `$GH_OPEN` for repo `b` (else `[]`),
+/// `pr create` prints a URL with the repo dir name.
+fn gh_pr_stub(s: &Sandbox, open_in_b: &str) -> PathBuf {
+    let log = s.path("gh.log");
+    s.stub(
+        "gh",
+        &format!(
+            r#"echo "${{PWD##*/}} $@" >> {log}
+case "$1 $2" in
+  "pr list") if [ "${{PWD##*/}}" = b ]; then echo '{open_in_b}'; else echo '[]'; fi ;;
+  "pr create") echo "https://github.com/acme/${{PWD##*/}}/pull/3" ;;
+esac"#,
+            log = log.display()
+        ),
+    );
+    log
+}
+
+fn origin_has(s: &Sandbox, repo: &str, branch: &str) -> bool {
+    Command::new("git")
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ])
+        .current_dir(s.path(&format!("origin/{repo}.git")))
+        .status()
+        .unwrap()
+        .success()
+}
+
+#[test]
+fn pr_pushes_and_opens_one_pr_per_repo_and_links_them() {
+    let s = pr_sandbox("gh", &["a", "b"]);
+    let log = gh_pr_stub(&s, "[]");
+    let o = s.run(&["pr", "7", "--draft"]);
+    assert_exit(&o, 0);
+    let gh = fs::read_to_string(&log).unwrap();
+    for r in ["a", "b"] {
+        assert!(origin_has(&s, r, "feat/7-x"), "{r} not pushed");
+        assert!(
+            gh.contains(&format!(
+                "{r} pr create --base main --head feat/7-x --title feat/7-x --body Card #7 --draft"
+            )),
+            "{gh}"
+        );
+    }
+    assert!(
+        gh.contains("a pr edit https://github.com/acme/a/pull/3 --body Card #7"),
+        "{gh}"
+    );
+    assert!(gh.contains("- b: https://github.com/acme/b/pull/3"), "{gh}");
+    assert!(gh.contains("- a: https://github.com/acme/a/pull/3"), "{gh}");
+    assert_has(&o, "https://github.com/acme/b/pull/3");
+}
+
+#[test]
+fn pr_skips_repos_without_commits_and_reuses_an_open_pr() {
+    let s = pr_sandbox("gh", &["a"]);
+    let log = gh_pr_stub(&s, "[]");
+    let o = s.run(&["pr", "7"]);
+    assert_exit(&o, 0);
+    assert_has(
+        &o,
+        "[b] feat/7-x has no commits ahead of origin/main, skipped",
+    );
+    let gh = fs::read_to_string(&log).unwrap();
+    assert!(
+        !gh.contains("b pr create") && !gh.contains("pr edit"),
+        "{gh}"
+    );
+
+    let s = pr_sandbox("gh", &["a", "b"]);
+    let log = gh_pr_stub(
+        &s,
+        r#"[{"number":9,"url":"https://github.com/acme/b/pull/9"}]"#,
+    );
+    let o = s.run(&["pr", "7"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "[b] PR already open: https://github.com/acme/b/pull/9");
+    let gh = fs::read_to_string(&log).unwrap();
+    assert!(!gh.contains("b pr create"), "{gh}");
+    // only the PR opened now gets the sibling list
+    assert!(
+        gh.contains("a pr edit") && !gh.contains("b pr edit"),
+        "{gh}"
+    );
+    assert!(gh.contains("- b: https://github.com/acme/b/pull/9"), "{gh}");
+}
+
+#[test]
+fn pr_dry_run_pushes_and_opens_nothing() {
+    let s = pr_sandbox("gh", &["a"]);
+    let log = gh_pr_stub(&s, "[]");
+    let o = s.run(&["pr", "7", "-n"]);
+    assert_exit(&o, 0);
+    assert_has(
+        &o,
+        "[a] would push feat/7-x (1 commit(s)) and open a PR into main",
+    );
+    assert!(!origin_has(&s, "a", "feat/7-x"));
+    assert!(!fs::read_to_string(&log).unwrap().contains("pr create"));
+}
+
+#[test]
+fn pr_with_azure_devops_links_the_work_item() {
+    let s = pr_sandbox("az", &["a"]);
+    let log = s.path("az.log");
+    s.stub(
+        "az",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2 $3" in
+  "repos pr list") echo '[]' ;;
+  "repos pr create") echo '{{"pullRequestId":5,"repository":{{"webUrl":"https://dev.azure.com/o/p/_git/a"}}}}' ;;
+esac"#,
+            log = log.display()
+        ),
+    );
+    let o = s.run(&["pr", "7"]);
+    assert_exit(&o, 0);
+    let az = fs::read_to_string(&log).unwrap();
+    assert!(
+        az.contains("repos pr create --source-branch feat/7-x --target-branch main --title feat/7-x --description Card #7 --work-items 7 --draft false"),
+        "{az}"
+    );
+    assert_has(&o, "https://dev.azure.com/o/p/_git/a/pullrequest/5");
+}
+
+#[test]
+fn pr_without_the_provider_cli_fails() {
+    let s = pr_sandbox("gh", &["a"]);
+    let o = s.run(&["pr", "7"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "`gh` is not on PATH");
+}

@@ -8,6 +8,7 @@ mod doctor;
 mod herdr;
 mod hooks;
 mod memo;
+mod pr;
 mod provider;
 mod selfmgmt;
 mod status;
@@ -190,6 +191,20 @@ enum Cmd {
         #[arg(short = 'n', long)]
         dry_run: bool,
     },
+    /// Push each repo's branch and open one PR per repo that has commits ahead of the base.
+    ///
+    /// Title from the card, description linking the card (and `Closes owner/repo#N` on GitHub;
+    /// the work item is linked on Azure DevOps), the sibling PRs linked to each other. A branch
+    /// that already has an open PR just prints it. Without <ID>, the card of the current directory.
+    Pr {
+        id: Option<String>,
+        /// Open the PRs as drafts.
+        #[arg(long)]
+        draft: bool,
+        /// Show what would be pushed and opened, without doing it.
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+    },
     /// Remove the card's worktrees, folder and herdr workspace (refuses with uncommitted changes or a running agent).
     #[command(alias = "remove")]
     Rm {
@@ -326,6 +341,7 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Herdr { id }
         | Cmd::Refresh { id, .. }
         | Cmd::Rm { id, .. } => Some(id.as_str()),
+        Cmd::Pr { id: Some(id), .. } => Some(id.as_str()),
         Cmd::Open { id: Some(id), .. } | Cmd::Code { id: Some(id) } => Some(id.as_str()),
         _ => None,
     };
@@ -432,6 +448,19 @@ fn run(cli: Cli) -> Result<()> {
             sync::run(&cfg, &id, mode, dry_run)
         }
         Cmd::Prune { dry_run } => commands::prune(&cfg, dry_run),
+        Cmd::Pr { id, draft, dry_run } => match id {
+            Some(id) => pr::run(&cfg, &id, draft, dry_run),
+            None => match card::infer(&cfg) {
+                card::Current::Card(id) => {
+                    templates::activate(&mut cfg, &id);
+                    pr::run(&cfg, &id, draft, dry_run)
+                }
+                card::Current::Dir(dir) => Err(anyhow::anyhow!(
+                    "{} is not inside a card; usage: twig pr <id>",
+                    dir.display()
+                )),
+            },
+        },
         Cmd::Completions { .. }
         | Cmd::Doctor { .. }
         | Cmd::Config { .. }
@@ -461,6 +490,7 @@ fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
         | Cmd::OpenCard { id: Some(id) }
         | Cmd::Code { id: Some(id) }
         | Cmd::Status { id: Some(id), .. }
+        | Cmd::Pr { id: Some(id), .. }
         | Cmd::Memo { card: Some(id), .. } => Some(id),
         _ => None,
     };
