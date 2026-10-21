@@ -4,7 +4,7 @@ use std::fs;
 
 use anyhow::Result;
 
-use crate::config::{Config, ProviderKind};
+use crate::config::Config;
 use crate::provider::{self, CardInfo};
 use crate::{card, sys, ui, workspace};
 
@@ -73,7 +73,7 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
     let url = info
         .map(|i| i.url.clone())
         .filter(|u| !u.is_empty())
-        .unwrap_or_else(|| provider::fallback_url(cfg, &cref));
+        .unwrap_or_else(|| provider::current(cfg).fallback_url(&cref));
     if !url.is_empty() {
         meta += &format!("**Work item:** {url}\n");
     }
@@ -119,24 +119,7 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
         String::new()
     };
 
-    let provider_rule = match cfg.provider.default {
-        ProviderKind::Az => {
-            "- **The `az` CLI is available.** You can query Azure DevOps directly\n  \
-             (`az boards work-item show --id <id>`, `az repos pr list`, etc.) instead of\n  \
-             asking the user.\n"
-                .to_string()
-        }
-        ProviderKind::Gh => {
-            let view = match &cref.repo {
-                Some(r) => format!("gh issue view {} --repo {r}", cref.number),
-                None => "gh issue view <id>".to_string(),
-            };
-            format!(
-                "- **The `gh` CLI is available.** You can query GitHub directly\n  \
-                 (`{view}`, `gh pr list`, etc.) instead of asking the user.\n"
-            )
-        }
-    };
+    let provider_rule = provider::current(cfg).context_hint(&cref);
 
     let memory = crate::memo::context_section(cfg, id).unwrap_or_default();
 

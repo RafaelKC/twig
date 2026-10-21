@@ -387,9 +387,9 @@ pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
     let url = provider::load(cfg, &cref, repo.as_deref())
         .map(|i| i.url)
         .filter(|u| !u.is_empty())
-        .or_else(|| Some(provider::fallback_url(cfg, &cref)).filter(|u| !u.is_empty()))
+        .or_else(|| Some(provider::current(cfg).fallback_url(&cref)).filter(|u| !u.is_empty()))
         .ok_or_else(|| {
-            let cli = cfg.provider.default.name();
+            let cli = provider::current(cfg).cli();
             anyhow::anyhow!("no URL for card {id}: not cached and the provider returned nothing (is `{cli}` installed and logged in?)")
         })?;
     let opener = if cfg!(target_os = "macos") {

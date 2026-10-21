@@ -1,31 +1,14 @@
-//! `twig pr`: one pull request per repo of the card, through `gh` or `az repos`, linked to the
-//! card and to each other. Also the PR lookup that `twig clean` uses.
+//! `twig pr`: one pull request per repo of the card, through the provider, linked to the card
+//! and to each other.
 
 use std::path::Path;
-use std::process::Command;
 
-use anyhow::{bail, Context, Result};
-use regex::Regex;
-use serde_json::Value;
+use anyhow::{bail, Result};
 
 use crate::card::CardRef;
-use crate::config::{Config, ProviderKind};
-use crate::provider::{self, CardInfo};
+use crate::config::Config;
+use crate::provider::{self, CardInfo, NewPr, Pr, PrState, Provider};
 use crate::{card, sys, ui};
-
-/// A pull request of one repo of the card.
-#[derive(Debug, Clone)]
-pub struct Pr {
-    /// `gh`: the PR number; `az`: the pull request id.
-    pub number: String,
-    pub url: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PrState {
-    Open,
-    Merged,
-}
 
 /// The base branch of the card: its template's `base`, else `git.base_branch`.
 pub fn card_base(cfg: &Config) -> String {
@@ -35,113 +18,18 @@ pub fn card_base(cfg: &Config) -> String {
         .unwrap_or_else(|| cfg.git.base_branch.clone())
 }
 
-fn az(cfg: &Config, wt: &Path) -> Command {
-    let mut cmd = Command::new("az");
-    cmd.current_dir(wt);
-    if !cfg.provider.az.organization.is_empty() {
-        cmd.args(["--organization", &cfg.provider.az.organization]);
-    }
-    cmd
-}
-
-fn gh(wt: &Path) -> Command {
-    let mut cmd = Command::new("gh");
-    cmd.current_dir(wt);
-    cmd
-}
-
-/// Web URL of an `az repos pr` result (the `url` field is the REST one).
-fn az_pr(v: &Value) -> Option<Pr> {
-    let id = v["pullRequestId"].as_u64()?.to_string();
-    let web = v["repository"]["webUrl"].as_str().unwrap_or_default();
-    let url = if web.is_empty() {
-        v["url"].as_str().unwrap_or_default().to_string()
-    } else {
-        format!("{web}/pullrequest/{id}")
-    };
-    Some(Pr { number: id, url })
-}
-
-/// The PR of `branch` in this worktree's repo, in the given state (best effort: `None` on any
-/// provider error, so callers treat "can't tell" like "no PR").
-pub fn find(cfg: &Config, wt: &Path, branch: &str, state: PrState) -> Option<Pr> {
-    match cfg.provider.default {
-        ProviderKind::Gh => {
-            sys::which("gh")?;
-            let state = match state {
-                PrState::Open => "open",
-                PrState::Merged => "merged",
-            };
-            let out = sys::output(gh(wt).args([
-                "pr",
-                "list",
-                "--head",
-                branch,
-                "--state",
-                state,
-                "--json",
-                "number,url",
-                "--limit",
-                "1",
-            ]))
-            .ok()?;
-            let v: Value = serde_json::from_str(&out).ok()?;
-            let p = v.as_array()?.first()?;
-            Some(Pr {
-                number: p["number"].as_u64()?.to_string(),
-                url: p["url"].as_str().unwrap_or_default().to_string(),
-            })
-        }
-        ProviderKind::Az => {
-            sys::which("az")?;
-            let status = match state {
-                PrState::Open => "active",
-                PrState::Merged => "completed",
-            };
-            let out = sys::output(az(cfg, wt).args([
-                "repos",
-                "pr",
-                "list",
-                "--source-branch",
-                branch,
-                "--status",
-                status,
-                "--output",
-                "json",
-            ]))
-            .ok()?;
-            let v: Value = serde_json::from_str(&out).ok()?;
-            az_pr(v.as_array()?.first()?)
-        }
-    }
-}
-
-/// `owner/repo` and number of the card's GitHub issue: from the card id, else from its URL.
-fn gh_issue(cref: &CardRef, info: Option<&CardInfo>) -> Option<String> {
-    if let Some(r) = &cref.repo {
-        return Some(format!("{r}#{}", cref.number));
-    }
-    let url = info.map(|i| i.url.as_str())?;
-    let c = Regex::new(r"github\.com/([^/]+/[^/]+)/issues/([0-9]+)")
-        .unwrap()
-        .captures(url)?;
-    Some(format!("{}#{}", &c[1], &c[2]))
-}
-
-/// The PR description: the card link and, for GitHub, the closing keyword.
-fn body(cfg: &Config, cref: &CardRef, info: Option<&CardInfo>) -> String {
+/// The PR description: the card link and whatever the provider adds (e.g. `Closes`).
+fn body(p: &dyn Provider, cref: &CardRef, info: Option<&CardInfo>) -> String {
     let url = info
         .map(|i| i.url.clone())
         .filter(|u| !u.is_empty())
-        .unwrap_or_else(|| provider::fallback_url(cfg, cref));
+        .unwrap_or_else(|| p.fallback_url(cref));
     let mut b = match url.is_empty() {
         true => format!("Card {}", cref.display()),
         false => format!("Card {}: {url}", cref.display()),
     };
-    if cfg.provider.default == ProviderKind::Gh {
-        if let Some(issue) = gh_issue(cref, info) {
-            b += &format!("\n\nCloses {issue}");
-        }
+    if let Some(link) = p.pr_card_link(cref, info) {
+        b += &format!("\n\n{link}");
     }
     b
 }
@@ -156,95 +44,6 @@ fn with_siblings(body: &str, repo: &str, all: &[(String, Pr)]) -> String {
     format!("{body}\n\nOther PRs of this card:\n{}", others.join("\n"))
 }
 
-/// What `twig pr` asks the provider to open.
-struct NewPr<'a> {
-    branch: &'a str,
-    base: &'a str,
-    title: &'a str,
-    body: &'a str,
-    /// Linked on Azure DevOps (`--work-items`).
-    work_item: &'a str,
-    draft: bool,
-}
-
-fn create(cfg: &Config, wt: &Path, p: &NewPr) -> Result<Pr> {
-    let NewPr {
-        branch,
-        base,
-        title,
-        body,
-        work_item,
-        draft,
-    } = *p;
-    match cfg.provider.default {
-        ProviderKind::Gh => {
-            let mut cmd = gh(wt);
-            cmd.args([
-                "pr", "create", "--base", base, "--head", branch, "--title", title, "--body", body,
-            ]);
-            if draft {
-                cmd.arg("--draft");
-            }
-            let out = sys::output(&mut cmd)?;
-            // `gh pr create` prints the URL on the last line
-            let url = out.lines().last().unwrap_or_default().trim().to_string();
-            let number = url.rsplit('/').next().unwrap_or_default().to_string();
-            Ok(Pr { number, url })
-        }
-        ProviderKind::Az => {
-            let mut cmd = az(cfg, wt);
-            cmd.args([
-                "repos",
-                "pr",
-                "create",
-                "--source-branch",
-                branch,
-                "--target-branch",
-                base,
-                "--title",
-                title,
-                "--description",
-                body,
-                "--work-items",
-                work_item,
-                "--draft",
-                if draft { "true" } else { "false" },
-                "--output",
-                "json",
-            ]);
-            let out = sys::output(&mut cmd)?;
-            let v: Value = serde_json::from_str(&out).context("unexpected response from az")?;
-            az_pr(&v).context("az repos pr create returned no pull request id")
-        }
-    }
-}
-
-fn update_body(cfg: &Config, wt: &Path, pr: &Pr, body: &str) -> Result<()> {
-    let mut cmd = match cfg.provider.default {
-        ProviderKind::Gh => {
-            let mut c = gh(wt);
-            c.args(["pr", "edit", &pr.url, "--body", body]);
-            c
-        }
-        ProviderKind::Az => {
-            let mut c = az(cfg, wt);
-            c.args([
-                "repos",
-                "pr",
-                "update",
-                "--id",
-                &pr.number,
-                "--description",
-                body,
-                "--output",
-                "none",
-            ]);
-            c
-        }
-    };
-    sys::output(&mut cmd).map(|_| ())
-}
-
 fn count(wt: &Path, range: &str) -> Option<u32> {
     sys::output(sys::git(wt).args(["rev-list", "--count", range]))
         .ok()
@@ -253,7 +52,8 @@ fn count(wt: &Path, range: &str) -> Option<u32> {
 
 pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
     let dir = card::require_card(cfg, id)?;
-    let cli = cfg.provider.default.name();
+    let p = provider::current(cfg);
+    let cli = p.cli();
     if sys::which(cli).is_none() {
         bail!("`{cli}` is not on PATH (provider.default = \"{cli}\")");
     }
@@ -265,7 +65,7 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
         repos.first().and_then(|r| cfg.repo_path(r)).as_deref(),
     );
     let base = card_base(cfg);
-    let body = body(cfg, &cref, info.as_ref());
+    let body = body(p.as_ref(), &cref, info.as_ref());
 
     let mut prs: Vec<(String, Pr)> = vec![];
     let mut created: Vec<String> = vec![];
@@ -276,7 +76,7 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
             ui::warn(format!("[{repo}] detached HEAD, skipped"));
             continue;
         };
-        if let Some(pr) = find(cfg, &wt, &branch, PrState::Open) {
+        if let Some(pr) = p.find_pr(&wt, &branch, PrState::Open) {
             ui::info(format!("[{repo}] PR already open: {}", pr.url));
             prs.push((repo.clone(), pr));
             continue;
@@ -316,10 +116,10 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
             base: &base,
             title: &title,
             body: &body,
-            work_item: &cref.number,
+            card: &cref,
             draft,
         };
-        match create(cfg, &wt, &new) {
+        match p.create_pr(&wt, &new) {
             Ok(pr) => {
                 ui::ok(format!("[{repo}] PR opened: {}", pr.url));
                 prs.push((repo.clone(), pr));
@@ -336,7 +136,7 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
     if prs.len() > 1 {
         for (repo, pr) in prs.iter().filter(|(r, _)| created.contains(r)) {
             let text = with_siblings(&body, repo, &prs);
-            if let Err(e) = update_body(cfg, &dir.join(repo), pr, &text) {
+            if let Err(e) = p.update_pr_body(&dir.join(repo), pr, &text) {
                 ui::warn(format!("[{repo}] could not link the other PRs: {e:#}"));
             }
         }
@@ -363,31 +163,6 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
 mod tests {
     use super::*;
 
-    fn cref(repo: Option<&str>) -> CardRef {
-        CardRef {
-            key: "12".into(),
-            number: "12".into(),
-            repo: repo.map(String::from),
-        }
-    }
-
-    #[test]
-    fn gh_issue_comes_from_the_id_or_the_url() {
-        assert_eq!(
-            gh_issue(&cref(Some("acme/web")), None).as_deref(),
-            Some("acme/web#12")
-        );
-        let info = CardInfo {
-            url: "https://github.com/acme/api/issues/12".into(),
-            ..Default::default()
-        };
-        assert_eq!(
-            gh_issue(&cref(None), Some(&info)).as_deref(),
-            Some("acme/api#12")
-        );
-        assert_eq!(gh_issue(&cref(None), None), None);
-    }
-
     #[test]
     fn siblings_list_the_other_repos_only() {
         let pr = |u: &str| Pr {
@@ -398,19 +173,6 @@ mod tests {
         assert_eq!(
             with_siblings("Card #1", "api", &all),
             "Card #1\n\nOther PRs of this card:\n- ui: U"
-        );
-    }
-
-    #[test]
-    fn az_web_url_is_built_from_the_repository() {
-        let v = serde_json::json!({
-            "pullRequestId": 5,
-            "url": "https://dev.azure.com/o/p/_apis/git/repositories/x/pullRequests/5",
-            "repository": {"webUrl": "https://dev.azure.com/o/p/_git/api"}
-        });
-        assert_eq!(
-            az_pr(&v).unwrap().url,
-            "https://dev.azure.com/o/p/_git/api/pullrequest/5"
         );
     }
 }

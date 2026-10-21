@@ -6,7 +6,7 @@ use std::process::Command;
 use anyhow::{bail, Result};
 use serde::Serialize;
 
-use crate::config::{config_path, Config, OpenTarget, ProviderKind};
+use crate::config::{config_path, Config, OpenTarget};
 use crate::sys;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -41,7 +41,7 @@ pub struct DoctorOutput {
 }
 
 /// Collects every check; prints them as they happen unless `json` is set.
-struct Report {
+pub struct Report {
     json: bool,
     errors: usize,
     warnings: usize,
@@ -77,21 +77,21 @@ impl Report {
         }
     }
 
-    fn ok(&mut self, msg: impl AsRef<str>) {
+    pub fn ok(&mut self, msg: impl AsRef<str>) {
         self.record(Level::Ok, msg.as_ref());
         if !self.json {
             println!("  \x1b[32m✔\x1b[0m {}", msg.as_ref());
         }
     }
 
-    fn info(&mut self, msg: impl AsRef<str>) {
+    pub fn info(&mut self, msg: impl AsRef<str>) {
         self.record(Level::Info, msg.as_ref());
         if !self.json {
             println!("  \x1b[36m·\x1b[0m {}", msg.as_ref());
         }
     }
 
-    fn warn(&mut self, msg: impl AsRef<str>) {
+    pub fn warn(&mut self, msg: impl AsRef<str>) {
         self.warnings += 1;
         self.record(Level::Warn, msg.as_ref());
         if !self.json {
@@ -99,7 +99,7 @@ impl Report {
         }
     }
 
-    fn error(&mut self, msg: impl AsRef<str>) {
+    pub fn error(&mut self, msg: impl AsRef<str>) {
         self.errors += 1;
         self.record(Level::Error, msg.as_ref());
         if !self.json {
@@ -108,7 +108,7 @@ impl Report {
     }
 
     /// Binary on PATH; error if missing. Returns whether it was found.
-    fn require_bin(&mut self, bin: &str, why: &str) -> bool {
+    pub fn require_bin(&mut self, bin: &str, why: &str) -> bool {
         match sys::which(bin) {
             Some(p) => {
                 self.ok(format!("{bin} ({})", p.display()));
@@ -128,7 +128,7 @@ fn git_global(key: &str) -> String {
         .unwrap_or_default()
 }
 
-fn succeeds(bin: &str, args: &[&str]) -> bool {
+pub fn succeeds(bin: &str, args: &[&str]) -> bool {
     sys::quiet(Command::new(bin).args(args))
 }
 
@@ -203,49 +203,7 @@ pub fn run(json: bool) -> Result<()> {
     }
 
     r.section("provider");
-    match cfg.provider.default {
-        ProviderKind::Az => {
-            if r.require_bin("az", "provider.default = \"az\"") {
-                if succeeds(
-                    "az",
-                    &[
-                        "extension",
-                        "show",
-                        "--name",
-                        "azure-devops",
-                        "--output",
-                        "none",
-                    ],
-                ) {
-                    r.ok("azure-devops extension installed");
-                    // `az account show` isn't enough: ADO access may come from `az devops login` (PAT)
-                    let mut args = vec![
-                        "devops", "project", "list", "--top", "1", "--output", "none",
-                    ];
-                    let org = &cfg.provider.az.organization;
-                    if !org.is_empty() {
-                        args.extend(["--organization", org.as_str()]);
-                    }
-                    if succeeds("az", &args) {
-                        r.ok("Azure DevOps access ok");
-                    } else {
-                        r.warn("az has no access to Azure DevOps (az login or az devops login; check provider.az.organization)");
-                    }
-                } else {
-                    r.warn("azure-devops extension missing (az extension add --name azure-devops)");
-                }
-            }
-        }
-        ProviderKind::Gh => {
-            if r.require_bin("gh", "provider.default = \"gh\"") {
-                if succeeds("gh", &["auth", "status"]) {
-                    r.ok("gh logged in");
-                } else {
-                    r.warn("gh is not logged in (gh auth login)");
-                }
-            }
-        }
-    }
+    crate::provider::current(&cfg).doctor(&mut r);
 
     r.section("agent");
     let ai_bin = cfg
