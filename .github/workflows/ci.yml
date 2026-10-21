@@ -61,7 +61,7 @@ jobs:
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errs) | Out-Null
             if ($errs) { $errs; exit 1 }
           }
-          $issues = Invoke-ScriptAnalyzer -Path $files -Severity Error
+          $issues = $files | ForEach-Object { Invoke-ScriptAnalyzer -Path $_ -Severity Error }
           if ($issues) { $issues | Format-Table -AutoSize; exit 1 }
       - name: smoke test
         shell: pwsh
