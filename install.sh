@@ -500,18 +500,39 @@ EOF
   herdr server reload-config >/dev/null 2>&1 || true
 }
 
+# shellcheck disable=SC2016 # the rc line must expand when the rc file runs, not now
 install_completions() {
+  data="${XDG_DATA_HOME:-$HOME/.local/share}"
+  # before 0.4 a full static script was written here; the hook below replaces it
+  rm -f "$data/bash-completion/completions/twig" "$data/zsh/site-functions/_twig"
   shell=$(basename "${SHELL:-sh}")
   case "$shell" in
-    bash) file="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/twig" ;;
-    zsh) file="${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions/_twig" ;;
-    fish) file="$HOME/.config/fish/completions/twig.fish" ;;
-    *) return ;;
+    bash)
+      rc="$HOME/.bashrc"
+      line='command -v twig >/dev/null 2>&1 && source <(COMPLETE=bash twig)  # twig completions'
+      ;;
+    zsh)
+      rc="$HOME/.zshrc"
+      # needs compinit, which zsh frameworks load earlier in .zshrc
+      line='(( $+functions[compdef] )) && command -v twig >/dev/null 2>&1 && source <(COMPLETE=zsh twig)  # twig completions'
+      ;;
+    fish)
+      file="$HOME/.config/fish/completions/twig.fish"
+      mkdir -p "$(dirname "$file")"
+      echo 'COMPLETE=fish twig | source' >"$file"
+      ok "completions (fish) at $file"
+      return 0
+      ;;
+    *)
+      info "completions: add the output of \`twig completions <shell>\` to your shell's startup file"
+      return 0
+      ;;
   esac
-  mkdir -p "$(dirname "$file")"
-  "$TWIG" completions "$shell" >"$file" && ok "completions ($shell) at $file"
-  if [ "$shell" = zsh ]; then
-    info "on zsh, make sure ~/.zshrc has: fpath=(${file%/*} \$fpath)"
+  if grep -qs '# twig completions' "$rc"; then
+    ok "completions already enabled in $rc"
+  else
+    printf '\n%s\n' "$line" >>"$rc"
+    ok "completions enabled in $rc (open a new terminal)"
   fi
 }
 

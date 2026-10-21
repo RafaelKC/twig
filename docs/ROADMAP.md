@@ -54,7 +54,7 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 - [x] Prebuilt, signed binaries for Linux and macOS on GitHub Releases on every `v*` tag ([RELEASING.md](RELEASING.md))
 - [ ] Windows binaries and a PowerShell installer (see [Native Windows](#native-windows))
 - [x] Installer (`curl ... | sh`) that:
-  - [x] Puts `twig` on the PATH and installs shell completions
+  - [x] Puts `twig` on the PATH and installs shell completions (dynamic since v0.4.0: a one-line hook in the shell rc that completes card ids, repos and templates)
   - [x] Checks and installs dependencies (see [DEPENDENCIES.md](DEPENDENCIES.md))
   - [x] Asks for the folder where repos live and the worktrees folder (default `~/.wt`)
   - [x] Installs the AI skill and the herdr plugin (with the `prefix+shift+o` shortcut)

@@ -236,6 +236,12 @@ fn remove_tool(bin: &str, pkgs: &Packages) -> Result<()> {
     )
 }
 
+/// A line install.sh appended to a shell rc file.
+fn is_twig_rc_line(l: &str) -> bool {
+    let l = l.trim_end();
+    (l.starts_with("export PATH=") && l.ends_with("# twig")) || l.ends_with("# twig completions")
+}
+
 pub fn uninstall(yes: bool) -> Result<()> {
     if !yes && !ui::confirm("remove twig (binary, herdr plugin, skill and completions)? [y/N]: ") {
         bail!("cancelled (use --yes to skip the prompt)");
@@ -278,19 +284,19 @@ pub fn uninstall(yes: bool) -> Result<()> {
         remove_path(&f, "completion");
     }
 
-    // PATH line install.sh appended (`export PATH="...:$PATH"  # twig`)
+    // lines install.sh appended: PATH (`export PATH="...:$PATH"  # twig`) and the completion hook
     for rc in [".bashrc", ".zshrc"] {
         let rc = home()?.join(rc);
         let Ok(text) = fs::read_to_string(&rc) else {
             continue;
         };
-        let kept: Vec<&str> = text
-            .lines()
-            .filter(|l| !(l.starts_with("export PATH=") && l.trim_end().ends_with("# twig")))
-            .collect();
+        let kept: Vec<&str> = text.lines().filter(|l| !is_twig_rc_line(l)).collect();
         if kept.len() != text.lines().count() {
             fs::write(&rc, kept.join("\n") + "\n")?;
-            ui::ok(format!("PATH line removed from {}", rc.display()));
+            ui::ok(format!(
+                "twig lines (PATH, completions) removed from {}",
+                rc.display()
+            ));
         }
     }
 

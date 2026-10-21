@@ -142,7 +142,7 @@ git clone https://github.com/RafaelKC/twig && cd twig
 cargo build --release
 ln -s "$PWD/target/release/twig" ~/.local/bin/twig
 mkdir -p ~/.config/twig && cp examples/config.toml ~/.config/twig/config.toml
-twig completions bash > ~/.local/share/bash-completion/completions/twig
+echo 'source <(COMPLETE=bash twig)  # twig completions' >> ~/.bashrc
 ```
 
 </details>
@@ -189,7 +189,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `config get <key>` / `config set <key> <value>` | read / write one value by dotted key (`git.base_branch`), validated, comments kept |
 | `update` | update to the latest release |
 | `uninstall` | remove twig, its plugin and skill |
-| `completions <shell>` | shell completion script |
+| `completions <shell>` | shell completion hook (the installer adds it to `~/.bashrc` / `~/.zshrc`); completes card ids, repos and templates too |
 
 All options: [docs/COMMANDS.md](docs/COMMANDS.md).
 
