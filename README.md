@@ -59,7 +59,7 @@ Your main clones stay on `main`. Two cards never step on each other.
 - **herdr workspace.** An `agent` tab with one AI agent per repo, and a `run` tab that starts
   each project. Closed a pane by accident? `twig add-repo` brings it back. `twig new --prompt
   "/deliver {id}"` (or `agent_prompt` in a template) starts the agents already working.
-- **Per-card ports.** A repo with `port = 4200` runs on a port of its own in each card,
+- **Per-card ports.** A repo with `port = 4200` (and named extras like `ports = { https = 4300 }`) runs on ports of its own in each card,
   deterministic per card (card 52644 → `4244`), so several cards run at once. Every process of
   the card gets every repo's port (`TWIG_PORT_<REPO>`, `PORT`), and the repo's `env` maps them to
   what the project reads: the front end calls the same card's API, the API allows that front end

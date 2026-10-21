@@ -2847,3 +2847,74 @@ fn repo_env_can_come_from_the_repo_and_card_twig_toml() {
     let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
     assert!(ctx.contains("with `API=card:7`"), "{ctx}");
 }
+
+// ───────────────────────── named ports ─────────────────────────
+
+#[test]
+fn named_ports_get_their_own_variables_everywhere() {
+    let s = ports_sandbox();
+    let cfg = fs::read_to_string(&s.config).unwrap().replace(
+        "[repos.b]\nport = 5000\n",
+        "[repos.b]\nport = 5000\nports = { https = 5100, debug = 9200 }\nenv = { Url = \"https://localhost:$TWIG_PORT_B_HTTPS\" }\n",
+    );
+    fs::write(&s.config, cfg).unwrap();
+    assert_exit(
+        &s.run(&["new", "52644", "x", "--repos", "a,b", "--no-ado"]),
+        0,
+    );
+
+    assert_eq!(
+        stdout(&s.run(&["ports", "52644", "--env"])),
+        "export TWIG_PORT_A=4244\nexport TWIG_PORT_B=5044\nexport TWIG_PORT_B_HTTPS=5144\nexport TWIG_PORT_B_DEBUG=9244\n"
+    );
+    assert_has(&s.run(&["ports", "52644"]), "b.https");
+    let file = fs::read_to_string(s.path("wt/52644/.twig-ports.env")).unwrap();
+    assert!(file.contains("TWIG_PORT_B_DEBUG=9244"), "{file}");
+    let st = json_of(&s.run(&["status", "52644", "--json"]));
+    let b = &st["cards"][0]["repos"][1];
+    assert_eq!(b["port"], 5044);
+    assert_eq!(b["ports"]["https"], 5144);
+    let ctx = fs::read_to_string(s.path("wt/52644/CLAUDE.md")).unwrap();
+    assert!(
+        ctx.contains("- `b.https`: 5144 (`$TWIG_PORT_B_HTTPS`)"),
+        "{ctx}"
+    );
+    // env sees the named ports
+    let ws: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(s.path("wt/52644/52644.code-workspace")).unwrap())
+            .unwrap();
+    assert_eq!(
+        ws["settings"]["terminal.integrated.env.linux"]["TWIG_PORT_B_HTTPS"],
+        "5144"
+    );
+}
+
+#[test]
+fn base_ports_closer_than_the_span_are_rejected() {
+    let s = ports_sandbox();
+    append_config(&s, "\n[repos.c]\nport = 4250\n");
+    let o = s.run(&["ls"]);
+    assert_exit(&o, 1);
+    assert_has(
+        &o,
+        "ports 4200 (a) and 4250 (c) are 50 apart, less than ports.span = 100",
+    );
+    assert_has(&s.run(&["doctor"]), "are 50 apart");
+    // a smaller span makes them fit
+    append_config(&s, "\n[ports]\nspan = 50\n");
+    assert_exit(&s.run(&["ls"]), 0);
+}
+
+#[test]
+fn named_ports_from_a_repo_file_are_checked_too() {
+    let s = overrides_sandbox("ports = { https = 4210 }\n");
+    let o = s.run(&["new", "7", "x", "--no-ado"]);
+    assert_has(&o, "(a.https)");
+    let o = s.run(&["ports", "7"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "ports 4200 (a) and 4210 (a.https) are 10 apart");
+
+    let s = new_sandbox();
+    append_config(&s, "\n[repos.a.ports]\n\"bad-name\" = 6000\n");
+    assert_has(&s.run(&["ls"]), "`bad-name` is not a valid port name");
+}

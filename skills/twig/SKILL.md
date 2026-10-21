@@ -32,8 +32,9 @@ and a **herdr workspace** labeled `<id>`:
 - tab `agent`: one pane per repo, running the agent (`agent.command`, e.g. `claude` or `codex`);
 - tab `run`: one pane per repo that has `run` in the config (and `autorun` not `false`).
 
-Every pane twig creates gets the card's ports (`TWIG_PORT_<REPO>` for each repo, `PORT` for its
-own) and the repo's `env` as environment variables.
+Every pane twig creates gets the card's ports (`TWIG_PORT_<REPO>` for each repo,
+`TWIG_PORT_<REPO>_<NAME>` for named ports, `PORT` for its own main one) and the repo's `env` as
+environment variables.
 
 The repos' main clones stay elsewhere, on the base branch. Never touch them from
 a card.
@@ -224,6 +225,7 @@ run         = "dotnet watch run"  # VS Code task + pane in the run tab
 autorun     = true                # false = doesn't start in the run tab
 install     = "dotnet restore"    # used by --install
 port        = 5000                # base port; each card runs on 5000 + its offset (card 52644 → 5044)
+ports       = { https = 5100 }    # more ports by name: TWIG_PORT_MY_BACKEND_HTTPS (bases ≥ span apart)
 env         = { ASPNETCORE_URLS = "http://localhost:$PORT" }  # extra env, expanded per card
 debug       = ["Debug: Back"]     # launch.json configs in the card's compound
 local_files = ["src/*/appsettings.Development.json"]  # gitignored, copied from the clone

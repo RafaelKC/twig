@@ -314,6 +314,8 @@ pub struct Repo {
     pub autorun: bool,
     /// Base dev server port; each card gets `port + offset` (see `ports.rs`).
     pub port: Option<u16>,
+    /// More base ports by name (`https = 5100`), each one `TWIG_PORT_<REPO>_<NAME>` in a card.
+    pub ports: IndexMap<String, u16>,
     /// Extra environment of the repo's processes in a card; values expand `$VAR` (see `procenv.rs`).
     pub env: IndexMap<String, String>,
     pub install: String,
@@ -333,6 +335,7 @@ impl Default for Repo {
             run: String::new(),
             autorun: true,
             port: None,
+            ports: IndexMap::new(),
             env: IndexMap::new(),
             install: String::new(),
             post_create: vec![],
@@ -371,11 +374,20 @@ pub fn expand(p: &str) -> PathBuf {
 }
 
 /// Checks on `[repos.*]` that serde can't express.
-fn validate_repos(repos: &IndexMap<String, Repo>) -> Result<()> {
+fn validate_repos(repos: &IndexMap<String, Repo>, span: u16) -> Result<()> {
+    if span == 0 {
+        bail!("ports.span must be at least 1");
+    }
     for (name, r) in repos {
+        if let Some(n) = r.ports.keys().find(|n| !crate::ports::valid_name(n)) {
+            bail!("repos.{name}.ports: `{n}` is not a valid port name (letters, digits and _)");
+        }
         if let Some(k) = r.env.keys().find(|k| !crate::procenv::valid_name(k)) {
             bail!("repos.{name}.env: `{k}` is not a valid environment variable name");
         }
+    }
+    if let Some(c) = crate::ports::base_conflicts(repos, span).first() {
+        bail!("{c}");
     }
     Ok(())
 }
@@ -421,10 +433,7 @@ impl Config {
         if cf.contains(['/', '\\']) {
             bail!("agent.context_file must be a file name, not a path: {cf}");
         }
-        validate_repos(&cfg.repos)?;
-        if cfg.ports.span == 0 {
-            bail!("ports.span must be at least 1");
-        }
+        validate_repos(&cfg.repos, cfg.ports.span)?;
         if cfg
             .templates
             .default
@@ -464,6 +473,8 @@ impl Config {
                 overrides::FILE
             )
         })?;
+        validate_repos(&layered.repos, self.ports.span)
+            .with_context(|| format!("in card {id}, with the {} overrides", overrides::FILE))?;
         self.repos = layered.repos;
         Ok(())
     }

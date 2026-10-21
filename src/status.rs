@@ -30,6 +30,8 @@ pub struct RepoStatus {
     pub vs_origin: Option<AheadBehind>,
     /// The card's dev server port for this repo (`port` in the config + the card's offset).
     pub port: Option<u16>,
+    /// The repo's named ports in this card (`ports` in the config).
+    pub ports: indexmap::IndexMap<String, u16>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -70,7 +72,13 @@ fn ahead_behind(wt: &Path, reference: &str) -> Option<AheadBehind> {
     })
 }
 
-fn repo_status(cfg: &Config, dir: &Path, repo: &str, port: Option<u16>) -> RepoStatus {
+fn repo_status(
+    cfg: &Config,
+    dir: &Path,
+    repo: &str,
+    port: Option<u16>,
+    ports: indexmap::IndexMap<String, u16>,
+) -> RepoStatus {
     let wt = dir.join(repo);
     let branch = sys::git_current_branch(&wt).filter(|b| b != "HEAD");
     let dirty = sys::output(sys::git(&wt).args(["status", "--porcelain"]))
@@ -106,6 +114,7 @@ fn repo_status(cfg: &Config, dir: &Path, repo: &str, port: Option<u16>) -> RepoS
         origin_ref,
         vs_origin,
         port,
+        ports,
     }
 }
 
@@ -115,8 +124,12 @@ pub fn collect(cfg: &Config, id: &str) -> CardStatus {
     let repos = card::repos_ordered(cfg, &dir)
         .iter()
         .map(|r| {
-            let port = ports.iter().find(|(p, _)| p == r).map(|(_, n)| *n);
-            repo_status(cfg, &dir, r, port)
+            let mine = ports.iter().filter(|p| &p.repo == r);
+            let port = mine.clone().find(|p| p.name.is_none()).map(|p| p.port);
+            let named = mine
+                .filter_map(|p| Some((p.name.clone()?, p.port)))
+                .collect();
+            repo_status(cfg, &dir, r, port, named)
         })
         .collect();
     let (workspace, agents_running) = herdr::card_presence(id);
@@ -158,7 +171,18 @@ fn print_card(s: &CardStatus, detailed: bool) {
         } else {
             String::new()
         };
-        let port = r.port.map(|p| format!("  :{p}")).unwrap_or_default();
+        let port = r
+            .port
+            .iter()
+            .map(|p| format!(":{p}"))
+            .chain(r.ports.iter().map(|(n, p)| format!("{n}:{p}")))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let port = if port.is_empty() {
+            port
+        } else {
+            format!("  {port}")
+        };
         println!(
             "      {:<18} {branch}{dirty}  base {}  origin {}{port}",
             r.repo,

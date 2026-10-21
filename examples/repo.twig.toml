@@ -1,7 +1,7 @@
 # .twig.toml at the root of a repo, committed with it: this repo's twig settings for the whole
 # team, so nobody has to repeat them in their own ~/.config/twig/config.toml.
 # Precedence: TWIG__* env vars > the card's .twig.toml > this file > the user config.
-# Allowed keys: label, short, run, autorun, port, env, install, post_create, local_files, debug.
+# Allowed keys: label, short, run, autorun, port, ports, env, install, post_create, local_files, debug.
 # Not allowed: path, default, hooks (they belong to each person's config). Format: docs/CONFIG.md.
 
 short   = "api"
@@ -10,6 +10,9 @@ run     = "dotnet watch run --project src/Api"
 
 # Each card runs this repo on 5000 + its offset (card 52644 → 5044).
 port = 5000
+# More ports by name, same offset: TWIG_PORT_<REPO>_HTTPS = 5144 in card 52644.
+# Base ports must be at least ports.span (default 100) apart from every other one.
+ports = { https = 5100 }
 
 local_files = ["src/*/appsettings.Development.json"]
 
