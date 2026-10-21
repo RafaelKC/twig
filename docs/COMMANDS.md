@@ -556,6 +556,10 @@ Asks the GitHub API for the latest release (`TWIG_REPO`, default `RafaelKC/twig`
 `install.sh` and runs it with `--update`: twig, the AI skill, the herdr plugin and
 completions are replaced; dependencies and config are not touched. Needs `curl`.
 
+The skill is refreshed in every place a previous install put it (`~/.claude/skills/twig` for
+Claude Code, `~/.agents/skills/twig` or `~/.codex/skills/twig` for Codex); `--update` never
+creates a skill where there was none.
+
 | Option | Description |
 |---|---|
 | `--check` | only reports whether a new version exists |

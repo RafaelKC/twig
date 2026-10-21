@@ -439,16 +439,30 @@ install_binary() {
   esac
 }
 
+copy_skill() {
+  mkdir -p "$(dirname "$1")"
+  rm -rf "$1"
+  cp -R "$PKG/skills/twig" "$1"
+  ok "$2 skill at $1"
+}
+
 install_skill() {
+  # --update doesn't ask which agent is used: refresh every copy an earlier install left
+  if [ "$MODE" = update ]; then
+    for spec in "$HOME/.claude/skills/twig:Claude Code" "$HOME/.agents/skills/twig:Codex" "$HOME/.codex/skills/twig:Codex"; do
+      dest="${spec%%:*}"
+      if [ -e "$dest" ]; then
+        copy_skill "$dest" "${spec#*:}"
+      fi
+    done
+    return 0
+  fi
   case "$AI" in
     codex) dest="$HOME/.agents/skills/twig"; name="Codex" ;;
     *) dest="$HOME/.claude/skills/twig"; name="Claude Code" ;;
   esac
   if [ -z "$AI" ] && [ ! -e "$dest" ]; then return; fi
-  mkdir -p "$(dirname "$dest")"
-  rm -rf "$dest"
-  cp -R "$PKG/skills/twig" "$dest"
-  ok "$name skill at $dest"
+  copy_skill "$dest" "$name"
 }
 
 install_herdr_plugin() {
