@@ -9,6 +9,11 @@
 #
 # herdr's native Windows support is in BETA: twig works with it, but expect rough edges.
 #
+# No admin needed for twig itself: everything goes to per-user folders and the user PATH.
+# Missing dependencies are installed per user when the package allows it (Git, VS Code, gh,
+# herdr, Claude Code); the Azure CLI is machine-wide only, so installing it asks for admin
+# approval (UAC).
+#
 # Options (when run as a file: .\install.ps1 -Update):
 #   -Version vX.Y.Z   install that release (default: latest)
 #   -Update           only update twig, skill, plugin and completions (no dependency setup)
@@ -74,9 +79,17 @@ function Install-Twig {
         $env:Path = (@($machine, $user) | Where-Object { $_ }) -join ';'
     }
 
+    # Per-user install first (Git, VS Code and the GitHub CLI's portable build have one: no
+    # admin, no UAC prompt); only a package that ships machine-wide only falls back to the
+    # default, and Windows then asks for admin approval.
     function Winget-Install($id) {
         if (-not (Have winget)) { Die "winget not found: install '$id' manually (or get App Installer from the Microsoft Store)" }
-        winget install --id $id -e --source winget --accept-package-agreements --accept-source-agreements
+        $common = @('install', '--id', $id, '-e', '--source', 'winget', '--accept-package-agreements', '--accept-source-agreements')
+        winget @common --scope user
+        if ($LASTEXITCODE -ne 0) {
+            Warn "$id has no per-user installer: Windows will ask for admin approval (UAC)"
+            winget @common
+        }
         Refresh-Path
     }
 
@@ -191,7 +204,10 @@ function Install-Twig {
         if ($chosen.Count -eq 0) {
             $c = Ask 'choose a provider: [1] az (Azure DevOps) [2] gh (GitHub)' '1'
             if ($c -eq '2' -or $c -eq 'gh') { Winget-Install 'GitHub.cli'; $chosen = @('gh') }
-            else { Winget-Install 'Microsoft.AzureCLI'; $chosen = @('az') }
+            else {
+                Warn 'the Azure CLI only installs machine-wide: Windows will ask for admin approval (UAC)'
+                Winget-Install 'Microsoft.AzureCLI'; $chosen = @('az')
+            }
         }
         Ok "provider: $($chosen -join ' ')"
         foreach ($p in $chosen) {

@@ -142,7 +142,10 @@ Duas opções:
   e os instaladores oficiais (herdr, Claude Code), coloca o `twig.exe` em
   `%LOCALAPPDATA%\Programs\twig` (adicionado ao PATH do usuário), a skill, o plugin do herdr
   (`prefix+shift+o`) e os completions no seu perfil do PowerShell. A config fica em
-  `%APPDATA%\twig\config.toml`. Com `irm | iex`, as opções vão por variável de ambiente
+  `%APPDATA%\twig\config.toml`. **Não precisa de admin** para o twig em si (só pastas do
+  usuário e o PATH do usuário); as dependências que faltam são instaladas por usuário quando dá
+  (Git, VS Code, gh, herdr, Claude Code). Só a Azure CLI é instalada para a máquina toda, então
+  instalá-la mostra o pedido de admin do Windows (UAC). Com `irm | iex`, as opções vão por variável de ambiente
   (`$env:TWIG_VERSION = "v0.4.0"`), ou como parâmetros se você salvar o script
   (`.\install.ps1 -Version v0.4.0`). `twig update` e `twig uninstall` funcionam igual ao Linux.
 

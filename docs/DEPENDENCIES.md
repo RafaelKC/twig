@@ -38,15 +38,19 @@ so before changing anything) there is no package-manager detection: it uses wing
 official Windows installers. It needs PowerShell 5.1+ (built in) and, for the dependencies,
 winget (App Installer).
 
-| Tool | Windows |
-|---|---|
-| `git` | `winget install Git.Git` |
-| `herdr` | `irm https://herdr.dev/install.ps1 \| iex` (beta) |
-| `gh` | `winget install GitHub.cli` |
-| `az` | `winget install Microsoft.AzureCLI` |
-| VS Code | `winget install Microsoft.VisualStudioCode` |
-| Claude Code | `irm https://claude.ai/install.ps1 \| iex` |
-| Codex | `npm install -g @openai/codex` (needs Node.js) |
+| Tool | Windows | Admin (UAC)? |
+|---|---|---|
+| `git` | `winget install Git.Git --scope user` | no |
+| `herdr` | `irm https://herdr.dev/install.ps1 \| iex` (beta; `%LOCALAPPDATA%\Programs\Herdr`) | no |
+| `gh` | `winget install GitHub.cli --scope user` (portable build) | no |
+| `az` | `winget install Microsoft.AzureCLI` (machine-wide MSI only) | **yes** |
+| VS Code | `winget install Microsoft.VisualStudioCode --scope user` | no |
+| Claude Code | `irm https://claude.ai/install.ps1 \| iex` | no |
+| Codex | `npm install -g @openai/codex` (needs Node.js) | no |
+
+twig's own pieces never need admin. `install.ps1` tries `--scope user` first and only falls back
+to winget's default (which may prompt for elevation) when a package has no per-user installer,
+saying so before it happens.
 
 Where it puts twig's pieces: `twig.exe` in `%LOCALAPPDATA%\Programs\twig` (added to the user
 `PATH`), the herdr plugin in `%LOCALAPPDATA%\twig\herdr-plugins\twig` (shortcut in
