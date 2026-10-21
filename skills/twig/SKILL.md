@@ -38,7 +38,7 @@ a card.
 
 | Command | When to use |
 |---|---|
-| `twig new <id> [slug]` | start a new card. With GitHub, prefer `owner/repo#123` (or the issue URL): the card folder becomes `repo-123`, and either form names it afterwards |
+| `twig new <id> [slug] [--prompt TEXT]` | start a new card. With GitHub, prefer `owner/repo#123` (or the issue URL): the card folder becomes `repo-123`, and either form names it afterwards |
 | `twig add-repo <id> <repo,...>` | the card needs another repo; also recreates closed panes in herdr |
 | `twig open [id] [default\|herdr\|code]` | open the card in a target; no target uses `[open] default` (herdr unless configured); no id = card of the current directory. `twig open code` and `twig open 123 code` both work |
 | `twig herdr <id>` | alias of `open <id> herdr`: open/focus the card in herdr (creates whatever is missing) |

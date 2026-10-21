@@ -15,7 +15,7 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 3. [#10](https://github.com/RafaelKC/twig/issues/10) `twig clean` (done, unreleased)
 4. [#3](https://github.com/RafaelKC/twig/issues/3) per-card ports, deterministic per card, as environment variables of the herdr panes (done, unreleased)
 5. [#19](https://github.com/RafaelKC/twig/issues/19) per-repo `.twig.toml`, per-card and environment overrides (done, unreleased)
-6. [#5](https://github.com/RafaelKC/twig/issues/5) start the agent with a prompt (a skill/command) when the card is created
+6. [#5](https://github.com/RafaelKC/twig/issues/5) start the agent with a prompt (a skill/command) when the card is created (done, unreleased)
 
 ### In development
 
@@ -101,7 +101,7 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 - [x] `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12))
 - [x] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10))
 - [x] `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
-- [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5); a `post_create` hook can already run a command you wrote, see [#15](https://github.com/RafaelKC/twig/issues/15)),
+- [x] Run a skill after creating a workspace: `twig new --prompt` / template `agent_prompt` ([#5](https://github.com/RafaelKC/twig/issues/5))
 - [x] `twig memo` card memory ([#16](https://github.com/RafaelKC/twig/issues/16)), still experimental; follow-ups in [#30](https://github.com/RafaelKC/twig/issues/30). See [MEMORY.md](MEMORY.md)
 
 ## herdr integration (plugin)

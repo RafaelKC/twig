@@ -245,9 +245,28 @@ fn ensure_panel(
     Ok(())
 }
 
+/// Quote for a POSIX shell (the panes run the command through the user's shell).
+fn shell_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+/// The agent command for a new pane: with a prompt, `<command> '<prompt>'` (Claude Code and
+/// Codex both take the first message as an argument). `{id}` and `{repo}` are replaced.
+fn agent_command(cfg: &Config, id: &str, repo: &str, prompt: Option<&str>) -> String {
+    let cmd = cfg.ai.command();
+    match prompt.map(str::trim).filter(|p| !p.is_empty()) {
+        Some(p) => format!(
+            "{cmd} {}",
+            shell_quote(&p.replace("{id}", id).replace("{repo}", repo))
+        ),
+        None => cmd.to_string(),
+    }
+}
+
 /// Create in herdr whatever the card is missing. Idempotent: existing things are left alone,
-/// and panes closed by the user come back.
-pub fn sync(cfg: &Config, id: &str) -> Result<String> {
+/// and panes closed by the user come back. `prompt` is the first message of the agents started
+/// now (only `twig new` passes one).
+pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
     ensure_server()?;
     let dir = card::require_card(cfg, id)?;
     let repos = card::repos_ordered(cfg, &dir);
@@ -286,7 +305,7 @@ pub fn sync(cfg: &Config, id: &str) -> Result<String> {
             &ws,
             "agent",
             repo,
-            cfg.ai.command(),
+            &agent_command(cfg, id, repo, prompt),
             &dir.join(repo),
             fresh && i == 0,
         )?;
@@ -324,6 +343,21 @@ mod tests {
             {"pane_id": "w1:p4"},
         ]}});
         assert_eq!(busy_panes(&v), ["w1:p1", "w1:p3"]);
+    }
+
+    #[test]
+    fn prompt_is_quoted_and_expanded() {
+        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        std::fs::write(&file, "version = 1\n").unwrap();
+        let cfg = Config::load_from(&file).unwrap();
+        assert_eq!(
+            agent_command(&cfg, "52644", "api", Some("/deliver {id} in {repo}")),
+            "claude '/deliver 52644 in api'"
+        );
+        assert_eq!(agent_command(&cfg, "1", "api", Some("  ")), "claude");
+        assert_eq!(agent_command(&cfg, "1", "api", None), "claude");
     }
 
     #[test]

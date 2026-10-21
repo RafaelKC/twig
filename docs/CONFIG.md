@@ -335,13 +335,19 @@ agent         = "claude"        # "claude" | "codex": context file and agent com
 install       = true            # run each repo's install/post_create (false = skip, like --no-setup)
 branch_prefix = "feat"          # optional; replaces git.branch_prefix (--fix still wins)
 base          = "main"          # optional; replaces git.base_branch
+agent_prompt  = "/deliver {id}" # optional; first message of the agents `twig new` starts
 
 [fullstack.hooks]               # same keys as [hooks]; only for cards created from this template
 post_create = ["echo created $TWIG_CARD_ID"]
 ```
 
-- **Precedence.** Explicit flags (`--repos`, `--branch`, `--base`, `--install`/`--no-setup`, `--fix`)
-  beat the template, which beats the config.
+- **Precedence.** Explicit flags (`--repos`, `--branch`, `--base`, `--install`/`--no-setup`, `--fix`,
+  `--prompt`) beat the template, which beats the config.
+- **Agent prompt.** `agent_prompt` is passed to each agent `twig new` starts in herdr as its first
+  message (`claude '<prompt>'`, `codex '<prompt>'`), so a card can start working right away, e.g.
+  with a skill (`/deliver {id}`). `{id}` becomes the card id and `{repo}` the pane's repo. Only on
+  `new`: agents recreated later by `twig herdr`/`add-repo` start without it. It is text you
+  wrote, sent to your own agent; nothing comes from the provider.
 - **Hooks.** Template hooks are card-level and run **after** the config's `[hooks]` of the same event.
 - **Remembered.** The template name is stored in the card folder (`.twig-template`), so `refresh`,
   `add-repo`, `open`, `rm`... keep using its hooks, agent, `install`, `branch_prefix` and `base`.

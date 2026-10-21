@@ -87,6 +87,10 @@ enum Cmd {
         /// Don't query the provider (offline).
         #[arg(long)]
         no_ado: bool,
+        /// First message for the agents started in herdr, e.g. a skill: "/deliver {id}"
+        /// (`{id}`, `{repo}` are replaced). Overrides the template's `agent_prompt`; "" = none.
+        #[arg(long)]
+        prompt: Option<String>,
     },
     /// Add more repos to an existing card (safe to re-run).
     AddRepo {
@@ -414,6 +418,7 @@ fn run(cli: Cli) -> Result<()> {
             herdr,
             code,
             no_ado,
+            prompt,
         } => commands::new(
             &mut cfg,
             commands::NewArgs {
@@ -429,6 +434,7 @@ fn run(cli: Cli) -> Result<()> {
                 herdr,
                 code,
                 no_ado,
+                prompt,
             },
         ),
         Cmd::AddRepo {

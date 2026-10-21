@@ -22,6 +22,7 @@ pub struct NewArgs {
     pub herdr: bool,
     pub code: bool,
     pub no_ado: bool,
+    pub prompt: Option<String>,
 }
 
 pub struct AddRepoArgs {
@@ -88,8 +89,8 @@ fn fire_in(cfg: &Config, ev: Event, id: &str, cwd: &Path, repos: &[hooks::RepoCt
     }
 }
 
-fn sync_herdr(cfg: &Config, id: &str) -> Option<String> {
-    match herdr::sync(cfg, id) {
+fn sync_herdr(cfg: &Config, id: &str, prompt: Option<&str>) -> Option<String> {
+    match herdr::sync(cfg, id, prompt) {
         Ok(ws) => Some(ws),
         Err(e) => {
             ui::warn(format!("herdr: {e:#}"));
@@ -230,7 +231,11 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         &hooks::repo_ctxs(cfg, &id, &repos),
     );
 
-    let ws = sync_herdr(cfg, &id);
+    // the template's prompt is a preset too: --prompt replaces it ("" = none)
+    let prompt = a
+        .prompt
+        .or_else(|| cfg.template.as_ref().and_then(|t| t.agent_prompt.clone()));
+    let ws = sync_herdr(cfg, &id, prompt.as_deref());
     open_after(cfg, &id, ws.as_deref(), a.code, a.herdr)
 }
 
@@ -342,7 +347,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
             &hooks::repo_ctxs(cfg, &a.id, &created),
         );
     }
-    let ws = sync_herdr(cfg, &a.id);
+    let ws = sync_herdr(cfg, &a.id, None);
     if added && cfg.vscode.enabled {
         ui::info("if the card's VS Code is open, accept the workspace reload");
     }
@@ -424,7 +429,7 @@ pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
 }
 
 pub fn herdr_cmd(cfg: &Config, id: &str) -> Result<()> {
-    let ws = herdr::sync(cfg, id)?;
+    let ws = herdr::sync(cfg, id, None)?;
     herdr::open(&ws)?;
     fire(cfg, Event::PostOpen, id, &hooks::card_repos(cfg, id));
     Ok(())

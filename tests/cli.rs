@@ -2723,3 +2723,58 @@ fn repo_file_with_a_forbidden_key_is_an_error_and_doctor_reports_it() {
     assert_has(&d, "a: ");
     assert_has(&d, "`path` can't be overridden");
 }
+
+// ───────────────────────── agent prompt ─────────────────────────
+
+#[test]
+fn new_prompt_is_the_first_message_of_every_agent() {
+    let s = new_sandbox();
+    let log = herdr_builder_stub(&s);
+    let o = s.run(&[
+        "new",
+        "7",
+        "x",
+        "--repos",
+        "a,b",
+        "--no-ado",
+        "--prompt",
+        "/deliver {id} ({repo})",
+    ]);
+    assert_exit(&o, 0);
+    let calls = fs::read_to_string(&log).unwrap();
+    assert!(calls.contains(" claude '/deliver 7 (a)'\n"), "{calls}");
+    assert!(calls.contains(" claude '/deliver 7 (b)'\n"), "{calls}");
+}
+
+#[test]
+fn template_agent_prompt_and_the_flag_overriding_it() {
+    let s = tpl_sandbox("[deliver]\nrepos = [\"a\"]\nagent_prompt = \"/entregar {id}\"\n");
+    let log = herdr_builder_stub(&s);
+    assert_exit(
+        &s.run(&["new", "7", "x", "--template", "deliver", "--no-ado"]),
+        0,
+    );
+    assert!(fs::read_to_string(&log)
+        .unwrap()
+        .contains("claude '/entregar 7'"));
+
+    fs::remove_file(&log).unwrap();
+    assert_exit(
+        &s.run(&[
+            "new",
+            "8",
+            "x",
+            "--template",
+            "deliver",
+            "--no-ado",
+            "--prompt",
+            "",
+        ]),
+        0,
+    );
+    let calls = fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.contains(" claude\n") && !calls.contains("entregar"),
+        "{calls}"
+    );
+}
