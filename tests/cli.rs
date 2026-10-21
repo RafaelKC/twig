@@ -2415,3 +2415,99 @@ fn pr_without_the_provider_cli_fails() {
     assert_exit(&o, 1);
     assert_has(&o, "`gh` is not on PATH");
 }
+
+// ───────────────────────── clean ─────────────────────────
+
+/// Merge `branch` of repo `a` into origin's main through the main clone.
+fn merge_into_origin_main(s: &Sandbox, branch: &str) {
+    let main = s.path("repos/a");
+    git_in(&main, &["fetch", "-q", "origin"]);
+    git_in(
+        &main,
+        &["merge", "-q", "--no-edit", &format!("origin/{branch}")],
+    );
+    git_in(&main, &["push", "-q", "origin", "main"]);
+}
+
+/// Cards 7 (own commit, merged into main), 8 (no commits) and 9 (own commit, not merged).
+fn clean_sandbox() -> Sandbox {
+    let s = new_sandbox();
+    for id in ["7", "8", "9"] {
+        assert_exit(&s.run(&["new", id, "x", "--no-ado"]), 0);
+    }
+    for id in ["7", "9"] {
+        let wt = s.path(&format!("wt/{id}/a"));
+        commit_file(&wt, "f.txt", id, "work");
+        git_in(&wt, &["push", "-q", "origin", &format!("feat/{id}-x")]);
+    }
+    merge_into_origin_main(&s, "feat/7-x");
+    s
+}
+
+#[test]
+fn clean_dry_run_lists_only_cards_whose_branches_were_merged() {
+    let s = clean_sandbox();
+    let o = s.run(&["clean", "-n"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "#7");
+    assert_has(&o, "every branch merged");
+    let out = text(&o);
+    assert!(!out.contains("#8") && !out.contains("#9"), "{out}");
+    assert!(s.path("wt/7").exists());
+}
+
+#[test]
+fn clean_asks_per_card_and_yes_removes_without_asking() {
+    let s = clean_sandbox();
+    let declined = s.run_with(s.cmd(&["clean"]), "n\n");
+    assert_exit(&declined, 0);
+    assert!(s.path("wt/7").exists());
+
+    let o = s.run_with(s.cmd(&["clean"]), "y\n");
+    assert_exit(&o, 0);
+    assert!(!s.path("wt/7").exists());
+    assert!(s.path("wt/8").exists() && s.path("wt/9").exists());
+
+    let s = clean_sandbox();
+    assert_exit(&s.run(&["clean", "--yes", "--branches"]), 0);
+    assert!(!s.path("wt/7").exists());
+    assert!(!git_in(&s.path("repos/a"), &["branch", "--list", "feat/7-x"]).contains("feat/7-x"));
+}
+
+#[test]
+fn clean_keeps_the_rm_safety_checks() {
+    let s = clean_sandbox();
+    fs::write(s.path("wt/7/a/dirty.txt"), "x").unwrap();
+    let o = s.run(&["clean", "--yes"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "uncommitted changes");
+    assert!(s.path("wt/7").exists());
+    assert_exit(&s.run(&["clean", "--yes", "--force"]), 0);
+    assert!(!s.path("wt/7").exists());
+}
+
+#[test]
+fn clean_uses_closed_issues_and_merged_prs_from_the_provider() {
+    let s = new_sandbox();
+    append_config(&s, "\n[provider]\ndefault = \"gh\"\n");
+    s.stub("gh", "exit 1");
+    for id in ["5", "6", "8"] {
+        assert_exit(&s.run(&["new", id, "x", "--no-ado"]), 0);
+    }
+    // 5: issue closed; 6: squash-merged PR (the branch itself is not in main); 8: open
+    commit_file(&s.path("wt/6/a"), "f.txt", "6", "work");
+    s.stub(
+        "gh",
+        r#"case "$1 $2 $3" in
+  "issue view 5") echo '{"title":"T","state":"CLOSED"}' ;;
+  "issue view 6"|"issue view 8") echo '{"title":"T","state":"OPEN"}' ;;
+  "pr list --head")
+    if [ "$4 $6" = "feat/6-x merged" ]; then echo '[{"number":1,"url":"u"}]'; else echo '[]'; fi ;;
+esac"#,
+    );
+    let o = s.run(&["clean", "-n"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "work item CLOSED");
+    assert_has(&o, "#6");
+    assert!(!text(&o).contains("#8"), "{}", text(&o));
+}

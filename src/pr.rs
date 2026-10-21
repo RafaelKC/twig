@@ -24,6 +24,7 @@ pub struct Pr {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrState {
     Open,
+    Merged,
 }
 
 /// The base branch of the card: its template's `base`, else `git.base_branch`.
@@ -69,6 +70,7 @@ pub fn find(cfg: &Config, wt: &Path, branch: &str, state: PrState) -> Option<Pr>
             sys::which("gh")?;
             let state = match state {
                 PrState::Open => "open",
+                PrState::Merged => "merged",
             };
             let out = sys::output(gh(wt).args([
                 "pr",
@@ -94,6 +96,7 @@ pub fn find(cfg: &Config, wt: &Path, branch: &str, state: PrState) -> Option<Pr>
             sys::which("az")?;
             let status = match state {
                 PrState::Open => "active",
+                PrState::Merged => "completed",
             };
             let out = sys::output(az(cfg, wt).args([
                 "repos",

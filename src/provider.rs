@@ -59,6 +59,21 @@ pub fn load(cfg: &Config, card: &CardRef, gh_repo_dir: Option<&Path>) -> Option<
     Some(info)
 }
 
+/// Query the provider again (ignoring the cache) and refresh the cache; `None` when it can't.
+pub fn refetch(cfg: &Config, card: &CardRef, gh_repo_dir: Option<&Path>) -> Option<CardInfo> {
+    let info = parse(cfg.provider.default, &fetch(cfg, card, gh_repo_dir)?)?;
+    save_cache(cfg, &card.key, &info);
+    Some(info)
+}
+
+/// Whether a work item / issue state means the work is over.
+pub fn is_finished(kind: ProviderKind, state: &str) -> bool {
+    match kind {
+        ProviderKind::Az => ["closed", "done", "removed"].contains(&state.to_lowercase().as_str()),
+        ProviderKind::Gh => state.eq_ignore_ascii_case("closed"),
+    }
+}
+
 pub fn save_cache(cfg: &Config, id: &str, info: &CardInfo) {
     let _ = fs::write(cache_file(cfg, id), &info.raw);
 }

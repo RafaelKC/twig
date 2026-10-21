@@ -163,6 +163,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `refresh <id>` | regenerate `CLAUDE.md`/`AGENTS.md` and the `.code-workspace` |
 | `memo [text] [-c id]` | (in development) append a dated line to the card memory, kept across sessions and `rm`; no text shows it |
 | `sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase/merge it into every repo of the card |
+| `clean [-n] [-y]` | remove finished cards (branches merged or work item closed), asking per card |
 | `pr [id] [--draft] [-n]` | push each repo's branch and open one PR per repo, linked to the card and to each other |
 | `rm <id> [-f]` | remove the card and its herdr workspace (refuses with uncommitted changes or a running agent; `-f` overrides) |
 | `prune` | clean orphaned worktree records |

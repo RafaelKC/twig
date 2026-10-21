@@ -20,6 +20,7 @@
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
 | `twig pr [id] [--draft] [-n]` | pushes each repo's branch and opens one linked PR per repo (`gh` / `az repos`) |
 | `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
+| `twig clean [-n] [-y] [--branches] [-f]` | removes finished cards (branches merged or work item closed), asking per card |
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor [--json]` | checks dependencies, login and config without changing anything |
 | `twig config edit` | opens the config in an editor and validates it on save |
@@ -379,6 +380,33 @@ twig pr 52644 --draft
 twig pr                      # current card
 twig pr acme/web#12 -n
 ```
+
+## `twig clean [-n] [-y] [--branches] [-f]`
+
+Finds the **finished cards** and offers to remove them. A card is finished when:
+
+- its work item / issue is closed in the provider (asked again, not read from the cache):
+  Azure DevOps state `Closed`, `Done` or `Removed`; GitHub `CLOSED`; or
+- **every** repo's branch got into the base (the card template's `base`, else
+  `git.base_branch`): the provider has a merged PR for the branch (this catches squash merges),
+  or the branch has commits of its own and all of them are in `origin/<base>`. A branch with no
+  commits of its own (a card just created) never counts as merged.
+
+Without the provider CLI, or offline, only the git check applies.
+
+The candidates are listed with the reason; then each one is confirmed (`[y/N]`) unless `--yes`.
+Removal is `twig rm` with the card's template active, so its safety checks hold: uncommitted
+changes or a running agent block the card (the others go on; exit 1 at the end) unless `--force`,
+and the `pre_rm`/`post_rm` hooks run.
+
+| Option | Description |
+|---|---|
+| `-n`, `--dry-run` | only lists the finished cards |
+| `-y`, `--yes` | doesn't ask |
+| `--branches` | also deletes the local branches (as `rm --branches`) |
+| `-f`, `--force` | removes even with uncommitted changes or a running agent |
+
+`twig prune` is different: it only cleans orphaned worktree records and empty card folders.
 
 ## `twig prune [-n | --dry-run]`
 
