@@ -73,8 +73,8 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
         runs += "\nPorts of this card (same every time; other cards use other ports). The herdr\n\
                  panes and the hooks get them as environment variables, `PORT` being the\n\
                  repo's own; elsewhere, `twig ports --env` prints them:\n\n";
-        for (r, p) in &card_ports {
-            runs += &format!("- `{r}`: {p} (`${}`)\n", crate::ports::var_name(r));
+        for p in &card_ports {
+            runs += &format!("- `{}`: {} (`${}`)\n", p.label(), p.port, p.var());
         }
     }
 

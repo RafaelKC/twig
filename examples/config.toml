@@ -71,6 +71,7 @@ short   = "api"
 default = true
 run     = "dotnet watch run --project src/Api --urls http://localhost:${PORT:-5000}"
 port    = 5000                    # each card gets its own: 5000 + offset (see [ports])
+ports   = { https = 5100 }        # more ports by name: TWIG_PORT_API_HTTPS (bases ≥ ports.span apart)
 # extra environment of this repo's processes in a card, expanded per card ($VAR, ${VAR:-default})
 env     = { Cors__Origins__0 = "http://localhost:${TWIG_PORT_WEB:-4200}" }
 install = "dotnet restore"

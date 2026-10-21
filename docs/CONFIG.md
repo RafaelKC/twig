@@ -103,7 +103,7 @@ local_files = [".env.local"]
 env         = { NG_API_URL = "http://localhost:${TWIG_PORT_API:-5000}" }
 ```
 
-Allowed: `label`, `short`, `run`, `autorun`, `port`, `env`, `install`, `post_create`,
+Allowed: `label`, `short`, `run`, `autorun`, `port`, `ports`, `env`, `install`, `post_create`,
 `local_files`, `debug`. A key replaces the same key of the user config as a whole (an `env` table
 in the file replaces the config's `env` table, it isn't merged entry by entry). Not allowed: `path` and `default` (they are about your machine and your cards) and
 `hooks` (personal workflow, kept in your own config). In a card, the file is read from the
@@ -245,12 +245,30 @@ or on another machine, and there is no allocation state to keep. With the defaul
 Two cards whose numbers are equal modulo `span` share ports: `new`/`add-repo`/`refresh` warn
 about it (and about a port some other process is already listening on), but don't change them.
 
+**More than one port per repo.** `ports` names extra base ports; each gets the same card offset:
+
+```toml
+[repos.api]
+port  = 5000                                # TWIG_PORT_API and PORT
+ports = { https = 5100, debug = 9200 }      # TWIG_PORT_API_HTTPS, TWIG_PORT_API_DEBUG
+```
+
+In card `52644`: `5044`, `5144` and `9244`. Names are letters, digits and `_`; `PORT` is only the
+main `port`.
+
+**Base ports must be at least `span` apart**, across every repo and name: with bases `5000`
+and `5001`, card 44 would put `https` on `5045`, where card 45 puts `http`. The config is
+rejected with both ports named (`ports 4200 (web) and 4250 (storybook) are 50 apart, less than
+ports.span = 100`), also when the ports come from a `.twig.toml`. Move the bases apart, or lower
+`span` (which also lowers how many cards get distinct ports).
+
 The ports reach the processes as **environment variables**, and the project's `run` command
 (or its own config) decides how to use them, falling back to its default when they are unset:
 
 | Variable | Value |
 |---|---|
 | `TWIG_PORT_<REPO>` | the port of each repo of the card (name upper-cased, non-alphanumerics as `_`: `my-api` → `TWIG_PORT_MY_API`), so a front end can point at the same card's back end |
+| `TWIG_PORT_<REPO>_<NAME>` | each named port (`ports = { https = 5100 }` → `TWIG_PORT_MY_API_HTTPS`) |
 | `PORT` | the repo's own port (many dev servers read it by themselves) |
 
 For variables named the way your project expects (`ASPNETCORE_URLS`, `Cors__Origins__0`,
@@ -402,6 +420,7 @@ post_create = ["echo created $TWIG_CARD_ID"]
 | `run` | — | command to start the project: becomes a VS Code task and a pane in herdr's `run` tab |
 | `autorun` | `true` | `false` = don't start it in herdr's `run` tab (still a VS Code task); only applies with `run` |
 | `port` | — | base dev server port; each card gets `port + offset` as `TWIG_PORT_<REPO>` / `PORT` (see [`[ports]`](#ports)) |
+| `ports` | `{}` | more base ports by name (`{ https = 5100 }`), `TWIG_PORT_<REPO>_<NAME>` in a card; at least `ports.span` apart from every other base port |
 | `env` | `{}` | extra environment variables of the repo's processes in a card; values may use `$VAR`, `${VAR}`, `${VAR:-default}` (see [Repo environment](#repo-environment-env)) |
 | `install` | — | dependency install command (e.g. `pnpm install`), used by `--install` or `worktree.auto_install`; without it, the repo is skipped |
 | `post_create` | `[]` | extra shell commands run in the worktree after `install` (e.g. `["cp .env.example .env", "dotnet ef database update"]`). Env: `TWIG_CARD`, `TWIG_REPO`. Stops at the first failure (warns only) |

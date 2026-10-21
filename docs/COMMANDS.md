@@ -238,7 +238,8 @@ With `--json`, stdout is only this JSON document (no colors, no emoji, no update
 It is always `{"cards": [...]}`: one entry per active card, or just the requested one with
 `<id>` (an unknown card still fails with exit 1 and nothing on stdout). `base_ref`,
 `vs_base`, `origin_ref` and `vs_origin` are `null` when there is nothing to compare against;
-`port` is the card's dev server port for the repo (`null` without `port` in the config).
+`port` is the card's dev server port for the repo (`null` without `port` in the config) and
+`ports` its named ports (`{"https": 5144}`, `{}` without `ports`).
 
 ```json
 {
@@ -254,7 +255,8 @@ It is always `{"cards": [...]}`: one entry per active card, or just the requeste
           "vs_base": { "ahead": 2, "behind": 0 },
           "origin_ref": "origin/card-123",
           "vs_origin": { "ahead": 1, "behind": 0 },
-          "port": null
+          "port": null,
+          "ports": {}
         }
       ],
       "herdr": { "workspace": true, "agents_running": 1 }
