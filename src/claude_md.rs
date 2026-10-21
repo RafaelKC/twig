@@ -55,6 +55,14 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
         );
         if let Some(r) = cfg.repo(repo).filter(|r| !r.run.is_empty()) {
             runs += &format!("- `{repo}`: `{}`\n", r.run);
+            let env: Vec<String> = crate::procenv::of(cfg, id, Some(repo))
+                .into_iter()
+                .filter(|(k, _)| r.env.contains_key(k))
+                .map(|(k, v)| format!("`{k}={v}`"))
+                .collect();
+            if !env.is_empty() {
+                runs += &format!("  with {}\n", env.join(", "));
+            }
         }
     }
     if runs.is_empty() {

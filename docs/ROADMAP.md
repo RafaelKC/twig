@@ -89,7 +89,8 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
   - [ ] Others: Vite, Next, Python, Go…
 - [x] Per-card ports, so two cards can run at the same time ([#3](https://github.com/RafaelKC/twig/issues/3)): `port` per repo, deterministic offset from the card number, `TWIG_PORT_<REPO>`/`PORT` in herdr panes, hooks and VS Code, `twig ports`
 - [ ] Users can write their own strategy (script/plugin in the config folder, with a contract: `detect`, `run_cmd`, `apply_port`, `default_port_base`)
-- [ ] Wire front ↔ back automatically (front pointing at the same card's back-end port; today by hand through `$TWIG_PORT_<BACK>`)
+- [x] Wire front ↔ back: every process of the card gets every repo's port, and the repo's `env` maps them to the project's own settings (API URL, CORS origin)
+- [ ] Several named ports per repo (`ports = { https = 5100 }`), with a check that base ports are at least `ports.span` apart
 
 ## Commands (ideas, see issues)
 

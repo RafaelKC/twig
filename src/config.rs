@@ -314,6 +314,8 @@ pub struct Repo {
     pub autorun: bool,
     /// Base dev server port; each card gets `port + offset` (see `ports.rs`).
     pub port: Option<u16>,
+    /// Extra environment of the repo's processes in a card; values expand `$VAR` (see `procenv.rs`).
+    pub env: IndexMap<String, String>,
     pub install: String,
     pub post_create: Vec<String>,
     pub hooks: Hooks,
@@ -331,6 +333,7 @@ impl Default for Repo {
             run: String::new(),
             autorun: true,
             port: None,
+            env: IndexMap::new(),
             install: String::new(),
             post_create: vec![],
             hooks: Hooks::default(),
@@ -365,6 +368,16 @@ pub fn expand(p: &str) -> PathBuf {
         return home().unwrap_or_default().join(rest);
     }
     PathBuf::from(p)
+}
+
+/// Checks on `[repos.*]` that serde can't express.
+fn validate_repos(repos: &IndexMap<String, Repo>) -> Result<()> {
+    for (name, r) in repos {
+        if let Some(k) = r.env.keys().find(|k| !crate::procenv::valid_name(k)) {
+            bail!("repos.{name}.env: `{k}` is not a valid environment variable name");
+        }
+    }
+    Ok(())
 }
 
 fn is_git_repo(p: &Path) -> bool {
@@ -408,6 +421,7 @@ impl Config {
         if cf.contains(['/', '\\']) {
             bail!("agent.context_file must be a file name, not a path: {cf}");
         }
+        validate_repos(&cfg.repos)?;
         if cfg.ports.span == 0 {
             bail!("ports.span must be at least 1");
         }

@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::{card, ports, sys, ui};
+use crate::{card, procenv, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
     let out = sys::output(Command::new("herdr").args(args))?;
@@ -156,9 +156,9 @@ fn tab_panes(ws: &str, tab: &str) -> Result<Vec<(String, String, String)>> {
         .collect())
 }
 
-/// `--env K=V` arguments for a new pane of `repo` (the card's ports, see `ports.rs`).
+/// `--env K=V` arguments for a new pane of `repo` (the card's ports and the repo's `env`).
 fn env_args(cfg: &Config, id: &str, repo: &str) -> Vec<String> {
-    ports::env(cfg, id, Some(repo))
+    procenv::of(cfg, id, Some(repo))
         .into_iter()
         .flat_map(|(k, v)| ["--env".to_string(), format!("{k}={v}")])
         .collect()
@@ -172,7 +172,7 @@ fn with_env<'a>(args: &[&'a str], env: &'a [String]) -> Vec<&'a str> {
 
 /// Make sure a repo has a pane in a tab. Creates the tab if missing; an existing pane
 /// is left alone unless `force` (root pane just created along with the workspace).
-/// New panes get the card's ports as environment variables.
+/// New panes get the card's ports and the repo's `env` as environment variables.
 #[allow(clippy::too_many_arguments)]
 fn ensure_panel(
     cfg: &Config,

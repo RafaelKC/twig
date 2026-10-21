@@ -2778,3 +2778,72 @@ fn template_agent_prompt_and_the_flag_overriding_it() {
         "{calls}"
     );
 }
+
+// ───────────────────────── repo env ─────────────────────────
+
+#[test]
+fn repo_env_is_expanded_per_card_and_reaches_panes_hooks_and_vscode() {
+    let s = ports_sandbox();
+    let log = herdr_builder_stub(&s);
+    let hook_log = s.path("hook.log");
+    let cfg = fs::read_to_string(&s.config).unwrap().replace(
+        "[repos.b]\nport = 5000\n",
+        &format!(
+            "[repos.b]\nport = 5000\nrun = \"api\"\nenv = {{ Cors__Origins__0 = \"http://localhost:$TWIG_PORT_A\", Front = \"${{TWIG_PORT_NOPE:-4200}}\", Card = \"$TWIG_CARD\" }}\n\n[repos.b.hooks]\npost_create = [\"echo \\\"$Cors__Origins__0 $Front $Card\\\" >> {}\"]\n",
+            hook_log.display()
+        ),
+    );
+    fs::write(&s.config, cfg).unwrap();
+    assert_exit(
+        &s.run(&["new", "52644", "x", "--repos", "a,b", "--no-ado"]),
+        0,
+    );
+
+    assert_eq!(
+        fs::read_to_string(&hook_log).unwrap(),
+        "http://localhost:4244 4200 52644\n"
+    );
+    let calls = fs::read_to_string(&log).unwrap();
+    assert!(
+        calls.contains("--env PORT=5044 --env Cors__Origins__0=http://localhost:4244 --env Front=4200 --env Card=52644"),
+        "{calls}"
+    );
+    let ws: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(s.path("wt/52644/52644.code-workspace")).unwrap())
+            .unwrap();
+    let task_env = &ws["tasks"]["tasks"][1]["options"]["env"];
+    assert_eq!(task_env["Cors__Origins__0"], "http://localhost:4244");
+    let ctx = fs::read_to_string(s.path("wt/52644/CLAUDE.md")).unwrap();
+    assert!(
+        ctx.contains("with `Cors__Origins__0=http://localhost:4244`"),
+        "{ctx}"
+    );
+}
+
+#[test]
+fn repo_env_with_an_invalid_name_is_a_config_error() {
+    let s = new_sandbox();
+    append_config(&s, "\n[repos.a.env]\n\"BAD-NAME\" = \"x\"\n");
+    let o = s.run(&["ls"]);
+    assert_exit(&o, 1);
+    assert_has(
+        &o,
+        "repos.a.env: `BAD-NAME` is not a valid environment variable name",
+    );
+}
+
+#[test]
+fn repo_env_can_come_from_the_repo_and_card_twig_toml() {
+    let s = overrides_sandbox("env = { API = \"x:$PORT\" }\n");
+    assert_exit(&s.run(&["new", "7", "x", "--no-ado"]), 0);
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("with `API=x:4207`"), "{ctx}");
+    fs::write(
+        s.path("wt/7/.twig.toml"),
+        "[repos.a]\nenv = { API = \"card:$TWIG_CARD\" }\n",
+    )
+    .unwrap();
+    assert_exit(&s.run(&["refresh", "7"]), 0);
+    let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
+    assert!(ctx.contains("with `API=card:7`"), "{ctx}");
+}
