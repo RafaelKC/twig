@@ -139,7 +139,8 @@ twig new 52644                      # create the card with the default repos
 twig new 52644 --repos api,ui-kit   # pick the repos
 twig add-repo 52644 web             # add a repo later (or restore closed panes)
 twig open 52644                     # open the card in the default target (herdr or code)
-twig open-card 52644              # open the card page (Azure DevOps) in the browser
+twig open-card 52644              # open the card page in the browser
+twig new acme/web#12               # GitHub: issue 12 of acme/web (card folder web-12)
 twig herdr 52644                    # open the card in herdr
 twig code                           # open the current card in VS Code
 twig ls                             # cards, branches, uncommitted changes (*)
@@ -154,7 +155,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `new <id> [slug]` | worktrees, `CLAUDE.md`/`AGENTS.md`, herdr workspace and, if enabled, the VS Code workspace |
 | `add-repo <id> <repo,...>` | add repos to a card; recreates missing herdr panes |
 | `open [id] [default\|herdr\|code]` | open a card in the chosen target; default from `[open] default` (herdr) |
-| `open-card [id]` (`opcd`) | open the card page in the browser (Azure DevOps only for now) |
+| `open-card [id]` (`opcd`) | open the card page (work item or issue) in the browser |
 | `herdr <id>` | open/focus the card in herdr |
 | `code [id]` | open the card in VS Code; without an id, the current card |
 | `ls` | active cards and each repo's branch (`--json` for scripts) |

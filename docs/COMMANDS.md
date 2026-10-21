@@ -10,7 +10,7 @@
 | `twig add-repo <id> <repo,...>` | adds more repos to an existing card |
 | `twig template ls` / `show NAME` / `edit` | lists, shows and edits the card templates (`templates.toml`) |
 | `twig open [id] [default\|herdr\|code]` | opens the card in the chosen target (default: `[open] default`, herdr) |
-| `twig open-card [id]` (`opcd`) | opens the card's page in the browser (Azure DevOps only for now) |
+| `twig open-card [id]` (`opcd`) | opens the card's page (work item or issue) in the browser |
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls [--json]` | lists active cards and each repo's branch |
@@ -50,6 +50,25 @@ Rule shared by `twig new` and `twig add-repo`:
 
 You can open both, just one, or neither. See [CONFIG.md](CONFIG.md) → `[vscode]` and `[herdr]`.
 
+## Card ids
+
+Every command that takes a card id accepts what the provider calls it:
+
+| Provider | You type | Card folder / herdr workspace | Branch |
+|---|---|---|---|
+| `az` | `52644` or `52644-some-slug` | `52644` | `feat/52644-<slug>` |
+| `gh` | `123` (looked up in the card's first repo) | `123` | `feat/123-<slug>` |
+| `gh` | `owner/repo#123`, `repo#123` (owner from `provider.gh.owner`) or `https://github.com/owner/repo/issues/123` | `repo-123` | `feat/123-<slug>` |
+
+GitHub issue numbers belong to a repository, so the same number can be two different issues in
+two repos. A repo-scoped id keeps them apart: the card folder is named `<repo>-<number>`, the
+issue is always fetched with `gh issue view <number> --repo owner/repo`, and the card remembers
+it (`.twig-issue` in the card folder). After `new`, both the folder name and the full id work:
+`twig status tracker-12` and `twig status acme/tracker#12` are the same card.
+
+`owner/repo#123` ids are rejected with `provider.default = "az"`. Quoting is not needed in bash
+or zsh (`#` only starts a comment at the start of a word).
+
 ## `twig new <id> [slug] [options]`
 
 Creates the `<worktrees>/<id>/` folder with one worktree per repo, the card's context file (`CLAUDE.md`, or `AGENTS.md` with `agent.provider = "codex"`),
@@ -59,7 +78,7 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 | Argument | Description |
 |---|---|
-| `<id>` | card/issue id in the provider (`az` or `gh`) |
+| `<id>` | card/issue id in the provider (`az` or `gh`); see [Card ids](#card-ids) |
 | `[slug]` | used only when the branch has to be **created**; without it, it comes from the card title |
 
 **Options**
@@ -132,13 +151,14 @@ twig open code              # current card, in VS Code (a lone target is not rea
 
 ## `twig open-card [id]` (alias `opcd`)
 
-Opens the card's page (the Azure DevOps work item) in the default browser, using the URL the
-provider cached for the card (fetched once from `az` if missing). Uses `xdg-open` on Linux and
-`open` on macOS; if no opener is found, it prints the URL instead.
+Opens the card's page (the Azure DevOps work item or the GitHub issue) in the default browser,
+using the URL the provider cached for the card (fetched once from `az`/`gh` if missing). Without a
+cached URL it falls back to `provider.az.item_url` (Azure DevOps) or
+`https://github.com/<owner>/<repo>/issues/<n>` for a [repo-scoped](#card-ids) GitHub card. Uses
+`xdg-open` on Linux and `open` on macOS; if no opener is found, it prints the URL instead.
 
 Without `<id>`, the card is inferred from the current directory; outside a card it fails with a
-usage error. With `provider = "gh"` it exits non-zero ("not supported yet") until GitHub
-`owner/repo#123` ids exist.
+usage error.
 
 ```bash
 twig open-card 52644

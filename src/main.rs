@@ -48,7 +48,8 @@ enum Cmd {
     /// Branch, per repo: --branch; else a branch on origin with <id> in its name
     /// (asks if there are several); else creates <prefix>/<id>-<slug> from origin/<base>.
     New {
-        /// Card/issue id in the provider (accepts "123-slug").
+        /// Card/issue id in the provider (accepts "123-slug"; with provider gh also
+        /// "owner/repo#123", "repo#123" with provider.gh.owner, or the issue URL).
         id: String,
         /// Only used when the branch must be CREATED; defaults to the card title.
         slug: Option<String>,
@@ -122,10 +123,10 @@ enum Cmd {
         #[arg(value_enum)]
         target: Option<Target>,
     },
-    /// Open the card's page (work item) in the default browser (Azure DevOps only for now).
+    /// Open the card's page (work item or issue) in the default browser.
     ///
     /// Without <ID>, the card is inferred from the current directory; outside a card, it is a
-    /// usage error. With `provider = "gh"` this is not supported yet.
+    /// usage error.
     #[command(name = "open-card", alias = "opcd")]
     OpenCard { id: Option<String> },
     /// Open the card's herdr workspace (creates whatever is missing).
@@ -317,6 +318,8 @@ fn run(cli: Cli) -> Result<()> {
 
     let mut cfg = Config::load()?;
     let update = cfg.update.clone();
+    let mut cli = cli;
+    normalize_ids(&cfg, &mut cli.cmd)?;
     // existing cards keep the agent and hooks of the template they were created from
     let card_id = match &cli.cmd {
         Cmd::AddRepo { id, .. }
@@ -444,6 +447,27 @@ fn run(cli: Cli) -> Result<()> {
         updatecheck::maybe_hint(&update);
     }
     result
+}
+
+/// Ids of existing cards may be typed as `owner/repo#123`: turn them into the card folder name.
+fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
+    let id = match cmd {
+        Cmd::AddRepo { id, .. }
+        | Cmd::Herdr { id }
+        | Cmd::Refresh { id, .. }
+        | Cmd::Sync { id, .. }
+        | Cmd::Rm { id, .. } => Some(id),
+        Cmd::Open { id: Some(id), .. }
+        | Cmd::OpenCard { id: Some(id) }
+        | Cmd::Code { id: Some(id) }
+        | Cmd::Status { id: Some(id), .. }
+        | Cmd::Memo { card: Some(id), .. } => Some(id),
+        _ => None,
+    };
+    if let Some(id) = id {
+        *id = card::key(cfg, id)?;
+    }
+    Ok(())
 }
 
 fn main() -> ExitCode {

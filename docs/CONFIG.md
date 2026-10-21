@@ -32,7 +32,7 @@ project      = "MyProject"
 item_url     = ""                 # manual fallback, {id} becomes the number
 
 [provider.gh]
-owner = ""                        # to resolve "#123" without owner/repo
+owner = ""                        # so "repo#123" means "<owner>/repo#123"
 
 [vscode]
 enabled     = true
@@ -100,7 +100,7 @@ The section used to be called `[ai]`; the old name is still accepted.
 | `az.organization` | `""` | ADO org; empty = `az devops configure` default |
 | `az.project` | `""` | ADO project; empty = `az` default |
 | `az.item_url` | `""` | manual work item URL (`{id}` becomes the number), used only if `az` doesn't return one |
-| `gh.owner` | `""` | default owner to resolve `#123` without `owner/repo` |
+| `gh.owner` | `""` | default owner, so `repo#123` means `<owner>/repo#123` (see [Card ids](COMMANDS.md#card-ids)) |
 
 ### `[vscode]`
 

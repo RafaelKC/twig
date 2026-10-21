@@ -995,12 +995,25 @@ fn open_card_prints_the_url_without_an_opener() {
 }
 
 #[test]
-fn open_card_with_gh_provider_fails_clearly() {
+fn open_card_with_gh_uses_the_issue_url_of_a_repo_scoped_card() {
     let (s, log) = open_card_sandbox("[provider]\ndefault = \"gh\"\n");
-    let o = s.run(&["open-card", "123"]);
-    assert_exit(&o, 1);
-    assert_has(&o, "not supported yet for provider \"gh\"");
-    assert_eq!(opened(&log), "");
+    fs::create_dir_all(s.path("wt/web-9/r1/.git")).unwrap();
+    fs::write(s.path("wt/web-9/.twig-issue"), "acme/web#9\n").unwrap();
+    // no cache and no `gh`: the URL is derived from owner/repo#number
+    assert_exit(&s.run(&["open-card", "acme/web#9"]), 0);
+    assert_eq!(opened(&log), "https://github.com/acme/web/issues/9");
+}
+
+#[test]
+fn open_card_with_gh_opens_the_cached_issue_url() {
+    let (s, log) = open_card_sandbox("[provider]\ndefault = \"gh\"\n");
+    fs::write(
+        s.path("wt/123/.gh.json"),
+        r#"{"title":"T","url":"https://github.com/acme/web/issues/123"}"#,
+    )
+    .unwrap();
+    assert_exit(&s.run(&["open-card", "123"]), 0);
+    assert_eq!(opened(&log), "https://github.com/acme/web/issues/123");
 }
 
 // ───────────────────────── status ─────────────────────────
@@ -1156,6 +1169,68 @@ fn new_creates_worktree_branch_from_base_and_context_file() {
     let ctx = fs::read_to_string(s.path("wt/7/CLAUDE.md")).unwrap();
     assert!(ctx.contains("Card #7"), "{ctx}");
     assert!(ctx.contains("feat/7-my-slug"), "{ctx}");
+}
+
+/// Fake `gh` that logs its arguments and answers `issue view` with issue 12 of acme/tracker.
+fn gh_issue_stub(s: &Sandbox) -> PathBuf {
+    let log = s.path("gh.log");
+    s.stub(
+        "gh",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2" in
+  "issue view") echo '{{"number":12,"title":"Login breaks on Safari","url":"https://github.com/acme/tracker/issues/12","body":"steps","state":"OPEN","labels":[{{"name":"bug"}}],"assignees":[]}}' ;;
+esac"#,
+            log = log.display()
+        ),
+    );
+    log
+}
+
+#[test]
+fn new_with_a_repo_scoped_gh_id() {
+    let s = new_sandbox();
+    append_config(&s, "\n[provider]\ndefault = \"gh\"\n");
+    let log = gh_issue_stub(&s);
+    let o = s.run(&["new", "acme/tracker#12"]);
+    assert_exit(&o, 0);
+    let gh = fs::read_to_string(&log).unwrap();
+    assert!(
+        gh.contains("issue view 12") && gh.contains("--repo acme/tracker"),
+        "{gh}"
+    );
+    let dir = s.path("wt/tracker-12");
+    assert_eq!(
+        fs::read_to_string(dir.join(".twig-issue")).unwrap().trim(),
+        "acme/tracker#12"
+    );
+    // the branch uses the issue number and the title; the bug label picks no special prefix
+    assert_eq!(branch_of(dir.join("a")), "feat/12-login-breaks-on-safari");
+    let ctx = fs::read_to_string(dir.join("CLAUDE.md")).unwrap();
+    assert!(
+        ctx.contains("# Card acme/tracker#12 — Login breaks on Safari"),
+        "{ctx}"
+    );
+    assert!(
+        ctx.contains("gh issue view 12 --repo acme/tracker"),
+        "{ctx}"
+    );
+
+    // the same id names the existing card
+    let st = s.run(&["status", "acme/tracker#12", "--json"]);
+    assert_exit(&st, 0);
+    assert_eq!(json_of(&st)["cards"][0]["id"], "tracker-12");
+    assert_exit(&s.run(&["rm", "acme/tracker#12"]), 0);
+    assert!(!dir.exists());
+}
+
+#[test]
+fn repo_scoped_ids_are_rejected_for_azure_devops() {
+    let s = new_sandbox();
+    let o = s.run(&["new", "acme/tracker#12", "--no-ado"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "only for provider \"gh\"");
+    assert!(!s.path("wt/tracker-12").exists());
 }
 
 #[test]
