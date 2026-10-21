@@ -11,7 +11,7 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 "GitHub end to end, close the card's loop, run several cards at once". In order:
 
 1. [#4](https://github.com/RafaelKC/twig/issues/4) GitHub `owner/repo#123` ids, `open-card` for `gh` (done, unreleased)
-2. [#12](https://github.com/RafaelKC/twig/issues/12) `twig pr`
+2. [#12](https://github.com/RafaelKC/twig/issues/12) `twig pr` (done, unreleased)
 3. [#10](https://github.com/RafaelKC/twig/issues/10) `twig clean`
 4. [#3](https://github.com/RafaelKC/twig/issues/3) per-card ports, as environment variables of the herdr panes
 5. [#19](https://github.com/RafaelKC/twig/issues/19) per-repo `.twig.toml`, per-card and environment overrides
@@ -41,7 +41,7 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 
 - [x] Support the `az` CLI (Azure DevOps) **and** the `gh` CLI (GitHub)
   - [x] Single provider interface: title, type, state, assignee, tags, description, acceptance criteria and link, cached per card
-  - [ ] The branch's PR (status, link) through the provider ([#12](https://github.com/RafaelKC/twig/issues/12))
+  - [x] Open the card's PRs through the provider, one per repo, linked to each other ([#12](https://github.com/RafaelKC/twig/issues/12)); PR status in `twig status` is still open
   - [x] GitHub `owner/repo#123` ids, `repo#123` with `provider.gh.owner`, or the issue URL; card folder `repo-123` ([#4](https://github.com/RafaelKC/twig/issues/4))
 - [ ] More providers: Jira, Linear, GitLab ([#17](https://github.com/RafaelKC/twig/issues/17))
 - [x] At install, ask which CLI to use (az and/or gh)
@@ -98,7 +98,8 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 - [x] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7); `gh` since [#4](https://github.com/RafaelKC/twig/issues/4))
 - [x] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9); ports and PR info pending #3/#12)
 - [x] `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
-- [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12))
+- [x] `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12))
+- [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10))
 - [x] `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
 - [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5); a `post_create` hook can already run a command you wrote, see [#15](https://github.com/RafaelKC/twig/issues/15)),
 - [x] `twig memo` card memory ([#16](https://github.com/RafaelKC/twig/issues/16)), still experimental; follow-ups in [#30](https://github.com/RafaelKC/twig/issues/30). See [MEMORY.md](MEMORY.md)

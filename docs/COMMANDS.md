@@ -18,6 +18,7 @@
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
 | `twig memo [text] [-c id]` (in development) | appends a dated line to the card memory (`MEMORY.md`, survives `rm`); without text, shows it. See [MEMORY.md](MEMORY.md) |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
+| `twig pr [id] [--draft] [-n]` | pushes each repo's branch and opens one linked PR per repo (`gh` / `az repos`) |
 | `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor [--json]` | checks dependencies, login and config without changing anything |
@@ -341,6 +342,43 @@ Runs `git fetch origin <base>` in each repo of the card (`<base>` is `git.base_b
 | `-n`, `--dry-run` | fetches, then only shows how many commits each repo would take; changes no worktree |
 
 Without `--merge`/`--rebase`, the strategy is `git.sync` from the config (`"rebase"` by default).
+
+## `twig pr [id] [--draft] [-n | --dry-run]`
+
+Opens the card's pull requests: one per repo, in a single command, through the provider's CLI
+(`gh pr create` or `az repos pr create`, run inside the worktree so the repo is detected from
+`origin`). Without `<id>`, the card of the current directory.
+
+Per repo, in config order:
+
+1. a detached HEAD is skipped;
+2. a branch that already has an **open PR** just prints it (nothing is pushed or edited);
+3. a branch with **no commits ahead** of `origin/<base>` is skipped (base: the card template's
+   `base`, else `git.base_branch`);
+4. otherwise the branch is pushed (`git push -u origin <branch>`) and the PR is opened into the
+   base. Uncommitted changes only warn: they are not in the PR.
+
+The PR title is the card title (the branch name when the card has no metadata). The description
+links the card; on GitHub it also says `Closes owner/repo#N` (from a [repo-scoped id](#card-ids)
+or the cached issue URL), so merging closes the issue; on Azure DevOps the work item is linked
+with `--work-items`. When the card ends up with more than one PR, each PR opened in this run gets
+an "Other PRs of this card" list with the sibling links (PRs that already existed are left as
+they are).
+
+| Option | Description |
+|---|---|
+| `--draft` | opens the PRs as drafts |
+| `-n`, `--dry-run` | shows what would be pushed and opened, without doing it |
+
+Exits 1 when the provider CLI is missing, or when a push or a PR creation failed (the other
+repos still go on). Azure DevOps uses `provider.az.organization` when set, else what `az`
+detects from the remote.
+
+```bash
+twig pr 52644 --draft
+twig pr                      # current card
+twig pr acme/web#12 -n
+```
 
 ## `twig prune [-n | --dry-run]`
 
