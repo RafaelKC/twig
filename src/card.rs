@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 
-use crate::config::{expand, Config};
+use crate::config::{expand, Config, ProviderKind};
 use crate::{sys, ui};
 
 /// Accept "50306-dispositivos" as "50306" + slug "dispositivos".
@@ -16,6 +16,113 @@ pub fn split_id(raw: &str) -> (String, Option<String>) {
         Some(c) => (c[1].to_string(), Some(c[2].to_string())),
         None => (raw.to_string(), None),
     }
+}
+
+/// Marker in the card folder with the GitHub issue the card was created from (`owner/repo#123`).
+const ISSUE_MARKER: &str = ".twig-issue";
+
+/// A card as the provider sees it. `key` names the card folder and the herdr workspace;
+/// `number` is the work item / issue number; `repo` is the GitHub `owner/repo` that owns the
+/// issue, when the card was created from a repo-scoped id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardRef {
+    pub key: String,
+    pub number: String,
+    pub repo: Option<String>,
+}
+
+impl CardRef {
+    /// The card stored in `<worktrees>/<key>/` (its marker, else the key is the number).
+    pub fn of(cfg: &Config, key: &str) -> Self {
+        fs::read_to_string(cfg.card_dir(key).join(ISSUE_MARKER))
+            .ok()
+            .and_then(|raw| parse_gh_ref(raw.trim(), None))
+            .unwrap_or_else(|| Self {
+                key: key.to_string(),
+                number: key.to_string(),
+                repo: None,
+            })
+    }
+
+    /// `owner/repo#123` for repo-scoped cards, else `#123`.
+    pub fn display(&self) -> String {
+        match &self.repo {
+            Some(r) => format!("{r}#{}", self.number),
+            None => format!("#{}", self.number),
+        }
+    }
+
+    pub fn record(&self, cfg: &Config) {
+        if let Some(r) = &self.repo {
+            let _ = fs::write(
+                cfg.card_dir(&self.key).join(ISSUE_MARKER),
+                format!("{r}#{}\n", self.number),
+            );
+        }
+    }
+}
+
+/// `owner/repo#123`, `repo#123` (owner from `default_owner`) or a GitHub issue URL.
+fn parse_gh_ref(raw: &str, default_owner: Option<&str>) -> Option<CardRef> {
+    let url = Regex::new(r"^https?://github\.com/([^/\s]+)/([^/\s]+)/issues/([0-9]+)/?$").unwrap();
+    let short = Regex::new(r"^(?:([^/#\s]+)/)?([^/#\s]+)#([0-9]+)$").unwrap();
+    let (owner, repo, number) = if let Some(c) = url.captures(raw) {
+        (c[1].to_string(), c[2].to_string(), c[3].to_string())
+    } else {
+        let c = short.captures(raw)?;
+        let owner = match c.get(1) {
+            Some(o) => o.as_str().to_string(),
+            None => default_owner.filter(|o| !o.is_empty())?.to_string(),
+        };
+        (owner, c[2].to_string(), c[3].to_string())
+    };
+    Some(CardRef {
+        key: format!("{repo}-{number}"),
+        number,
+        repo: Some(format!("{owner}/{repo}")),
+    })
+}
+
+/// Whether the text looks like a repo-scoped GitHub id (whatever the provider).
+fn looks_like_gh_ref(raw: &str) -> bool {
+    raw.contains('#') || raw.starts_with("https://github.com/")
+}
+
+/// Resolve what the user typed: `123`, `123-slug`, or (provider `gh`) `owner/repo#123`,
+/// `repo#123` with `provider.gh.owner`, or an issue URL. Returns the card and the slug in it.
+pub fn parse_ref(cfg: &Config, raw: &str) -> Result<(CardRef, Option<String>)> {
+    if looks_like_gh_ref(raw) {
+        if cfg.provider.default != ProviderKind::Gh {
+            bail!("{raw:?}: owner/repo#123 ids are only for provider \"gh\" (provider.default)");
+        }
+        let owner = Some(cfg.provider.gh.owner.as_str());
+        return match parse_gh_ref(raw, owner) {
+            Some(r) => Ok((r, None)),
+            None if Regex::new(r"^[^/#\s]+#[0-9]+$").unwrap().is_match(raw) => {
+                bail!("{raw:?}: repo#123 needs provider.gh.owner in the config; use owner/repo#123")
+            }
+            None => {
+                bail!("{raw:?} is not a card id (expected 123, owner/repo#123 or an issue URL)")
+            }
+        };
+    }
+    let (id, slug) = split_id(raw);
+    Ok((
+        CardRef {
+            key: id.clone(),
+            number: id,
+            repo: None,
+        },
+        slug,
+    ))
+}
+
+/// The card folder name for an id typed on an existing card (`owner/repo#4` → `repo-4`).
+pub fn key(cfg: &Config, raw: &str) -> Result<String> {
+    if looks_like_gh_ref(raw) {
+        return parse_ref(cfg, raw).map(|(r, _)| r.key);
+    }
+    Ok(raw.to_string())
 }
 
 /// Repos actually present in the card folder (independent of the config), sorted alphabetically.
@@ -385,6 +492,81 @@ mod tests {
             ("50306".into(), Some("dispositivos".into()))
         );
         assert_eq!(split_id("50306"), ("50306".into(), None));
+    }
+
+    fn cfg(provider: &str) -> (tempfile::TempDir, Config) {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        fs::write(
+            &file,
+            format!(
+                "version = 1\n{provider}\n[paths]\nworktrees = \"{}\"\n",
+                tmp.path().join("wt").display()
+            ),
+        )
+        .unwrap();
+        let cfg = Config::load_from(&file).unwrap();
+        (tmp, cfg)
+    }
+
+    fn gh_ref(key: &str, number: &str, repo: &str) -> CardRef {
+        CardRef {
+            key: key.into(),
+            number: number.into(),
+            repo: Some(repo.into()),
+        }
+    }
+
+    #[test]
+    fn gh_ids_are_repo_scoped() {
+        let (_t, c) = cfg("[provider]\ndefault = \"gh\"\ngh.owner = \"acme\"\n");
+        let want = gh_ref("web-12", "12", "acme/web");
+        assert_eq!(parse_ref(&c, "acme/web#12").unwrap().0, want);
+        assert_eq!(parse_ref(&c, "web#12").unwrap().0, want);
+        assert_eq!(
+            parse_ref(&c, "https://github.com/acme/web/issues/12")
+                .unwrap()
+                .0,
+            want
+        );
+        assert_eq!(
+            parse_ref(&c, "other/web#12").unwrap().0,
+            gh_ref("web-12", "12", "other/web")
+        );
+        // plain numbers keep working
+        let (r, slug) = parse_ref(&c, "12-fix-it").unwrap();
+        assert_eq!(
+            (r.key.as_str(), r.repo, slug.as_deref()),
+            ("12", None, Some("fix-it"))
+        );
+        assert_eq!(key(&c, "acme/web#12").unwrap(), "web-12");
+        assert_eq!(key(&c, "web-12").unwrap(), "web-12");
+    }
+
+    #[test]
+    fn short_gh_id_needs_an_owner_and_az_rejects_gh_ids() {
+        let (_t, c) = cfg("[provider]\ndefault = \"gh\"\n");
+        let err = parse_ref(&c, "web#12").unwrap_err().to_string();
+        assert!(err.contains("provider.gh.owner"), "{err}");
+        assert!(parse_ref(&c, "a/b#x").is_err());
+        let (_t, c) = cfg("");
+        let err = parse_ref(&c, "acme/web#12").unwrap_err().to_string();
+        assert!(err.contains("provider \"gh\""), "{err}");
+    }
+
+    #[test]
+    fn card_ref_round_trips_through_the_marker() {
+        let (_t, c) = cfg("[provider]\ndefault = \"gh\"\n");
+        let r = gh_ref("web-12", "12", "acme/web");
+        fs::create_dir_all(c.card_dir("web-12")).unwrap();
+        r.record(&c);
+        assert_eq!(CardRef::of(&c, "web-12"), r);
+        assert_eq!(r.display(), "acme/web#12");
+        let plain = CardRef::of(&c, "7");
+        assert_eq!(
+            (plain.number.as_str(), plain.display()),
+            ("7", "#7".to_string())
+        );
     }
 
     #[test]

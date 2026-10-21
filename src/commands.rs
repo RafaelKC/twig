@@ -4,7 +4,7 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-use crate::config::{Config, OpenTarget, ProviderKind};
+use crate::config::{Config, OpenTarget};
 use crate::hooks::{self, Event};
 use crate::provider::{self, CardInfo};
 use crate::{card, claude_md, herdr, memo, sys, templates, ui, workspace};
@@ -105,7 +105,8 @@ fn first_repo_path(cfg: &Config, repos: &[String]) -> Option<std::path::PathBuf>
 pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     check_code_flag(cfg, a.code)?;
 
-    let (id, slug_from_id) = card::split_id(&a.id);
+    let (cref, slug_from_id) = card::parse_ref(cfg, &a.id)?;
+    let id = cref.key.clone();
     if card::is_reserved(&id) {
         bail!("{id:?} cannot be a card id (reserved folder name)");
     }
@@ -153,7 +154,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     let info: Option<CardInfo> = if a.no_ado {
         None
     } else {
-        provider::load(cfg, &id, first_repo_path(cfg, &repos).as_deref())
+        provider::load(cfg, &cref, first_repo_path(cfg, &repos).as_deref())
     };
     if let Some(i) = &info {
         ui::info(format!("card: {}", i.title));
@@ -164,6 +165,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     }
 
     fs::create_dir_all(&dir)?;
+    cref.record(cfg);
     if let Some(i) = &info {
         provider::save_cache(cfg, &id, i);
     }
@@ -183,7 +185,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         .or(t_base)
         .unwrap_or_else(|| cfg.git.base_branch.clone());
     let opts = card::BranchOpts {
-        id: &id,
+        id: &cref.number,
         slug: &slug,
         forced: a.branch.as_deref(),
         base: &base,
@@ -271,9 +273,10 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     }
 
     let existing = card::repos_ordered(cfg, &dir);
+    let cref = card::CardRef::of(cfg, &a.id);
     let info = provider::load(
         cfg,
-        &a.id,
+        &cref,
         existing.first().and_then(|r| cfg.repo_path(r)).as_deref(),
     );
     let slug = info.as_ref().map(CardInfo::slug).unwrap_or_default();
@@ -293,7 +296,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
         .or_else(|| t.and_then(|t| t.base.clone()))
         .unwrap_or_else(|| cfg.git.base_branch.clone());
     let opts = card::BranchOpts {
-        id: &a.id,
+        id: &cref.number,
         slug: &slug,
         forced: a.branch.as_deref(),
         base: &base,
@@ -363,11 +366,8 @@ pub fn open(cfg: &Config, id: Option<&str>, target: Option<OpenTarget>) -> Resul
     }
 }
 
-/// `twig open-card [id]`: open the card's cached provider URL in the browser (Azure DevOps only).
+/// `twig open-card [id]`: open the card's provider URL (cached, else derived) in the browser.
 pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
-    if cfg.provider.default == ProviderKind::Gh {
-        bail!("open-card is not supported yet for provider \"gh\" (needs owner/repo#123 ids, see issue #4)");
-    }
     let id = match id {
         Some(id) => id.to_string(),
         None => match card::infer(cfg) {
@@ -383,10 +383,15 @@ pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
     let repo = card::repos_ordered(cfg, &cfg.card_dir(&id))
         .first()
         .and_then(|r| cfg.repo_path(r));
-    let url = provider::load(cfg, &id, repo.as_deref())
+    let cref = card::CardRef::of(cfg, &id);
+    let url = provider::load(cfg, &cref, repo.as_deref())
         .map(|i| i.url)
         .filter(|u| !u.is_empty())
-        .ok_or_else(|| anyhow::anyhow!("no URL for card {id}: not cached and the provider returned nothing (is `az` installed and logged in?)"))?;
+        .or_else(|| Some(provider::fallback_url(cfg, &cref)).filter(|u| !u.is_empty()))
+        .ok_or_else(|| {
+            let cli = cfg.provider.default.name();
+            anyhow::anyhow!("no URL for card {id}: not cached and the provider returned nothing (is `{cli}` installed and logged in?)")
+        })?;
     let opener = if cfg!(target_os = "macos") {
         "open"
     } else {
@@ -418,7 +423,7 @@ pub fn open_code(cfg: &Config, id: &str) -> Result<()> {
         let dir = cfg.card_dir(id);
         let info = provider::load(
             cfg,
-            id,
+            &card::CardRef::of(cfg, id),
             card::repos_ordered(cfg, &dir)
                 .first()
                 .and_then(|r| cfg.repo_path(r))
@@ -534,7 +539,7 @@ pub fn refresh(cfg: &Config, id: &str, refetch: bool) -> Result<()> {
     }
     let info = provider::load(
         cfg,
-        id,
+        &card::CardRef::of(cfg, id),
         card::repos_ordered(cfg, &dir)
             .first()
             .and_then(|r| cfg.repo_path(r))

@@ -9,6 +9,7 @@ use regex::Regex;
 use serde_json::Value;
 use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
 
+use crate::card::CardRef;
 use crate::config::{Config, ProviderKind};
 use crate::sys;
 
@@ -41,15 +42,16 @@ pub fn cache_file(cfg: &Config, id: &str) -> PathBuf {
 }
 
 /// Load from the card folder's cache; without a cache, query the provider.
-/// `gh_repo_dir` is a clone of the card's repo, from which `gh` infers owner/repo.
-pub fn load(cfg: &Config, id: &str, gh_repo_dir: Option<&Path>) -> Option<CardInfo> {
-    let cache = cache_file(cfg, id);
+/// `gh_repo_dir` is a clone of the card's repo, from which `gh` infers owner/repo when the card
+/// has no `owner/repo` of its own.
+pub fn load(cfg: &Config, card: &CardRef, gh_repo_dir: Option<&Path>) -> Option<CardInfo> {
+    let cache = cache_file(cfg, &card.key);
     if let Ok(raw) = fs::read_to_string(&cache) {
         if let Some(info) = parse(cfg.provider.default, &raw) {
             return Some(info);
         }
     }
-    let raw = fetch(cfg, id, gh_repo_dir)?;
+    let raw = fetch(cfg, card, gh_repo_dir)?;
     let info = parse(cfg.provider.default, &raw)?;
     if cache.parent().is_some_and(|d| d.is_dir()) {
         let _ = fs::write(&cache, &info.raw);
@@ -65,12 +67,19 @@ pub fn drop_cache(cfg: &Config, id: &str) {
     let _ = fs::remove_file(cache_file(cfg, id));
 }
 
-/// Card URL even without metadata (falls back to the config's `item_url`).
-pub fn fallback_url(cfg: &Config, id: &str) -> String {
-    cfg.provider.az.item_url.replace("{id}", id)
+/// Card URL even without metadata: the config's `item_url` (Azure DevOps), or the issue URL
+/// of a repo-scoped GitHub card.
+pub fn fallback_url(cfg: &Config, card: &CardRef) -> String {
+    match (cfg.provider.default, &card.repo) {
+        (ProviderKind::Gh, Some(repo)) => {
+            format!("https://github.com/{repo}/issues/{}", card.number)
+        }
+        _ => cfg.provider.az.item_url.replace("{id}", &card.number),
+    }
 }
 
-fn fetch(cfg: &Config, id: &str, gh_repo_dir: Option<&Path>) -> Option<String> {
+fn fetch(cfg: &Config, card: &CardRef, gh_repo_dir: Option<&Path>) -> Option<String> {
+    let id = card.number.as_str();
     match cfg.provider.default {
         ProviderKind::Az => {
             sys::which("az")?;
@@ -99,7 +108,9 @@ fn fetch(cfg: &Config, id: &str, gh_repo_dir: Option<&Path>) -> Option<String> {
                 "--json",
                 "number,title,url,body,state,labels,assignees",
             ]);
-            if let Some(dir) = gh_repo_dir {
+            if let Some(repo) = &card.repo {
+                cmd.args(["--repo", repo]);
+            } else if let Some(dir) = gh_repo_dir {
                 cmd.current_dir(dir);
             }
             sys::output(&mut cmd).ok()

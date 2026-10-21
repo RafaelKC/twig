@@ -8,22 +8,26 @@ Issue numbers refer to <https://github.com/RafaelKC/twig/issues>.
 
 ### Next: v0.4.0
 
-Not planned yet; pick from [Later](#later). Suggested: the GitHub path ([#4](https://github.com/RafaelKC/twig/issues/4), `open-card` for `gh`, [#12](https://github.com/RafaelKC/twig/issues/12)).
+"GitHub end to end, close the card's loop, run several cards at once". In order:
+
+1. [#4](https://github.com/RafaelKC/twig/issues/4) GitHub `owner/repo#123` ids, `open-card` for `gh` (done, unreleased)
+2. [#12](https://github.com/RafaelKC/twig/issues/12) `twig pr`
+3. [#10](https://github.com/RafaelKC/twig/issues/10) `twig clean`
+4. [#3](https://github.com/RafaelKC/twig/issues/3) per-card ports, as environment variables of the herdr panes
+5. [#19](https://github.com/RafaelKC/twig/issues/19) per-repo `.twig.toml`, per-card and environment overrides
+6. [#5](https://github.com/RafaelKC/twig/issues/5) start the agent with a prompt (a skill/command) when the card is created
 
 ### In development
 
-- **Card memory:** `twig memo`, a per-card `MEMORY.md` that survives `rm`, with the last 10 entries injected into the context file ([#16](https://github.com/RafaelKC/twig/issues/16)). Simple version implemented, still experimental: see [MEMORY.md](MEMORY.md). Follow-ups: consolidation of old entries, size cap, export on `rm` through lifecycle hooks ([#15](https://github.com/RafaelKC/twig/issues/15)), structured sections.
+- **Card memory:** `twig memo`, a per-card `MEMORY.md` that survives `rm`, with the last 10 entries injected into the context file ([#16](https://github.com/RafaelKC/twig/issues/16), shipped in v0.3.0). Still experimental: see [MEMORY.md](MEMORY.md). Follow-ups in [#30](https://github.com/RafaelKC/twig/issues/30): consolidation of old entries, size cap, export on `rm` through lifecycle hooks, structured sections.
 
 ### Later
 
 Not scheduled yet; grouped by theme.
 
-- **Ports and run:** [#3](https://github.com/RafaelKC/twig/issues/3) per-card dev server ports (card A front on 4200, card B on 4201)
-- **GitHub provider:** [#4](https://github.com/RafaelKC/twig/issues/4) `owner/repo#123` ids (unblocks `open-card` for `gh`)
-- **Automation:** [#5](https://github.com/RafaelKC/twig/issues/5) run a skill after creating a workspace; [#15](https://github.com/RafaelKC/twig/issues/15) lifecycle hooks (done, unreleased); [#14](https://github.com/RafaelKC/twig/issues/14) card templates (done, unreleased; choosing the template automatically from the work item type/tags is a follow-up)
-- **Day-to-day commands:** [#9](https://github.com/RafaelKC/twig/issues/9) `status`; [#10](https://github.com/RafaelKC/twig/issues/10) `clean` (merged/closed cards); [#12](https://github.com/RafaelKC/twig/issues/12) `pr`; [#13](https://github.com/RafaelKC/twig/issues/13) `sync`; [#11](https://github.com/RafaelKC/twig/issues/11) `--json`
-- **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#16](https://github.com/RafaelKC/twig/issues/16) handoff notes (simple version in development, see above); [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
-- **Config and quality:** [#19](https://github.com/RafaelKC/twig/issues/19) `.twig.toml`, per-card and env overrides (`config get/set` done); [#18](https://github.com/RafaelKC/twig/issues/18) CI on PRs and integration tests
+- **Agents and providers:** [#8](https://github.com/RafaelKC/twig/issues/8) more agents; [#17](https://github.com/RafaelKC/twig/issues/17) Jira/Linear/GitLab
+- **Editor:** [#29](https://github.com/RafaelKC/twig/issues/29) Neovim as a first-class editor target
+- **Templates:** pick the template automatically from the work item type/tags (follow-up on [#14](https://github.com/RafaelKC/twig/issues/14))
 
 Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates.toml`, `twig memo` in development; on top of v0.2.5's `status`, `sync`, `--json` on `ls`/`status`/`doctor`, update hint, CI on PRs and branch rules on `main`, PR-based release flow; on top of v0.2.0's `rm` that closes the herdr workspace and blocks on a running agent, `open`, `open-card`, Codex support; on top of v0.1.1's installer, `update`, `uninstall`, `doctor`, `prune`, completions, `worktree.auto_install` and per-repo `post_create`).
 
@@ -38,7 +42,7 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 - [x] Support the `az` CLI (Azure DevOps) **and** the `gh` CLI (GitHub)
   - [x] Single provider interface: title, type, state, assignee, tags, description, acceptance criteria and link, cached per card
   - [ ] The branch's PR (status, link) through the provider ([#12](https://github.com/RafaelKC/twig/issues/12))
-  - [ ] GitHub `owner/repo#123` ids (today the issue is looked up in the first repo of the card) ([#4](https://github.com/RafaelKC/twig/issues/4))
+  - [x] GitHub `owner/repo#123` ids, `repo#123` with `provider.gh.owner`, or the issue URL; card folder `repo-123` ([#4](https://github.com/RafaelKC/twig/issues/4))
 - [ ] More providers: Jira, Linear, GitLab ([#17](https://github.com/RafaelKC/twig/issues/17))
 - [x] At install, ask which CLI to use (az and/or gh)
 - [x] If the chosen CLI isn't installed, install it (brew/apt/dnf/pacman)
@@ -91,13 +95,13 @@ Current: v0.3.0 (`config get/set`, lifecycle hooks, card templates in `templates
 
 - [x] `twig rm` also removes the herdr workspace, blocks on a running agent, `-f` ([#6](https://github.com/RafaelKC/twig/issues/6))
 - [x] `twig open [id] [default|herdr|code]` ([#1](https://github.com/RafaelKC/twig/issues/1))
-- [x] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7))
+- [x] `twig open-card` / `opcd` ([#7](https://github.com/RafaelKC/twig/issues/7); `gh` since [#4](https://github.com/RafaelKC/twig/issues/4))
 - [x] `twig status` ([#9](https://github.com/RafaelKC/twig/issues/9); ports and PR info pending #3/#12)
 - [x] `--json` ([#11](https://github.com/RafaelKC/twig/issues/11))
 - [ ] `twig clean` ([#10](https://github.com/RafaelKC/twig/issues/10)), `twig pr` ([#12](https://github.com/RafaelKC/twig/issues/12))
 - [x] `twig sync` ([#13](https://github.com/RafaelKC/twig/issues/13))
 - [ ] Run a skill after creating a workspace ([#5](https://github.com/RafaelKC/twig/issues/5); a `post_create` hook can already run a command you wrote, see [#15](https://github.com/RafaelKC/twig/issues/15)),
-- [ ] `twig memo` card memory ([#16](https://github.com/RafaelKC/twig/issues/16)): **in development** (simple version in; consolidation, size cap and export on `rm` via hooks [#15](https://github.com/RafaelKC/twig/issues/15) pending). See [MEMORY.md](MEMORY.md)
+- [x] `twig memo` card memory ([#16](https://github.com/RafaelKC/twig/issues/16)), still experimental; follow-ups in [#30](https://github.com/RafaelKC/twig/issues/30). See [MEMORY.md](MEMORY.md)
 
 ## herdr integration (plugin)
 

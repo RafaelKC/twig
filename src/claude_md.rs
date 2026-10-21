@@ -61,7 +61,8 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
         runs = "_(no run command configured for these repos)_\n".into();
     }
 
-    let mut heading = format!("# Card #{id}");
+    let cref = card::CardRef::of(cfg, id);
+    let mut heading = format!("# Card {}", cref.display());
     match info {
         Some(i) => heading += &format!(" — {}", i.title),
         None if !slug.is_empty() => heading += &format!(" — {slug}"),
@@ -72,7 +73,7 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
     let url = info
         .map(|i| i.url.clone())
         .filter(|u| !u.is_empty())
-        .unwrap_or_else(|| provider::fallback_url(cfg, id));
+        .unwrap_or_else(|| provider::fallback_url(cfg, &cref));
     if !url.is_empty() {
         meta += &format!("**Work item:** {url}\n");
     }
@@ -123,10 +124,17 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
             "- **The `az` CLI is available.** You can query Azure DevOps directly\n  \
              (`az boards work-item show --id <id>`, `az repos pr list`, etc.) instead of\n  \
              asking the user.\n"
+                .to_string()
         }
         ProviderKind::Gh => {
-            "- **The `gh` CLI is available.** You can query GitHub directly\n  \
-             (`gh issue view <id>`, `gh pr list`, etc.) instead of asking the user.\n"
+            let view = match &cref.repo {
+                Some(r) => format!("gh issue view {} --repo {r}", cref.number),
+                None => "gh issue view <id>".to_string(),
+            };
+            format!(
+                "- **The `gh` CLI is available.** You can query GitHub directly\n  \
+                 (`{view}`, `gh pr list`, etc.) instead of asking the user.\n"
+            )
         }
     };
 
@@ -162,13 +170,14 @@ main clones listed in the table: they are shared by all cards.\n\
 - **Do not switch branches inside the worktrees.** If you need another branch,\n  \
 that's another card (`twig new`).\n\
 - **Each repo commits separately.** There is no atomic commit across them; when the\n  \
-change is coupled, mention the card (`#{id}`) in the messages for traceability.\n\
+change is coupled, mention the card (`{card_ref}`) in the messages for traceability.\n\
 - **Dependencies and caches are per worktree.** Do not share or symlink\n  \
 `node_modules`, `bin/`, `obj/` etc. between cards.\n\
 - **Do not commit this file.** It lives outside the repos on purpose.\n\
 {provider_rule}\n\
 {memory}{context}\n",
         version = env!("CARGO_PKG_VERSION"),
+        card_ref = cref.display(),
     );
 
     fs::write(&path, body)?;

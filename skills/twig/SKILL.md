@@ -38,12 +38,12 @@ a card.
 
 | Command | When to use |
 |---|---|
-| `twig new <id> [slug]` | start a new card |
+| `twig new <id> [slug]` | start a new card. With GitHub, prefer `owner/repo#123` (or the issue URL): the card folder becomes `repo-123`, and either form names it afterwards |
 | `twig add-repo <id> <repo,...>` | the card needs another repo; also recreates closed panes in herdr |
 | `twig open [id] [default\|herdr\|code]` | open the card in a target; no target uses `[open] default` (herdr unless configured); no id = card of the current directory. `twig open code` and `twig open 123 code` both work |
 | `twig herdr <id>` | alias of `open <id> herdr`: open/focus the card in herdr (creates whatever is missing) |
 | `twig code [id]` | alias of `open [id] code`: open the card in VS Code |
-| `twig open-card [id]` (alias `opcd`) | open the card's page in the browser (Azure DevOps only; `gh` errors with "not supported yet"); prints the URL if no opener exists |
+| `twig open-card [id]` (alias `opcd`) | open the card's page (work item or issue) in the browser; prints the URL if no opener exists |
 | `twig ls [--json]` | list active cards and each repo's branch (`*` = uncommitted changes) |
 | `twig status [id] [--json]` | per repo: branch, uncommitted files (`*N`), ahead/behind vs base and origin; herdr workspace and running agent. No id = all cards, compact |
 | `twig refresh <id> [--refetch]` | regenerate the context file (`CLAUDE.md`/`AGENTS.md`) and `.code-workspace` (after changing branch or config); `--refetch` fetches the card again |
