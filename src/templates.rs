@@ -23,6 +23,8 @@ pub struct Template {
     pub install: Option<bool>,
     pub branch_prefix: Option<String>,
     pub base: Option<String>,
+    /// First message of the card's agents when `twig new` starts them (`{id}`, `{repo}`).
+    pub agent_prompt: Option<String>,
     /// Card-level hooks that only apply to cards created from this template.
     pub hooks: Hooks,
 }
@@ -195,6 +197,9 @@ pub fn show(name: &str) -> Result<()> {
     if let Some(b) = &t.base {
         println!("  base           {b}");
     }
+    if let Some(p) = &t.agent_prompt {
+        println!("  agent_prompt   {p}");
+    }
     for (ev, cmds) in hooks::entries(&t.hooks) {
         for c in cmds {
             println!("  hooks.{ev:<12} {c}");
@@ -212,6 +217,7 @@ pub const EDIT_TEMPLATE: &str = r#"# twig templates. Format documented in docs/C
 # install       = true             # run each repo's install/post_create
 # branch_prefix = "feat"           # optional
 # base          = "main"           # optional
+# agent_prompt  = "/deliver {id}"  # first message of the agents on `twig new` ({id}, {repo})
 #
 # [fullstack.hooks]                # only for cards created from this template
 # post_create = ["echo created $TWIG_CARD"]

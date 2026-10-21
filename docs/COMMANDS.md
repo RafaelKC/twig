@@ -97,6 +97,7 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 | `--herdr` | opens herdr at the end |
 | `--code` | opens VS Code at the end (error if VS Code isn't enabled/installed) |
 | `--no-ado` | doesn't query the provider (offline) |
+| `--prompt TEXT` | first message of the agents started in herdr, e.g. a skill: `--prompt "/deliver {id}"` (`{id}`, `{repo}` replaced); overrides the template's `agent_prompt`, `""` = none |
 
 **Branch selection**, repo by repo:
 
