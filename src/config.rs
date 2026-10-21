@@ -605,6 +605,13 @@ mod tests {
     }
 
     #[test]
+    fn the_example_config_is_valid() {
+        let f = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/config.toml");
+        let cfg = Config::load_from(&f).unwrap();
+        assert!(!cfg.repos["api"].env.is_empty());
+    }
+
+    #[test]
     fn claude_is_the_default() {
         let cfg = parse("").unwrap();
         assert_eq!(cfg.ai.command(), "claude");

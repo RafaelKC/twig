@@ -41,6 +41,8 @@ DevOps work item or a GitHub issue) its own sandbox:
 ├── web/                    git worktree on the card's branch
 ├── CLAUDE.md               (AGENTS.md for Codex) the card's title, description, acceptance criteria, repos and rules
 ├── 52644.code-workspace    VS Code workspace, colored per card, with run tasks and a debug compound
+├── MEMORY.md               card memory (symlink; survives `twig rm`)
+├── .twig-ports.env         the card's dev server ports (4244, 5044: same for this card every time)
 └── .ado.json               cached work item
 ```
 
@@ -55,14 +57,27 @@ Your main clones stay on `main`. Two cards never step on each other.
   from Azure DevOps (`az`) or GitHub (`gh`) into the card's `CLAUDE.md` (or `AGENTS.md` with Codex), along with a
   "card context" section that survives regeneration.
 - **herdr workspace.** An `agent` tab with one AI agent per repo, and a `run` tab that starts
-  each project. Closed a pane by accident? `twig add-repo` brings it back.
+  each project. Closed a pane by accident? `twig add-repo` brings it back. `twig new --prompt
+  "/deliver {id}"` (or `agent_prompt` in a template) starts the agents already working.
+- **Per-card ports.** A repo with `port = 4200` runs on a port of its own in each card,
+  deterministic per card (card 52644 → `4244`), so several cards run at once. Every process of
+  the card gets every repo's port (`TWIG_PORT_<REPO>`, `PORT`), and the repo's `env` maps them to
+  what the project reads: the front end calls the same card's API, the API allows that front end
+  in CORS.
+- **Pull requests and cleanup.** `twig pr` pushes and opens one PR per repo, linked to the card
+  and to each other; `twig clean` removes the cards whose branches were merged or whose work item
+  was closed.
+- **GitHub or Azure DevOps.** `twig new 52644` or `twig new acme/web#12`; both providers sit
+  behind one interface.
 - **VS Code workspace.** Friendly folder names, a per-card title bar color, `run:` tasks and a
   compound that debugs every repo at once.
 - **Local files.** Gitignored files (`appsettings.Development.json`, `.env.local`, …) are copied
   from the main clone into each worktree.
 - **Lifecycle hooks.** Your own shell commands on `post_create`, `pre_rm`, `post_rm`, `post_open` and `post_refresh`, card-wide or per repo; `--no-hooks` skips them.
 - **Card templates.** Named presets in `~/.config/twig/templates.toml` (repos, agent, install, hooks): `twig new 123 --template fullstack`; flags override them.
-- **One config.** Everything team-specific lives in `~/.config/twig/config.toml`.
+- **One config, plus the repo's.** Your settings live in `~/.config/twig/config.toml`; a repo
+  can version its own (`run`, `install`, `port`, `env`) in a `.twig.toml`, a card can override
+  them in `<card>/.twig.toml`, and `TWIG__SECTION__KEY` env vars override anything.
 - **Self-check.** `twig doctor` checks tools, logins, config and repos, and finds orphaned worktrees.
 
 ## herdr layout
@@ -206,13 +221,19 @@ short   = "api"                     # herdr pane name
 default = true                      # part of every new card
 run     = "dotnet watch run --project src/Api"
 install = "dotnet restore"
+port    = 5000                      # 5000 + the card's offset in each card
+env     = { ASPNETCORE_URLS = "http://localhost:$PORT", Cors__Origins__0 = "http://localhost:${TWIG_PORT_WEB:-4200}" }
 local_files = ["src/*/appsettings.Development.json"]
 
 [repos.web]
 label   = "🌐 Web"
 default = true
-run     = "pnpm start"
+run     = "ng serve --port ${PORT:-4200} --proxy-config proxy.conf.js"   # proxy reads $TWIG_PORT_API
+port    = 4200
 ```
+
+The same repo settings can live in the repo itself, versioned, as a `.twig.toml`
+([example](examples/repo.twig.toml)).
 
 Full example: [examples/config.toml](examples/config.toml). Every field:
 [docs/CONFIG.md](docs/CONFIG.md).
@@ -247,7 +268,7 @@ cargo test        # unit + integration tests
 
 Early and opinionated: built for a daily Azure DevOps + .NET + Angular workflow on
 Linux/WSL, now generalized through the config. See the [roadmap](docs/ROADMAP.md) for what's next
-(per-card ports, more herdr actions, native Windows).
+(more herdr actions, native Windows).
 
 ## License
 

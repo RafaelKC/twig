@@ -11,17 +11,29 @@ repository (e.g. back end and front end), so each card gets:
 ```
 ~/.wt/<id>/                  card folder (paths.worktrees in the config)
 ├── <repo-a>/                git worktree of repo A, on the card's branch
+│   └── .twig.toml           (optional, versioned in the repo) the repo's twig settings
 ├── <repo-b>/                git worktree of repo B
-├── CLAUDE.md                card context: work item data, repos, branches, rules
+├── CLAUDE.md                card context: work item data, repos, branches, ports, rules
 │                            (AGENTS.md when agent.provider = "codex")
+├── MEMORY.md                card memory (symlink into <worktrees>/memos/; survives rm)
 ├── <id>.code-workspace      VS Code workspace (only if vscode.enabled)
+├── .twig-ports.env          the card's dev server ports (only if some repo has `port`)
+├── .twig.toml               (optional, by hand) repo settings for this card only
+├── .twig-template           template the card was created from
+├── .twig-issue              GitHub owner/repo#N of a repo-scoped card
 └── .ado.json | .gh.json     cache of the card data
 ```
+
+`<id>` is the card number (`52644`), or `<repo>-<number>` for a GitHub card created from
+`owner/repo#123` (folder `repo-123`); afterwards both forms name the card.
 
 and a **herdr workspace** labeled `<id>`:
 
 - tab `agent`: one pane per repo, running the agent (`agent.command`, e.g. `claude` or `codex`);
 - tab `run`: one pane per repo that has `run` in the config (and `autorun` not `false`).
+
+Every pane twig creates gets the card's ports (`TWIG_PORT_<REPO>` for each repo, `PORT` for its
+own) and the repo's `env` as environment variables.
 
 The repos' main clones stay elsewhere, on the base branch. Never touch them from
 a card.
@@ -65,13 +77,14 @@ a card.
 
 Lifecycle hooks (`[hooks]` and `[repos.<name>.hooks]` in the config: `post_create`, `pre_rm`, `post_rm`,
 `post_open`, `post_refresh`) run the user's own shell commands around `new`/`add-repo`, `rm`, `open`/`herdr`/`code`
-and `refresh`, with `TWIG_CARD_ID`, `TWIG_CARD_DIR`, `TWIG_REPO`, `TWIG_REPO_DIR`, `TWIG_BRANCH`, `TWIG_EVENT`.
+and `refresh`, with `TWIG_CARD_ID`, `TWIG_CARD_DIR`, `TWIG_REPO`, `TWIG_REPO_DIR`, `TWIG_BRANCH`, `TWIG_EVENT`,
+the card's `TWIG_PORT_<REPO>` (and `PORT`, plus the repo's `env`, for repo hooks).
 A failing `pre_rm` blocks `rm` (`-f` skips it); `post_*` failures only warn. `--no-hooks` (global) skips all of
 them; don't use it unless the user asks. Never add hooks to the config on your own.
 
 `--json` (on `ls`, `status`, `doctor`) prints only a JSON document on stdout, no colors; use it
 instead of parsing the text. `ls`/`status`: `{"cards":[{"id","repos":[...]}]}` (`status` repos add
-`dirty` count, `base_ref`/`vs_base`, `origin_ref`/`vs_origin` and a per-card `herdr`
+`dirty` count, `base_ref`/`vs_base`, `origin_ref`/`vs_origin`, `port` and a per-card `herdr`
 `{workspace, agents_running}`); `doctor`: `{"ok","errors","warnings","sections":[{"name","checks":[{"level","message"}]}]}`
 (still exits 1 on errors). Schemas in `docs/COMMANDS.md`.
 
@@ -79,12 +92,14 @@ instead of parsing the text. `ls`/`status`: `{"cards":[{"id","repos":[...]}]}` (
 
 | Option | Effect |
 |---|---|
-| `--repos a,b` | the card's repos; without it, uses those with `default = true` |
+| `--template NAME` | preset from `templates.toml` (repos, agent, install, prefix/base, `agent_prompt`, hooks) |
+| `--repos a,b` | the card's repos; without it, the template's, else those with `default = true` |
 | `--branch NAME` | forces the branch in all repos |
 | `--base NAME` | base for the new branch (default `git.base_branch`) |
 | `--fix` | new branch with the `fix/` prefix |
-| `--install` | runs each repo's `install` |
+| `--install` / `--no-setup` | runs / skips each repo's `install` and `post_create` |
 | `--herdr` / `--code` | opens herdr / VS Code at the end |
+| `--prompt TEXT` | first message of the agents started in herdr, e.g. a skill (`"/deliver {id}"`; `{id}`, `{repo}` replaced); `""` drops the template's `agent_prompt` |
 | `--no-ado` | doesn't query the provider |
 
 `twig add-repo` accepts `--branch`, `--base`, `--fix`, `--herdr`, and `--code`.
@@ -120,6 +135,15 @@ Two pitfalls:
 - "o card 123 também mexe no repo X" (card 123 also touches repo X) → `twig add-repo 123 X`.
 - "fechei sem querer o painel do repo X" (accidentally closed repo X's pane) → `twig add-repo 123 X` (recreates what's missing).
 - "abre o card 123 no browser" (open card 123's page) → `twig open-card 123`.
+- "começa a issue 12 do repo web" (GitHub) → `twig new owner/web#12` (or `web#12` with `provider.gh.owner`).
+- "abre os PRs do card" (open the card's PRs) → `twig pr <id> -n` to show what would happen, then
+  `twig pr <id>` (`--draft` if the user wants drafts). Commit first: uncommitted changes don't go in.
+- "limpa os cards que já terminaram" (clean up finished cards) → `twig clean -n`, show the list,
+  and remove only what the user confirms (`twig clean` asks per card).
+- "em que porta roda o front desse card?" (which port?) → `twig ports <id>`; inside a pane, `$PORT`.
+- "o front desse card tem que chamar o back desse card" / CORS → the repo's `env` (in the config or
+  its `.twig.toml`) mapping `$TWIG_PORT_<REPO>` to the setting the project reads; then
+  `twig refresh <id>` and recreate the panes (close them, `twig herdr <id>`).
 - "terminei o card 123" (finished card 123) → check `twig ls` (no `*`), confirm with the user, and only then
   `twig rm 123`. If it refuses because an agent is running, tell the user instead of using `-f`. Local branches are only deleted with `--branches`, and only if the user asks.
 - "mudei de branch" or "mexi no config" (switched branch / changed the config) → `twig refresh <id>`.
@@ -132,8 +156,10 @@ Two pitfalls:
 - **Work only inside `~/.wt/<id>/`.** Don't edit, check out, or commit in the main
   clones; they are shared by all cards.
 - **Don't switch branches inside a worktree.** Another branch is another card.
-- **Each repo commits separately.** There is no atomic commit across repos; mention `#<id>`
-  in the messages on both sides when the change is coupled.
+- **Each repo commits separately.** There is no atomic commit across repos; mention the card
+  (`#<id>`, or `owner/repo#N` on GitHub) in the messages on both sides when the change is coupled.
+- **Don't hardcode ports.** Use `$PORT` / `$TWIG_PORT_<REPO>`; another card may be running the
+  same repo on the default port.
 - **Dependencies and caches are per worktree** (`node_modules`, `bin/`, `obj/`...). Don't
   symlink between cards.
 - **The card's context file (`CLAUDE.md`/`AGENTS.md`) is not versioned.** Update the "Card context"
@@ -197,9 +223,19 @@ default     = true                # included when --repos is not passed
 run         = "dotnet watch run"  # VS Code task + pane in the run tab
 autorun     = true                # false = doesn't start in the run tab
 install     = "dotnet restore"    # used by --install
+port        = 5000                # base port; each card runs on 5000 + its offset (card 52644 → 5044)
+env         = { ASPNETCORE_URLS = "http://localhost:$PORT" }  # extra env, expanded per card
 debug       = ["Debug: Back"]     # launch.json configs in the card's compound
 local_files = ["src/*/appsettings.Development.json"]  # gitignored, copied from the clone
+
+[ports]
+span = 100                        # offsets go 1..=span; cards equal modulo span share ports
 ```
+
+Layers on top of this file (strongest first): CLI flags > `TWIG__SECTION__KEY` env vars >
+`<card>/.twig.toml` (`[repos.<name>]`) > the repo's versioned `.twig.toml` (`run`, `install`,
+`port`, `env`...; no `path`/`default`/`hooks`) > this file. `twig config get/set` only see this
+file.
 
 To register a repo: add a `[repos.<name>]` block and run `twig doctor`.
 A repo passed in `--repos` that isn't in the config yet is registered automatically if
