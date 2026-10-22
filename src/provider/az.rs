@@ -21,11 +21,13 @@ impl<'a> AzureDevOps<'a> {
         Self { cfg }
     }
 
-    fn az(&self, wt: Option<&Path>) -> Command {
+    /// `az <args> [--organization X]`: az only accepts `--organization` after the subcommand.
+    fn az(&self, wt: Option<&Path>, args: &[&str]) -> Command {
         let mut cmd = sys::tool("az");
         if let Some(wt) = wt {
             cmd.current_dir(wt);
         }
+        cmd.args(args);
         if !self.cfg.organization.is_empty() {
             cmd.args(["--organization", &self.cfg.organization]);
         }
@@ -56,16 +58,18 @@ impl Provider for AzureDevOps<'_> {
 
     fn fetch_card(&self, card: &CardRef, _repo_dir: Option<&Path>) -> Option<String> {
         sys::which("az")?;
-        let mut cmd = self.az(None);
-        cmd.args([
-            "boards",
-            "work-item",
-            "show",
-            "--id",
-            &card.number,
-            "--output",
-            "json",
-        ]);
+        let mut cmd = self.az(
+            None,
+            &[
+                "boards",
+                "work-item",
+                "show",
+                "--id",
+                &card.number,
+                "--output",
+                "json",
+            ],
+        );
         sys::output(&mut cmd).ok()
     }
 
@@ -125,61 +129,68 @@ impl Provider for AzureDevOps<'_> {
             PrState::Open => "active",
             PrState::Merged => "completed",
         };
-        let out = sys::output(self.az(Some(wt)).args([
-            "repos",
-            "pr",
-            "list",
-            "--source-branch",
-            branch,
-            "--status",
-            status,
-            "--output",
-            "json",
-        ]))
+        let out = sys::output(&mut self.az(
+            Some(wt),
+            &[
+                "repos",
+                "pr",
+                "list",
+                "--source-branch",
+                branch,
+                "--status",
+                status,
+                "--output",
+                "json",
+            ],
+        ))
         .ok()?;
         let v: Value = serde_json::from_str(&out).ok()?;
         pr_of(v.as_array()?.first()?)
     }
 
     fn create_pr(&self, wt: &Path, p: &NewPr) -> Result<Pr> {
-        let mut cmd = self.az(Some(wt));
-        cmd.args([
-            "repos",
-            "pr",
-            "create",
-            "--source-branch",
-            p.branch,
-            "--target-branch",
-            p.base,
-            "--title",
-            p.title,
-            "--description",
-            p.body,
-            "--work-items",
-            &p.card.number,
-            "--draft",
-            if p.draft { "true" } else { "false" },
-            "--output",
-            "json",
-        ]);
+        let mut cmd = self.az(
+            Some(wt),
+            &[
+                "repos",
+                "pr",
+                "create",
+                "--source-branch",
+                p.branch,
+                "--target-branch",
+                p.base,
+                "--title",
+                p.title,
+                "--description",
+                p.body,
+                "--work-items",
+                &p.card.number,
+                "--draft",
+                if p.draft { "true" } else { "false" },
+                "--output",
+                "json",
+            ],
+        );
         let out = sys::output(&mut cmd)?;
         let v: Value = serde_json::from_str(&out).context("unexpected response from az")?;
         pr_of(&v).context("az repos pr create returned no pull request id")
     }
 
     fn update_pr_body(&self, wt: &Path, pr: &Pr, body: &str) -> Result<()> {
-        let mut cmd = self.az(Some(wt));
-        cmd.args([
-            "repos",
-            "pr",
-            "update",
-            "--id",
-            &pr.number,
-            "--description",
-            body,
-            "--output",
-            "none",
-        ]);
+        let mut cmd = self.az(
+            Some(wt),
+            &[
+                "repos",
+                "pr",
+                "update",
+                "--id",
+                &pr.number,
+                "--description",
+                body,
+                "--output",
+                "none",
+            ],
+        );
         sys::output(&mut cmd).map(|_| ())
     }
 
@@ -240,5 +251,25 @@ mod tests {
         let az = AzureDevOps::new(&cfg);
         assert!(az.is_finished("Closed") && az.is_finished("done"));
         assert!(!az.is_finished("Active") && !az.is_finished("Resolved"));
+    }
+
+    #[test]
+    fn organization_goes_after_the_subcommand() {
+        let cfg = Az {
+            organization: "https://dev.azure.com/o".into(),
+            ..Az::default()
+        };
+        let cmd = AzureDevOps::new(&cfg).az(None, &["boards", "work-item", "show"]);
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_string_lossy()).collect();
+        assert_eq!(
+            args,
+            [
+                "boards",
+                "work-item",
+                "show",
+                "--organization",
+                "https://dev.azure.com/o"
+            ]
+        );
     }
 }
