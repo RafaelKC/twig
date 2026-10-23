@@ -37,4 +37,5 @@ jobs:
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           AGENT_OWNER: ${{ github.repository_owner }}
+          LABELED_BY: ${{ github.event.sender.login }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
