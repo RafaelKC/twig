@@ -38,7 +38,7 @@ mkdir -p "$LOG_DIR" "$HOME_DIR/work"
 export CARGO_TARGET_DIR=$HOME_DIR/target # shared build cache between runs
 
 say() { gh issue comment "$N" --repo "$REPO" --body "$MARK"$'\n'"$1" >/dev/null; }
-die() { echo "$1" >"$LOG_DIR/reason"; echo "agent: $1" >&2; exit 1; }
+die() { echo "$1" >"$LOG_DIR/reason"; echo "agent: $1" >&2; fail_run; }
 
 set_state() { # doing | done | fail: set agent:<state>, drop the other agent labels
   local s=$1 l rm=()
@@ -59,8 +59,9 @@ assign_pr() {
   gh pr edit "$PR" --repo "$REPO" --add-reviewer "$OWNER" >/dev/null 2>&1 || true
 }
 
-on_error() {
-  local line=$1
+# Marks the issue agent:fail and says why. `exit` does not fire the ERR trap, so die calls this too.
+fail_run() {
+  local line=${1:-?}
   trap - ERR
   [ -e "$LOG_DIR/failed" ] && exit 1 # a subshell already reported it
   touch "$LOG_DIR/failed"
@@ -69,7 +70,7 @@ on_error() {
   say "❌ **agent:fail** — $reason"$'\n\n'"Run: ${RUN_URL:-n/a}"$'\n'"Re-add the \`agent\` label to try again." || true
   exit 1
 }
-trap 'on_error $LINENO' ERR
+trap 'fail_run $LINENO' ERR
 trap 'git -C "$REPO_DIR" worktree remove --force "$WT" >/dev/null 2>&1 || true' EXIT
 
 # --- guards ------------------------------------------------------------------------------------
