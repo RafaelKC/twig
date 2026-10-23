@@ -10,6 +10,8 @@ agent         = "claude"                 # optional: "claude" | "codex" (CLAUDE.
 install       = true                     # optional: run each repo's install/post_create (false skips them)
 branch_prefix = "feat"                   # optional: replaces git.branch_prefix (--fix still wins)
 base          = "main"                   # optional: replaces git.base_branch
+# autorun      = false                  # optional: false = no repo starts in herdr's run tab; or per repo:
+#                                       #   autorun = { my-back = true, my-front = false }
 # agent_prompt = "/deliver {id}"        # optional: first message of the agents on `twig new` ({id}, {repo})
 
 # Card-level hooks, only for cards created from this template. Same keys as [hooks] in the

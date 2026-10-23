@@ -14,6 +14,24 @@ use crate::{hooks, ui};
 /// Marker in the card folder that records which template created it.
 const MARKER: &str = ".twig-template";
 
+/// `autorun` in a template: one value for every repo, or a per-repo table.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum Autorun {
+    All(bool),
+    PerRepo(IndexMap<String, bool>),
+}
+
+impl Autorun {
+    /// The template's say for `repo`, if it has one.
+    pub fn for_repo(&self, repo: &str) -> Option<bool> {
+        match self {
+            Autorun::All(b) => Some(*b),
+            Autorun::PerRepo(m) => m.get(repo).copied(),
+        }
+    }
+}
+
 /// One `[name]` table of the templates file.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields, default)]
@@ -23,6 +41,8 @@ pub struct Template {
     pub install: Option<bool>,
     pub branch_prefix: Option<String>,
     pub base: Option<String>,
+    /// Overrides the repos' `autorun` (config and `.twig.toml`) for cards of this template.
+    pub autorun: Option<Autorun>,
     /// First message of the card's agents when `twig new` starts them (`{id}`, `{repo}`).
     pub agent_prompt: Option<String>,
     /// Card-level hooks that only apply to cards created from this template.
@@ -76,6 +96,13 @@ pub fn validate(cfg: Option<&Config>, t: &Templates) -> Vec<String> {
                         "[{name}] repo `{r}` is not in the config (add it under [repos.{r}])"
                     ));
                 }
+            }
+        }
+        if let (Some(Autorun::PerRepo(m)), Some(cfg)) = (&tpl.autorun, cfg) {
+            for r in m.keys().filter(|r| !cfg.repos.contains_key(*r)) {
+                errors.push(format!(
+                    "[{name}] autorun repo `{r}` is not in the config (add it under [repos.{r}])"
+                ));
             }
         }
         for e in hooks::validate_hooks(&format!("{name}.hooks"), &tpl.hooks).1 {
@@ -197,6 +224,14 @@ pub fn show(name: &str) -> Result<()> {
     if let Some(b) = &t.base {
         println!("  base           {b}");
     }
+    match &t.autorun {
+        Some(Autorun::All(b)) => println!("  autorun        {b}"),
+        Some(Autorun::PerRepo(m)) => {
+            let list: Vec<_> = m.iter().map(|(r, b)| format!("{r}={b}")).collect();
+            println!("  autorun        {}", list.join(", "));
+        }
+        None => {}
+    }
     if let Some(p) = &t.agent_prompt {
         println!("  agent_prompt   {p}");
     }
@@ -217,6 +252,7 @@ pub const EDIT_TEMPLATE: &str = r#"# twig templates. Format documented in docs/C
 # install       = true             # run each repo's install/post_create
 # branch_prefix = "feat"           # optional
 # base          = "main"           # optional
+# autorun       = false          # or { api = true, ui = false }; overrides the repos' autorun
 # agent_prompt  = "/deliver {id}"  # first message of the agents on `twig new` ({id}, {repo})
 #
 # [fullstack.hooks]                # only for cards created from this template
@@ -226,6 +262,25 @@ pub const EDIT_TEMPLATE: &str = r#"# twig templates. Format documented in docs/C
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn autorun_accepts_a_bool_or_a_per_repo_table() {
+        let t: Templates = toml::from_str(
+            "[a]\nautorun = false\n[b]\nautorun = { api = true, ui = false }\n[c]\n",
+        )
+        .unwrap();
+        let a = t["a"].autorun.as_ref().unwrap();
+        assert_eq!(
+            (a.for_repo("api"), a.for_repo("x")),
+            (Some(false), Some(false))
+        );
+        let b = t["b"].autorun.as_ref().unwrap();
+        assert_eq!(b.for_repo("api"), Some(true));
+        assert_eq!(b.for_repo("ui"), Some(false));
+        assert_eq!(b.for_repo("other"), None);
+        assert!(t["c"].autorun.is_none());
+        assert!(toml::from_str::<Templates>("[a]\nautorun = \"yes\"\n").is_err());
+    }
 
     #[test]
     fn the_example_templates_file_is_valid() {

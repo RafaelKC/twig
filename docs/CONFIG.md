@@ -386,6 +386,7 @@ agent         = "claude"        # "claude" | "codex": context file and agent com
 install       = true            # run each repo's install/post_create (false = skip, like --no-setup)
 branch_prefix = "feat"          # optional; replaces git.branch_prefix (--fix still wins)
 base          = "main"          # optional; replaces git.base_branch
+autorun       = false           # optional; or { api = true, ui = false }: starts the repos' `run` in herdr's run tab
 agent_prompt  = "/deliver {id}" # optional; first message of the agents `twig new` starts
 
 [fullstack.hooks]               # same keys as [hooks]; only for cards created from this template
@@ -394,6 +395,11 @@ post_create = ["echo created $TWIG_CARD_ID"]
 
 - **Precedence.** Explicit flags (`--repos`, `--branch`, `--base`, `--install`/`--no-setup`, `--fix`,
   `--prompt`) beat the template, which beats the config.
+- **Autorun.** `autorun` in a template overrides the repos' `autorun` (config, repo `.twig.toml`, card
+  `.twig.toml`) for the whole card: `false` starts nothing in herdr's `run` tab, `true` starts every
+  repo that has `run`. The table form sets it per repo (`{ api = true, ui = false }`); repos not listed
+  keep their own value. Since the template is remembered, `twig herdr`/`add-repo` respect it too.
+  There is no `twig new` flag for it yet.
 - **Agent prompt.** `agent_prompt` is passed to each agent `twig new` starts in herdr as its first
   message (`claude '<prompt>'`, `codex '<prompt>'`), so a card can start working right away, e.g.
   with a skill (`/deliver {id}`). `{id}` becomes the card id and `{repo}` the pane's repo. Only on
@@ -403,7 +409,8 @@ post_create = ["echo created $TWIG_CARD_ID"]
 - **Remembered.** The template name is stored in the card folder (`.twig-template`), so `refresh`,
   `add-repo`, `open`, `rm`... keep using its hooks, agent, `install`, `branch_prefix` and `base`.
 - **Validation.** `twig doctor` and `twig template edit` report empty names, repos that are not in the
-  config, an unknown `agent`, empty hook commands and a `templates.default` that does not exist.
+  config, an unknown `agent`, empty hook commands, repos that are not in the config inside a
+  per-repo `autorun` and a `templates.default` that does not exist.
 - Choosing the template automatically from the work item type/tags is not supported yet
   (follow-up on [#14](https://github.com/RafaelKC/twig/issues/14)).
 
