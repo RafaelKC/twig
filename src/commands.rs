@@ -505,24 +505,37 @@ pub struct LsOutput {
 }
 
 pub fn ls_collect(cfg: &Config) -> LsOutput {
-    let cards = card::list_cards(cfg)
-        .into_iter()
-        .map(|id| {
-            let dir = cfg.card_dir(&id);
-            let repos = card::repos_ordered(cfg, &dir)
-                .into_iter()
-                .map(|repo| {
-                    let wt = dir.join(&repo);
-                    LsRepo {
-                        branch: sys::git_current_branch(&wt),
-                        dirty: sys::git_is_dirty(&wt),
-                        repo,
-                    }
-                })
-                .collect();
-            LsCard { id, repos }
-        })
-        .collect();
+    // the git calls dominate the time, so every repo is probed on its own thread (order is kept)
+    let cards = std::thread::scope(|s| {
+        let pending: Vec<_> = card::list_cards(cfg)
+            .into_iter()
+            .map(|id| {
+                let dir = cfg.card_dir(&id);
+                let repos: Vec<_> = card::repos_ordered(cfg, &dir)
+                    .into_iter()
+                    .map(|repo| {
+                        let wt = dir.join(&repo);
+                        s.spawn(move || LsRepo {
+                            branch: sys::git_current_branch(&wt),
+                            dirty: sys::git_is_dirty(&wt),
+                            repo,
+                        })
+                    })
+                    .collect();
+                (id, repos)
+            })
+            .collect();
+        pending
+            .into_iter()
+            .map(|(id, repos)| LsCard {
+                id,
+                repos: repos
+                    .into_iter()
+                    .map(|h| h.join().expect("ls worker panicked"))
+                    .collect(),
+            })
+            .collect()
+    });
     LsOutput { cards }
 }
 
