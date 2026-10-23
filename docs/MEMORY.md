@@ -96,3 +96,24 @@ The twig skill (`skills/twig/SKILL.md`) tells agents to:
 - The exact format and command surface may change until this is declared stable.
 
 See also: [COMMANDS.md](COMMANDS.md), [ROADMAP.md](ROADMAP.md).
+
+## Agent sessions
+
+> **Experimental.** The transcript format is internal to Claude Code and may change.
+
+Claude Code deletes old transcripts (`cleanupPeriodDays`, 30 days by default), so a card
+reopened a month later would have its `MEMORY.md` but no conversation. twig keeps them next to
+the memo:
+
+- `twig rm <id>` moves `~/.claude/projects/<cwd>/` (the `*.jsonl` files and the `<uuid>/`
+  folders) of each repo to `<worktrees>/memos/<id>-<provider>/sessions/<repo>/` and prints where.
+  `<cwd>` is the worktree path with every non-alphanumeric character replaced by `-`
+  (`CLAUDE_CONFIG_DIR` is honoured).
+- `twig new <id>` / `twig add-repo` move them back for the repos they create and print
+  `sessions restored: api (2), web (1)`. The card path is the same, so `claude --resume` finds them.
+- `twig prune` never touches `memos/`.
+- Opt out with `[agent] keep_sessions = false`. Only the `claude` agent is supported; with
+  another one nothing happens. `/rewind` checkpoints (`~/.claude/file-history`) are not archived.
+
+Transcripts contain tool output (file contents, `.env` values, tokens). The archive stays on
+your disk, but treat `memos/` as sensitive.

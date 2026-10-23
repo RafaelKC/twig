@@ -238,6 +238,11 @@ on `new`, `add-repo` and `refresh`. This is the first, simple version of
 [#16](https://github.com/RafaelKC/twig/issues/16) and the format may still change; design and
 what is missing (consolidation, size cap, export on `rm`) in [docs/MEMORY.md](docs/MEMORY.md).
 
+Similarly (experimental), `twig rm` archives the Claude Code sessions of the card's repos in
+`memos/<id>-<provider>/sessions/<repo>/` and `twig new` / `twig add-repo` restore them; turn it
+off with `[agent] keep_sessions = false`. Transcripts may contain secrets; see
+[docs/MEMORY.md](docs/MEMORY.md#agent-sessions).
+
 ## Configuration
 
 ```toml
