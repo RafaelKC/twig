@@ -30,7 +30,7 @@ repository (e.g. back end and front end), so each card gets:
 and a **herdr workspace** labeled `<id>`:
 
 - tab `agent`: one pane per repo, running the agent (`agent.command`, e.g. `claude` or `codex`);
-- tab `run`: one pane per repo that has `run` in the config (and `autorun` not `false`).
+- tab `run`: one pane per repo that has `run` in the config (and `autorun` not `false`; a template's `autorun` overrides it).
 
 Every pane twig creates gets the card's ports (`TWIG_PORT_<REPO>` for each repo,
 `TWIG_PORT_<REPO>_<NAME>` for named ports, `PORT` for its own main one) and the repo's `env` as
@@ -98,7 +98,7 @@ instead of parsing the text. `ls`/`status`: `{"cards":[{"id","repos":[...]}]}` (
 
 | Option | Effect |
 |---|---|
-| `--template NAME` | preset from `templates.toml` (repos, agent, install, prefix/base, `agent_prompt`, hooks) |
+| `--template NAME` | preset from `templates.toml` (repos, agent, install, prefix/base, `autorun`, `agent_prompt`, hooks) |
 | `--repos a,b` | the card's repos; without it, the template's, else those with `default = true` |
 | `--branch NAME` | forces the branch in all repos |
 | `--base NAME` | base for the new branch (default `git.base_branch`) |
