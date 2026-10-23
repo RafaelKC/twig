@@ -324,12 +324,21 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
     }
     for repo in &repos {
         let Some(r) = cfg.repo(repo) else { continue };
-        if r.run.is_empty() || !r.autorun {
+        if r.run.is_empty() || !autorun(cfg, repo, r.autorun) {
             continue;
         }
         ensure_panel(cfg, id, &ws, "run", repo, &r.run, &dir.join(repo), false)?;
     }
     Ok(ws)
+}
+
+/// Whether `repo` starts in the `run` tab: the card's template wins over the repo's own value.
+fn autorun(cfg: &Config, repo: &str, repo_value: bool) -> bool {
+    cfg.template
+        .as_ref()
+        .and_then(|t| t.autorun.as_ref())
+        .and_then(|a| a.for_repo(repo))
+        .unwrap_or(repo_value)
 }
 
 /// Focus the workspace and, when outside herdr, open herdr in the terminal.
@@ -374,6 +383,29 @@ mod tests {
         );
         assert_eq!(agent_command(&cfg, "1", "api", Some("  ")), "claude");
         assert_eq!(agent_command(&cfg, "1", "api", None), "claude");
+    }
+
+    #[test]
+    fn template_autorun_overrides_the_repo_value() {
+        use crate::templates::{Autorun, Template};
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        std::fs::write(&file, "version = 1\n").unwrap();
+        let mut cfg = Config::load_from(&file).unwrap();
+        assert!(autorun(&cfg, "api", true));
+        assert!(!autorun(&cfg, "api", false));
+        cfg.template = Some(Template {
+            autorun: Some(Autorun::All(false)),
+            ..Default::default()
+        });
+        assert!(!autorun(&cfg, "api", true));
+        cfg.template = Some(Template {
+            autorun: Some(Autorun::PerRepo([("api".to_string(), true)].into())),
+            ..Default::default()
+        });
+        assert!(autorun(&cfg, "api", false));
+        assert!(!autorun(&cfg, "ui", false));
+        assert!(autorun(&cfg, "ui", true));
     }
 
     #[test]
