@@ -11,11 +11,6 @@ on:
 permissions:
   contents: read
 
-# One run per issue; a second `agent` label while one is running waits for it.
-concurrency:
-  group: agent-issue-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
   run:
     # Only the maintainer's label starts the agent: this repo is public and the runner is ours.
@@ -26,6 +21,12 @@ jobs:
       && !github.event.issue.pull_request
     runs-on: [self-hosted, linux, ARM64, twig-agent]
     timeout-minutes: 240
+    # One run per issue; a second `agent` label while one is running waits for it. Set on the job
+    # (not the workflow) so events skipped by the `if` above, like the agent:* labels the script
+    # adds itself, never take the queue slot of a real request.
+    concurrency:
+      group: agent-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
     steps:
       # The default branch, never the PR/issue content: the script below runs with secrets.
       - uses: actions/checkout@v4
