@@ -1,0 +1,21 @@
+name: auto-assign
+
+# Assigns every new issue to the maintainer, including issues opened without a template
+# (e.g. `gh issue create` or the API).
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  assign:
+    if: ${{ toJSON(github.event.issue.assignees) == '[]' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - run: gh issue edit "$NUMBER" --repo "$REPO" --add-assignee RafaelKC
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}

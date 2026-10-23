@@ -1,0 +1,31 @@
+name: Enhancement
+description: Suggest a new feature or an improvement to twig
+title: "[Enhancement]: "
+labels: [enhancement]
+assignees: [RafaelKC]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What is missing or painful today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should twig do? Commands, flags, config, behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] ...
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Alternatives, open questions, related issues.
