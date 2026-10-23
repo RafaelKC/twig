@@ -52,6 +52,13 @@ set_state() { # doing | done | fail: set agent:<state>, drop the other agent lab
   fi
 }
 
+# The PR is yours to review and merge. GitHub ignores a review request for the PR author, so the
+# reviewer part only takes effect when AGENT_PAT belongs to another account (e.g. a bot).
+assign_pr() {
+  gh pr edit "$PR" --repo "$REPO" --add-assignee "$OWNER" >/dev/null 2>&1 || true
+  gh pr edit "$PR" --repo "$REPO" --add-reviewer "$OWNER" >/dev/null 2>&1 || true
+}
+
 on_error() {
   local line=$1
   trap - ERR
@@ -187,6 +194,7 @@ if [ -z "$PR" ]; then
     --body "Closes #$N"$'\n\n'"$(summary_of implement)"$'\n\n---\n'"Opened by the twig agent ([run]($RUN_URL))." |
     grep -Eo '[0-9]+$')
   gh pr edit "$PR" --repo "$REPO" --add-label "agent:doing" >/dev/null 2>&1 || true
+  assign_pr
   say "🔀 PR #$PR opened; reviewing."
 fi
 
@@ -260,4 +268,5 @@ done
 # --- done --------------------------------------------------------------------------------------
 
 set_state done
+assign_pr
 say "✅ **agent:done** — PR #$PR is green and reviewed. Your turn: review and merge."
