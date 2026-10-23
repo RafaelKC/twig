@@ -19,7 +19,8 @@ context herdr passes to the plugin (`HERDR_PLUGIN_CONTEXT_JSON`):
 3. else opens that folder in VS Code.
 
 If the card has no `.code-workspace` yet, `twig code` generates it. It errors if
-`vscode.enabled = false` or `code` isn't on the PATH.
+`vscode.enabled = false` or `code` isn't found: twig looks on the PATH, then in the usual
+install spots (`/usr/local/bin`, `/usr/bin`, `/snap/bin`, `/opt/homebrew/bin`, `~/.local/bin`, the macOS app bundle), since the herdr server's PATH is often shorter than your shell's.
 
 Requirements: `twig` on the herdr server's PATH, or at `~/.local/bin/twig` /
 `~/.cargo/bin/twig`.

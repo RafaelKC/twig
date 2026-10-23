@@ -22,6 +22,28 @@ pub fn which(bin: &str) -> Option<PathBuf> {
     })
 }
 
+/// `code` on PATH, else the usual install spots: the herdr server (which runs the plugin) may have
+/// a PATH without `/usr/local/bin`, `/snap/bin`, Homebrew's or the VS Code app's own bin dir.
+pub fn find_code() -> Option<PathBuf> {
+    if let Some(p) = which("code") {
+        return Some(p);
+    }
+    let mut spots: Vec<PathBuf> = vec![
+        "/usr/local/bin/code".into(),
+        "/usr/bin/code".into(),
+        "/snap/bin/code".into(),
+        "/opt/homebrew/bin/code".into(),
+        "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code".into(),
+    ];
+    if let Some(home) = env::var_os("HOME") {
+        spots.push(Path::new(&home).join(".local/bin/code"));
+    }
+    if let Some(local) = env::var_os("LOCALAPPDATA") {
+        spots.push(Path::new(&local).join("Programs/Microsoft VS Code/bin/code.cmd"));
+    }
+    spots.into_iter().find(|p| p.is_file())
+}
+
 /// A command for an external tool. On Windows, `az`, `code`, `claude`... are `.cmd` files that
 /// `Command::new("az")` doesn't find (it only adds `.exe`): resolve them through PATHEXT.
 pub fn tool(bin: &str) -> Command {

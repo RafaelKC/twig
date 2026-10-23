@@ -365,6 +365,20 @@ fn code_with_id_opens_the_card_workspace() {
 }
 
 #[test]
+fn code_falls_back_to_known_install_dirs_when_not_on_path() {
+    let (s, log) = code_sandbox();
+    // the herdr server's PATH may lack the dir that has `code`
+    fs::create_dir_all(s.home.join(".local/bin")).unwrap();
+    fs::rename(s.bin.join("code"), s.home.join(".local/bin/code")).unwrap();
+    let o = s.run(&["code", "123"]);
+    assert_exit(&o, 0);
+    assert_eq!(
+        opened(&log),
+        s.path("wt/123/123.code-workspace").display().to_string()
+    );
+}
+
+#[test]
 fn code_without_id_uses_herdr_workspace_label() {
     let (s, log) = code_sandbox();
     let mut c = s.cmd(&["code"]);
