@@ -43,21 +43,23 @@ the command; a failing `post_*` hook only warns.
 
 ## Short aliases
 
-Frequently typed commands and flags have short forms (also listed by `--help` and offered by the
-completions). The long forms keep working.
+Frequently typed commands and flags have short forms (listed by `--help` and offered by the
+completions). The long forms keep working. Short flags are per command: the same letter can mean
+different flags on different commands (e.g. `-r` is `--repos`, `--refetch` or `--rebase`, and `-b`
+is `--branch` or `--branches`), so check the table or `--help` of the command you are using.
 
 | Command | Alias |
 |---|---|
 | `add-repo` | `ar` |
 | `status` | `st` |
 | `open-card` | `opcd` |
-| `ls` / `rm` | `list` / `remove` |
 
 | Flag | Short | Commands |
 |---|---|---|
 | `--template` | `-t` | `new` |
 | `--repos` | `-r` | `new` |
-| `--branch` | `-b` | `new`, `add-repo` (`-b` is `--branches` on `rm`, `clean`) |
+| `--branch` | `-b` | `new`, `add-repo` |
+| `--branches` | `-b` | `rm`, `clean` |
 | `--base` | `-B` | `new`, `add-repo` |
 | `--fix` | `-F` | `new`, `add-repo` |
 | `--install` / `--no-setup` | `-i` / `-S` | `new`, `add-repo` |

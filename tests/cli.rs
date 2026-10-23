@@ -2997,7 +2997,10 @@ fn short_flag_and_command_aliases_match_the_long_forms() {
     let short = s.run(&["st", "123", "-j"]);
     assert_exit(&short, 0);
     assert_eq!(json_of(&long), json_of(&short));
-    assert_exit(&s.run(&["ls", "-j"]), 0);
+    assert_eq!(
+        json_of(&s.run(&["ls", "--json"])),
+        json_of(&s.run(&["ls", "-j"]))
+    );
 }
 
 #[test]
@@ -3006,4 +3009,18 @@ fn short_aliases_show_in_help() {
     let o = s.run(&["new", "--help"]);
     assert_has(&o, "-t, --template");
     assert_has(&o, "-r, --repos");
+}
+
+#[test]
+fn command_aliases_show_in_help_and_completions() {
+    let s = Sandbox::new();
+    let o = s.run(&["--help"]);
+    assert_has(&o, "add-repo");
+    assert!(stdout(&o).contains("[alias: ar]"), "{}", stdout(&o));
+    assert!(stdout(&o).contains("[alias: st]"), "{}", stdout(&o));
+    let got = complete(&s, &[""]);
+    for a in ["ar", "st"] {
+        assert!(got.iter().any(|g| g == a), "{got:?}");
+    }
+    assert_exit(&s.run(&["ar", "--help"]), 0);
 }

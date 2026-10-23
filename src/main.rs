@@ -95,7 +95,7 @@ enum Cmd {
         prompt: Option<String>,
     },
     /// Add more repos to an existing card (safe to re-run).
-    #[command(alias = "ar")]
+    #[command(visible_alias = "ar")]
     AddRepo {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
@@ -140,7 +140,7 @@ enum Cmd {
     ///
     /// Without <ID>, the card is inferred from the current directory; outside a card, it is a
     /// usage error.
-    #[command(name = "open-card", alias = "opcd")]
+    #[command(name = "open-card", visible_alias = "opcd")]
     OpenCard {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
@@ -159,7 +159,7 @@ enum Cmd {
         id: Option<String>,
     },
     /// List active cards and each repo's branch (* = uncommitted changes).
-    #[command(alias = "list")]
+    #[command(visible_alias = "list")]
     Ls {
         /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
         #[arg(short = 'j', long)]
@@ -168,7 +168,7 @@ enum Cmd {
     /// Per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent.
     ///
     /// Without <ID>, every card (compact); with an id, the details of that card.
-    #[command(alias = "st")]
+    #[command(visible_alias = "st")]
     Status {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
@@ -243,7 +243,7 @@ enum Cmd {
         dry_run: bool,
     },
     /// Remove the card's worktrees, folder and herdr workspace (refuses with uncommitted changes or a running agent).
-    #[command(alias = "remove")]
+    #[command(visible_alias = "remove")]
     Rm {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
