@@ -21,6 +21,9 @@ Labels are mirrored on the PR. To ask for more work after reviewing, comment on 
 or leave review comments) and add `agent` again: the run continues on the same branch `agent/issue-N`
 and PR, with your comments (and only yours) as input.
 
+The PR is assigned to you. GitHub does not let the PR author be a reviewer, so the review request only
+takes effect if `AGENT_PAT` belongs to another account (e.g. a bot).
+
 Guard rails: only `RafaelKC` adding the label starts a run; issues opened by outsiders are refused
 (copy the request into a comment of your own); the agent cannot change `.github/workflows/` or
 `scripts/agent/`; the implementer and the reviewer are separate Claude sessions; the reviewer is
