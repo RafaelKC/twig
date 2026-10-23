@@ -2987,3 +2987,39 @@ fn named_ports_from_a_repo_file_are_checked_too() {
     append_config(&s, "\n[repos.a.ports]\n\"bad-name\" = 6000\n");
     assert_has(&s.run(&["ls"]), "`bad-name` is not a valid port name");
 }
+
+// ───────────────────────── short aliases ─────────────────────────
+
+#[test]
+fn short_flag_and_command_aliases_match_the_long_forms() {
+    let s = status_sandbox("idle");
+    let long = s.run(&["status", "123", "--json"]);
+    let short = s.run(&["st", "123", "-j"]);
+    assert_exit(&short, 0);
+    assert_eq!(json_of(&long), json_of(&short));
+    assert_eq!(
+        json_of(&s.run(&["ls", "--json"])),
+        json_of(&s.run(&["ls", "-j"]))
+    );
+}
+
+#[test]
+fn short_aliases_show_in_help() {
+    let s = Sandbox::new();
+    let o = s.run(&["new", "--help"]);
+    assert_has(&o, "-t, --template");
+    assert_has(&o, "-r, --repos");
+}
+
+#[test]
+fn command_aliases_show_in_help_and_completions() {
+    let s = Sandbox::new();
+    let o = s.run(&["--help"]);
+    assert_has(&o, "add-repo");
+    assert!(stdout(&o).contains("[alias: ar]"), "{}", stdout(&o));
+    assert!(stdout(&o).contains("[alias: st]"), "{}", stdout(&o));
+    let got = complete(&s, &[""]);
+    // clap lists each command once, under its visible alias when it has one
+    assert!(got.iter().any(|g| g == "st"), "{got:?}");
+    assert_exit(&s.run(&["ar", "--help"]), 0);
+}

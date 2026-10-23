@@ -41,6 +41,38 @@ Lifecycle hooks fire from `new`/`add-repo` (`post_create`), `rm` (`pre_rm`, `pos
 `open`/`herdr`/`code` (`post_open`) and `refresh` (`post_refresh`). A failing `pre_*` hook aborts
 the command; a failing `post_*` hook only warns.
 
+## Short aliases
+
+Frequently typed commands and flags have short forms (listed by `--help` and offered by the
+completions). The long forms keep working. Short flags are per command: the same letter can mean
+different flags on different commands (e.g. `-r` is `--repos`, `--refetch` or `--rebase`, and `-b`
+is `--branch` or `--branches`), so check the table or `--help` of the command you are using.
+
+| Command | Alias |
+|---|---|
+| `add-repo` | `ar` |
+| `status` | `st` |
+| `open-card` | `opcd` |
+
+| Flag | Short | Commands |
+|---|---|---|
+| `--template` | `-t` | `new` |
+| `--repos` | `-r` | `new` |
+| `--branch` | `-b` | `new`, `add-repo` |
+| `--branches` | `-b` | `rm`, `clean` |
+| `--base` | `-B` | `new`, `add-repo` |
+| `--fix` | `-F` | `new`, `add-repo` |
+| `--install` / `--no-setup` | `-i` / `-S` | `new`, `add-repo` |
+| `--herdr` / `--code` | `-H` / `-c` | `new`, `add-repo` |
+| `--no-ado` / `--prompt` | `-o` / `-p` | `new` |
+| `--json` | `-j` | `ls`, `status`, `doctor` |
+| `--env` | `-e` | `ports` |
+| `--refetch` | `-r` | `refresh` |
+| `--merge` / `--rebase` | `-m` / `-r` | `sync` |
+| `--draft` | `-d` | `pr` |
+| `--check` | `-c` | `update` |
+| `--dry-run`, `--force`, `--yes` | `-n`, `-f`, `-y` | as before |
+
 ## Opening in herdr and VS Code
 
 Rule shared by `twig new` and `twig add-repo`:

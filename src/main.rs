@@ -60,41 +60,42 @@ enum Cmd {
         /// Only used when the branch must be CREATED; defaults to the card title.
         slug: Option<String>,
         /// Preset from templates.toml (repos, agent, install, hooks); default: `[templates] default`.
-        #[arg(long, add = ArgValueCandidates::new(complete::templates))]
+        #[arg(short = 't', long, add = ArgValueCandidates::new(complete::templates))]
         template: Option<String>,
         /// Card repos; defaults to the template's, else the repos with `default = true`.
-        #[arg(long, value_delimiter = ',', add = ArgValueCandidates::new(complete::repos))]
+        #[arg(short = 'r', long, value_delimiter = ',', add = ArgValueCandidates::new(complete::repos))]
         repos: Option<Vec<String>>,
         /// Force this branch in every repo.
-        #[arg(long)]
+        #[arg(short = 'b', long)]
         branch: Option<String>,
         /// Base for the new branch (default: git.base_branch).
-        #[arg(long)]
+        #[arg(short = 'B', long)]
         base: Option<String>,
         /// New branch with the fix/ prefix.
-        #[arg(long)]
+        #[arg(short = 'F', long)]
         fix: bool,
         /// Run each repo's `install` and `post_create` (default with `worktree.auto_install`).
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         install: bool,
         /// Skip `install` and `post_create`, even with `worktree.auto_install`.
-        #[arg(long, conflicts_with = "install")]
+        #[arg(short = 'S', long, conflicts_with = "install")]
         no_setup: bool,
         /// Open herdr at the end.
-        #[arg(long)]
+        #[arg(short = 'H', long)]
         herdr: bool,
         /// Open VS Code at the end (error if not enabled/installed).
-        #[arg(long)]
+        #[arg(short = 'c', long)]
         code: bool,
         /// Don't query the provider (offline).
-        #[arg(long)]
+        #[arg(short = 'o', long)]
         no_ado: bool,
         /// First message for the agents started in herdr, e.g. a skill: "/deliver {id}"
         /// (`{id}`, `{repo}` are replaced). Overrides the template's `agent_prompt`; "" = none.
-        #[arg(long)]
+        #[arg(short = 'p', long)]
         prompt: Option<String>,
     },
     /// Add more repos to an existing card (safe to re-run).
+    #[command(visible_alias = "ar")]
     AddRepo {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
@@ -102,25 +103,25 @@ enum Cmd {
         #[arg(required = true, value_delimiter = ',', add = ArgValueCandidates::new(complete::repos))]
         repos: Vec<String>,
         /// Force this branch in the new repos.
-        #[arg(long)]
+        #[arg(short = 'b', long)]
         branch: Option<String>,
         /// Base for the new branch.
-        #[arg(long)]
+        #[arg(short = 'B', long)]
         base: Option<String>,
         /// New branch with the fix/ prefix.
-        #[arg(long)]
+        #[arg(short = 'F', long)]
         fix: bool,
         /// Run `install` and `post_create` on the new repos (default with `worktree.auto_install`).
-        #[arg(long)]
+        #[arg(short = 'i', long)]
         install: bool,
         /// Skip `install` and `post_create`, even with `worktree.auto_install`.
-        #[arg(long, conflicts_with = "install")]
+        #[arg(short = 'S', long, conflicts_with = "install")]
         no_setup: bool,
         /// Open herdr at the end.
-        #[arg(long)]
+        #[arg(short = 'H', long)]
         herdr: bool,
         /// Open VS Code at the end (error if not enabled/installed).
-        #[arg(long)]
+        #[arg(short = 'c', long)]
         code: bool,
     },
     /// Open a card in herdr or VS Code (target defaults to `[open] default` in the config).
@@ -139,7 +140,7 @@ enum Cmd {
     ///
     /// Without <ID>, the card is inferred from the current directory; outside a card, it is a
     /// usage error.
-    #[command(name = "open-card", alias = "opcd")]
+    #[command(name = "open-card", visible_alias = "opcd")]
     OpenCard {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
@@ -158,20 +159,21 @@ enum Cmd {
         id: Option<String>,
     },
     /// List active cards and each repo's branch (* = uncommitted changes).
-    #[command(alias = "list")]
+    #[command(visible_alias = "list")]
     Ls {
         /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
-        #[arg(long)]
+        #[arg(short = 'j', long)]
         json: bool,
     },
     /// Per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent.
     ///
     /// Without <ID>, every card (compact); with an id, the details of that card.
+    #[command(visible_alias = "st")]
     Status {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
         /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
-        #[arg(long)]
+        #[arg(short = 'j', long)]
         json: bool,
     },
     /// Show the card's dev server ports (`port` of each repo + the card's offset).
@@ -182,7 +184,7 @@ enum Cmd {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
         /// Print `export TWIG_PORT_<REPO>=<port>` lines.
-        #[arg(long)]
+        #[arg(short = 'e', long)]
         env: bool,
     },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
@@ -190,7 +192,7 @@ enum Cmd {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
         /// Drop the cache and fetch the card data from the provider again.
-        #[arg(long)]
+        #[arg(short = 'r', long)]
         refetch: bool,
     },
     /// (in development) Append a line to the card's memory, or show it when no text is given.
@@ -216,10 +218,10 @@ enum Cmd {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
         /// Merge the base branch instead of rebasing.
-        #[arg(long, conflicts_with = "rebase")]
+        #[arg(short = 'm', long, conflicts_with = "rebase")]
         merge: bool,
         /// Rebase onto the base branch (overrides `[git] sync = "merge"`).
-        #[arg(long)]
+        #[arg(short = 'r', long)]
         rebase: bool,
         /// Fetch and show what would happen, without changing any worktree.
         #[arg(short = 'n', long)]
@@ -234,19 +236,19 @@ enum Cmd {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
         /// Open the PRs as drafts.
-        #[arg(long)]
+        #[arg(short = 'd', long)]
         draft: bool,
         /// Show what would be pushed and opened, without doing it.
         #[arg(short = 'n', long)]
         dry_run: bool,
     },
     /// Remove the card's worktrees, folder and herdr workspace (refuses with uncommitted changes or a running agent).
-    #[command(alias = "remove")]
+    #[command(visible_alias = "remove")]
     Rm {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
         /// Also delete the local branches.
-        #[arg(long)]
+        #[arg(short = 'b', long)]
         branches: bool,
         /// Remove even with uncommitted changes or a running agent.
         #[arg(short, long)]
@@ -264,7 +266,7 @@ enum Cmd {
         #[arg(short, long)]
         yes: bool,
         /// Also delete the local branches.
-        #[arg(long)]
+        #[arg(short = 'b', long)]
         branches: bool,
         /// Remove even with uncommitted changes or a running agent.
         #[arg(short, long)]
@@ -279,7 +281,7 @@ enum Cmd {
     /// Check dependencies, login and config without changing anything (exits 1 on error).
     Doctor {
         /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
-        #[arg(long)]
+        #[arg(short = 'j', long)]
         json: bool,
     },
     /// Manage the config file.
@@ -295,7 +297,7 @@ enum Cmd {
     /// Update twig (and its herdr plugin and skill) to the latest release.
     Update {
         /// Only report whether a new version exists.
-        #[arg(long)]
+        #[arg(short = 'c', long)]
         check: bool,
         /// Install this version instead of the latest (e.g. v0.2.0).
         #[arg(long)]

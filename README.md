@@ -226,6 +226,8 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 
 All options: [docs/COMMANDS.md](docs/COMMANDS.md).
 
+Short forms exist for the common commands and flags (`st`, `ar`, `new -t NAME -r a,b`, `ls -j`): see [docs/COMMANDS.md](docs/COMMANDS.md#short-aliases).
+
 ### Card memory (in development)
 
 Agents lose context between sessions. `twig memo "..."` appends one dated line to a per-card
