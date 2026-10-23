@@ -409,7 +409,8 @@ post_create = ["echo created $TWIG_CARD_ID"]
 - **Remembered.** The template name is stored in the card folder (`.twig-template`), so `refresh`,
   `add-repo`, `open`, `rm`... keep using its hooks, agent, `install`, `branch_prefix` and `base`.
 - **Validation.** `twig doctor` and `twig template edit` report empty names, repos that are not in the
-  config, an unknown `agent`, empty hook commands, repos that are not in the config inside a per-repo `autorun` and a `templates.default` that does not exist.
+  config, an unknown `agent`, empty hook commands, repos that are not in the config inside a
+  per-repo `autorun` and a `templates.default` that does not exist.
 - Choosing the template automatically from the work item type/tags is not supported yet
   (follow-up on [#14](https://github.com/RafaelKC/twig/issues/14)).
 

@@ -253,7 +253,6 @@ pub const EDIT_TEMPLATE: &str = r#"# twig templates. Format documented in docs/C
 # branch_prefix = "feat"           # optional
 # base          = "main"           # optional
 # autorun       = false          # or { api = true, ui = false }; overrides the repos' autorun
-# autorun       = false          # or { api = true, ui = false }; overrides the repos' autorun
 # agent_prompt  = "/deliver {id}"  # first message of the agents on `twig new` ({id}, {repo})
 #
 # [fullstack.hooks]                # only for cards created from this template
