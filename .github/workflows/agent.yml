@@ -1,0 +1,39 @@
+name: agent
+
+# Autonomous issue -> PR loop. Adding the `agent` label to an open issue makes the
+# self-hosted runner implement it, open a PR, review it, fix the review findings and watch the
+# PR gates. Progress is shown with the labels agent:doing / agent:done / agent:fail.
+# Setup and security notes: docs/AGENT.md.
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+# One run per issue; a second `agent` label while one is running waits for it.
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    # Only the maintainer's label starts the agent: this repo is public and the runner is ours.
+    if: >-
+      github.event.label.name == 'agent'
+      && github.event.sender.login == 'RafaelKC'
+      && github.event.issue.state == 'open'
+      && !github.event.issue.pull_request
+    runs-on: [self-hosted, linux, ARM64, twig-agent]
+    timeout-minutes: 240
+    steps:
+      # The default branch, never the PR/issue content: the script below runs with secrets.
+      - uses: actions/checkout@v4
+      - run: scripts/agent/run.sh
+        env:
+          # A PAT (not github.token): pushes and PRs made with github.token do not trigger ci.yml.
+          GH_TOKEN: ${{ secrets.AGENT_PAT }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          AGENT_OWNER: ${{ github.repository_owner }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
