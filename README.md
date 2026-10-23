@@ -289,7 +289,7 @@ skills/           AI agent skill
 scripts/          release helper
 .github/          release workflow
 install.sh        installer
-docs/             commands, config, dependencies, releasing, roadmap
+docs/             commands, config, dependencies, releasing, roadmap, autonomous agent
 refs/             evaluated but unused references
 ```
 
