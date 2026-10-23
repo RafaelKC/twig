@@ -41,6 +41,36 @@ Lifecycle hooks fire from `new`/`add-repo` (`post_create`), `rm` (`pre_rm`, `pos
 `open`/`herdr`/`code` (`post_open`) and `refresh` (`post_refresh`). A failing `pre_*` hook aborts
 the command; a failing `post_*` hook only warns.
 
+## Short aliases
+
+Frequently typed commands and flags have short forms (also listed by `--help` and offered by the
+completions). The long forms keep working.
+
+| Command | Alias |
+|---|---|
+| `add-repo` | `ar` |
+| `status` | `st` |
+| `open-card` | `opcd` |
+| `ls` / `rm` | `list` / `remove` |
+
+| Flag | Short | Commands |
+|---|---|---|
+| `--template` | `-t` | `new` |
+| `--repos` | `-r` | `new` |
+| `--branch` | `-b` | `new`, `add-repo` (`-b` is `--branches` on `rm`, `clean`) |
+| `--base` | `-B` | `new`, `add-repo` |
+| `--fix` | `-F` | `new`, `add-repo` |
+| `--install` / `--no-setup` | `-i` / `-S` | `new`, `add-repo` |
+| `--herdr` / `--code` | `-H` / `-c` | `new`, `add-repo` |
+| `--no-ado` / `--prompt` | `-o` / `-p` | `new` |
+| `--json` | `-j` | `ls`, `status`, `doctor` |
+| `--env` | `-e` | `ports` |
+| `--refetch` | `-r` | `refresh` |
+| `--merge` / `--rebase` | `-m` / `-r` | `sync` |
+| `--draft` | `-d` | `pr` |
+| `--check` | `-c` | `update` |
+| `--dry-run`, `--force`, `--yes` | `-n`, `-f`, `-y` | as before |
+
 ## Opening in herdr and VS Code
 
 Rule shared by `twig new` and `twig add-repo`:
