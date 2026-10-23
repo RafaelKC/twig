@@ -141,6 +141,30 @@ pub fn git_is_dirty(repo: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Branch and dirty state in a single `git status` call (what `twig ls` needs per repo).
+pub fn git_branch_and_dirty(repo: &Path) -> (Option<String>, bool) {
+    output(git(repo).args(["status", "--porcelain=v2", "--branch"]))
+        .map(|s| parse_status_v2(&s))
+        .unwrap_or((None, false))
+}
+
+fn parse_status_v2(out: &str) -> (Option<String>, bool) {
+    let mut branch = None;
+    let mut unborn = false;
+    let mut dirty = false;
+    for line in out.lines() {
+        if let Some(h) = line.strip_prefix("# branch.head ") {
+            // same as `rev-parse --abbrev-ref HEAD`: "HEAD" when detached
+            branch = Some(if h == "(detached)" { "HEAD" } else { h }.to_string());
+        } else if line.strip_prefix("# branch.oid ") == Some("(initial)") {
+            unborn = true;
+        } else if !line.starts_with('#') && !line.trim().is_empty() {
+            dirty = true;
+        }
+    }
+    (branch.filter(|_| !unborn), dirty)
+}
+
 pub fn git_ref_exists(repo: &Path, refname: &str) -> bool {
     quiet(git(repo).args(["show-ref", "--verify", "--quiet", refname]))
 }
@@ -162,4 +186,21 @@ pub fn git_orphan_worktrees(repo: &Path) -> Vec<String> {
         }
     }
     orphans
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_status_v2() {
+        let clean = "# branch.oid abc\n# branch.head main\n";
+        assert_eq!(parse_status_v2(clean), (Some("main".into()), false));
+        let dirty = "# branch.oid abc\n# branch.head feat/x\n? new.txt\n";
+        assert_eq!(parse_status_v2(dirty), (Some("feat/x".into()), true));
+        let detached = "# branch.oid abc\n# branch.head (detached)\n";
+        assert_eq!(parse_status_v2(detached), (Some("HEAD".into()), false));
+        let unborn = "# branch.oid (initial)\n# branch.head main\n";
+        assert_eq!(parse_status_v2(unborn), (None, false));
+    }
 }
