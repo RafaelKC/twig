@@ -504,38 +504,51 @@ pub struct LsOutput {
     pub cards: Vec<LsCard>,
 }
 
+/// Upper bound on concurrent `git status` processes in `twig ls`.
+const LS_WORKERS: usize = 8;
+
 pub fn ls_collect(cfg: &Config) -> LsOutput {
-    // the git calls dominate the time, so every repo is probed on its own thread (order is kept)
-    let cards = std::thread::scope(|s| {
-        let pending: Vec<_> = card::list_cards(cfg)
-            .into_iter()
-            .map(|id| {
-                let dir = cfg.card_dir(&id);
-                let repos: Vec<_> = card::repos_ordered(cfg, &dir)
-                    .into_iter()
-                    .map(|repo| {
-                        let wt = dir.join(&repo);
-                        s.spawn(move || LsRepo {
-                            branch: sys::git_current_branch(&wt),
-                            dirty: sys::git_is_dirty(&wt),
-                            repo,
-                        })
-                    })
-                    .collect();
-                (id, repos)
-            })
-            .collect();
-        pending
-            .into_iter()
-            .map(|(id, repos)| LsCard {
-                id,
-                repos: repos
-                    .into_iter()
-                    .map(|h| h.join().expect("ls worker panicked"))
-                    .collect(),
-            })
-            .collect()
+    let mut cards: Vec<LsCard> = card::list_cards(cfg)
+        .into_iter()
+        .map(|id| LsCard { id, repos: vec![] })
+        .collect();
+    // (card index, repo name, worktree path), in card then repo order
+    let jobs: Vec<(usize, String, std::path::PathBuf)> = cards
+        .iter()
+        .enumerate()
+        .flat_map(|(i, c)| {
+            let dir = cfg.card_dir(&c.id);
+            card::repos_ordered(cfg, &dir)
+                .into_iter()
+                .map(move |repo| (i, repo.clone(), dir.join(repo)))
+        })
+        .collect();
+
+    // the git calls dominate the time, so they run on a small pool; results keep the job order
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let results: Vec<std::sync::Mutex<Option<LsRepo>>> =
+        jobs.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    std::thread::scope(|s| {
+        for _ in 0..LS_WORKERS.min(jobs.len()) {
+            s.spawn(|| loop {
+                let n = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some((_, repo, wt)) = jobs.get(n) else {
+                    break;
+                };
+                let (branch, dirty) = sys::git_branch_and_dirty(wt);
+                let done = LsRepo {
+                    repo: repo.clone(),
+                    branch,
+                    dirty,
+                };
+                *results[n].lock().unwrap_or_else(|e| e.into_inner()) = Some(done);
+            });
+        }
     });
+    for ((i, _, _), slot) in jobs.iter().zip(results) {
+        let done = slot.into_inner().unwrap_or_else(|e| e.into_inner());
+        cards[*i].repos.extend(done);
+    }
     LsOutput { cards }
 }
 
@@ -695,4 +708,65 @@ pub fn prune(cfg: &Config, dry_run: bool) -> Result<()> {
         ui::info("kept");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn git_ok(dir: &Path, args: &[&str]) {
+        let st = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(st.status.success(), "{args:?}: {st:?}");
+    }
+
+    #[test]
+    fn ls_collect_keeps_card_and_repo_order_with_branch_and_dirty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let wt = tmp.path().join("wt");
+        let file = tmp.path().join("config.toml");
+        fs::write(
+            &file,
+            format!("version = 1\n[paths]\nworktrees = '{}'\n", wt.display()),
+        )
+        .unwrap();
+        let cfg = Config::load_from(&file).unwrap();
+
+        // 3 cards x 3 repos; repo "b" of card "20" is dirty
+        for card_id in ["30", "10", "20"] {
+            for repo in ["c", "a", "b"] {
+                let dir = wt.join(card_id).join(repo);
+                fs::create_dir_all(&dir).unwrap();
+                git_ok(&dir, &["init", "-q", "-b", &format!("br-{card_id}-{repo}")]);
+                git_ok(&dir, &["commit", "-q", "--allow-empty", "-m", "init"]);
+            }
+        }
+        fs::write(wt.join("20/b/new.txt"), "x").unwrap();
+
+        let out = ls_collect(&cfg);
+        let ids: Vec<_> = out.cards.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, ["10", "20", "30"]);
+        for c in &out.cards {
+            let repos: Vec<_> = c.repos.iter().map(|r| r.repo.as_str()).collect();
+            assert_eq!(repos, ["a", "b", "c"]);
+            for r in &c.repos {
+                assert_eq!(
+                    r.branch.as_deref(),
+                    Some(format!("br-{}-{}", c.id, r.repo).as_str())
+                );
+                assert_eq!(
+                    r.dirty,
+                    c.id == "20" && r.repo == "b",
+                    "{} {}",
+                    c.id,
+                    r.repo
+                );
+            }
+        }
+    }
 }
