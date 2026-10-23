@@ -6,7 +6,8 @@
 # Labels on the issue (and the PR): agent:doing while working, agent:done or agent:fail at the end.
 # Re-adding `agent` runs it again on the same branch/PR, with your new comments as input.
 #
-# Required env: GH_TOKEN (PAT), REPO (owner/name), ISSUE_NUMBER.
+# Required env: GH_TOKEN (PAT), REPO (owner/name), ISSUE_NUMBER. LABELED_BY (who added the label) is
+# checked against AGENT_OWNER when set.
 # Optional env: AGENT_OWNER, AGENT_HOME, AGENT_BASE, AGENT_MODEL, AGENT_MAX_REVIEW_ROUNDS,
 #               AGENT_MAX_CI_ROUNDS, AGENT_CLAUDE_TIMEOUT, AGENT_CI_TIMEOUT, RUN_URL.
 set -Eeuo pipefail
@@ -75,8 +76,10 @@ trap 'git -C "$REPO_DIR" worktree remove --force "$WT" >/dev/null 2>&1 || true' 
 
 # --- guards ------------------------------------------------------------------------------------
 
-# Your label is the approval to work on the issue, whoever wrote it. Text from anyone else is
-# marked as such in the prompt, and claude runs without GH_TOKEN (see claude_run).
+# What authorizes a run is who added the label (also checked in agent.yml), not who wrote the
+# issue. Text from anyone else is marked as such in the prompt, and claude runs without GH_TOKEN
+# (see claude_run).
+[ -z "${LABELED_BY:-}" ] || [ "$LABELED_BY" = "$OWNER" ] || die "the label was added by @$LABELED_BY, not by $OWNER."
 author=$(gh api "repos/$REPO/issues/$N" --jq .user.login)
 
 for l in "agent:doing|fbca04" "agent:done|0e8a16" "agent:fail|b60205"; do
