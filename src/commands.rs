@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 use anyhow::{bail, Result};
 
@@ -44,7 +45,7 @@ fn check_code_flag(cfg: &Config, code: bool) -> Result<()> {
     if !cfg.vscode.enabled {
         bail!("VS Code disabled in the config (vscode.enabled = false)");
     }
-    if sys::which("code").is_none() {
+    if sys::find_code().is_none() {
         bail!("`code` is not on PATH");
     }
     Ok(())
@@ -59,7 +60,7 @@ fn open_after(
     herdr_flag: bool,
 ) -> Result<()> {
     if code || (cfg.vscode.enabled && cfg.vscode.open_on_new) {
-        if sys::which("code").is_some() {
+        if sys::find_code().is_some() {
             open_code(cfg, id)?;
         } else {
             ui::warn("vscode.open_on_new is on, but `code` is not on PATH");
@@ -471,7 +472,10 @@ pub fn code(cfg: &Config, id: Option<&str>) -> Result<()> {
 }
 
 fn launch_code(target: &Path) -> Result<()> {
-    let mut cmd = sys::tool("code");
+    let mut cmd = match sys::find_code() {
+        Some(code) => Command::new(code),
+        None => sys::tool("code"),
+    };
     cmd.arg(target);
     // without this VS Code's integrated terminal inherits HERDR_* and refuses to run `herdr` (nested)
     for (k, _) in std::env::vars().filter(|(k, _)| k.starts_with("HERDR_")) {
