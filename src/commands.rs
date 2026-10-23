@@ -7,7 +7,9 @@ use anyhow::{bail, Result};
 use crate::config::{Config, OpenTarget};
 use crate::hooks::{self, Event};
 use crate::provider::{self, CardInfo};
-use crate::{card, claude_md, herdr, memo, ports, procenv, sys, templates, ui, workspace};
+use crate::{
+    card, claude_md, herdr, memo, ports, procenv, sessions, sys, templates, ui, workspace,
+};
 
 pub struct NewArgs {
     pub id: String,
@@ -219,6 +221,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         workspace::write(cfg, &id, &title)?;
     }
     memo::ensure_link(cfg, &id);
+    sessions::restore(cfg, &id, &repos);
     claude_md::write(cfg, &id, &slug, info.as_ref())?;
 
     if wants_setup(cfg, install, no_setup) {
@@ -338,6 +341,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     if wants_setup(cfg, install, no_setup) {
         setup(cfg, &a.id, &created);
     }
+    sessions::restore(cfg, &a.id, &created);
     regenerate(cfg, &a.id, info.as_ref())?;
     if !created.is_empty() {
         fire(
@@ -614,6 +618,7 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
     }
 
     herdr::close_workspace(id);
+    sessions::archive(cfg, id, &repos);
 
     for repo in &repos {
         let wt = dir.join(repo);

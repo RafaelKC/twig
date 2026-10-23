@@ -22,6 +22,7 @@ version = 1                       # schema version, so `twig update` can migrate
 provider = "claude"               # "claude" | "codex"
 # command      = "claude"         # what `twig herdr` runs in the agent tab (default: the provider's)
 # context_file = "CLAUDE.md"      # card context file (default: CLAUDE.md / AGENTS.md)
+# keep_sessions = true            # archive/restore Claude Code sessions on rm/new (experimental)
 
 [provider]
 default = "az"                    # "az" | "gh"
@@ -153,6 +154,7 @@ clone.
 | `provider` | `"claude"` | agent chosen at install: `claude` (Claude Code) or `codex` (Codex). Anything else is rejected |
 | `command` | the provider's (`claude` / `codex`) | command that starts the agent in herdr's `agent` tab |
 | `context_file` | the provider's (`CLAUDE.md` / `AGENTS.md`) | name of the card's context file; a file name, not a path |
+| `keep_sessions` | `true` | (experimental) `twig rm` moves the Claude Code sessions of the card's repos to `memos/<id>-<provider>/sessions/<repo>/` and `twig new` / `twig add-repo` restore them. Claude Code only; see [MEMORY.md](MEMORY.md#agent-sessions) |
 
 The section used to be called `[ai]`; the old name is still accepted.
 

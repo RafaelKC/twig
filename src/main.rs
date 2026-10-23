@@ -16,6 +16,7 @@ mod pr;
 mod procenv;
 mod provider;
 mod selfmgmt;
+mod sessions;
 mod status;
 mod sync;
 mod sys;

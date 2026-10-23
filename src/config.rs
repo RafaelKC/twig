@@ -108,6 +108,8 @@ pub struct Ai {
     command: String,
     /// empty = the provider's default context file
     context_file: String,
+    /// `twig rm` archives the agent's sessions and `twig new` restores them (Claude Code only)
+    pub keep_sessions: bool,
 }
 
 impl Default for Ai {
@@ -116,6 +118,7 @@ impl Default for Ai {
             provider: AgentKind::Claude,
             command: String::new(),
             context_file: String::new(),
+            keep_sessions: true,
         }
     }
 }
@@ -493,6 +496,14 @@ impl Config {
             .join(crate::card::MEMOS_DIR)
             .join(format!("{id}-{}", self.provider.default.name()))
             .join(crate::memo::MEMO_FILE)
+    }
+
+    /// Where `twig rm` archives the agent's sessions, one folder per repo.
+    pub fn sessions_dir(&self, id: &str) -> PathBuf {
+        self.worktrees()
+            .join(crate::card::MEMOS_DIR)
+            .join(format!("{id}-{}", self.provider.default.name()))
+            .join("sessions")
     }
 
     pub fn workspace_file(&self, id: &str) -> PathBuf {
