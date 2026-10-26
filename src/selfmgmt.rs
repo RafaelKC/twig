@@ -486,6 +486,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn recognizes_the_twig_rc_lines() {
+        assert!(is_twig_rc_line(
+            "export PATH=\"$HOME/.local/bin:$PATH\"  # twig"
+        ));
+        assert!(is_twig_rc_line(
+            "COMPLETE=bash twig | source  # twig completions"
+        ));
+        assert!(is_twig_rc_line(
+            "if [ \"$HERDR_ENV\" = 1 ]; then eval \"$(twig env --auto 2>/dev/null)\"; fi  # twig pane env"
+        ));
+        assert!(!is_twig_rc_line("export PATH=/usr/bin"));
+    }
+
+    #[test]
     fn compares_versions() {
         assert_eq!(parse_version("v1.2.3"), Some((1, 2, 3)));
         assert!(parse_version("v0.10.0") > parse_version("0.9.9"));

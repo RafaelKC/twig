@@ -2698,6 +2698,31 @@ fn env_prints_the_full_pane_environment() {
 }
 
 #[test]
+fn doctor_flags_a_herdr_pane_without_the_twig_env() {
+    let s = ports_sandbox();
+    assert_exit(
+        &s.run(&["new", "52644", "x", "--repos", "a", "--no-ado"]),
+        0,
+    );
+    let doctor = |card_id: Option<&str>| {
+        let mut c = s.cmd(&["doctor"]);
+        c.current_dir(s.path("wt/52644/a")).env("HERDR_ENV", "1");
+        match card_id {
+            Some(v) => c.env("TWIG_CARD_ID", v),
+            None => c.env_remove("TWIG_CARD_ID"),
+        };
+        s.run_with(c, "")
+    };
+    assert_has(&doctor(None), "has no twig environment");
+    let o = doctor(Some("52644"));
+    assert!(
+        !text(&o).contains("has no twig environment"),
+        "{}",
+        text(&o)
+    );
+}
+
+#[test]
 fn env_auto_is_silent_outside_a_card_or_in_a_set_up_pane() {
     let s = ports_sandbox();
     assert_exit(

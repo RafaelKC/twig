@@ -541,11 +541,14 @@ install_pane_env() {
   case "$(basename "${SHELL:-sh}")" in
     bash) rc="$HOME/.bashrc" ;;
     zsh) rc="$HOME/.zshrc" ;;
-    *) return 0 ;;
+    *)
+      info "pane env: add \`if [ \"\$HERDR_ENV\" = 1 ] && [ -z \"\$TWIG_CARD_ID\" ]; then eval \"\$(twig env --auto)\"; fi\` to your shell's startup file"
+      return 0
+      ;;
   esac
   # herdr restores a card's layout after a reboot with fresh shells; this sets the twig env
   # again. The shell tests the two variables itself, so terminals outside herdr never run twig.
-  line='[ "$HERDR_ENV" = 1 ] && [ -z "$TWIG_CARD_ID" ] && command -v twig >/dev/null 2>&1 && eval "$(twig env --auto 2>/dev/null)"  # twig pane env'
+  line='if [ "$HERDR_ENV" = 1 ] && [ -z "$TWIG_CARD_ID" ] && command -v twig >/dev/null 2>&1; then eval "$(twig env --auto 2>/dev/null)"; fi  # twig pane env'
   if grep -qs '# twig pane env' "$rc"; then
     ok "pane env hook already enabled in $rc"
   else

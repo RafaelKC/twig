@@ -115,9 +115,13 @@ pub fn show(cfg: &Config, id: Option<&str>, repo: Option<&str>, auto: bool) -> a
     if auto && std::env::var_os("TWIG_CARD_ID").is_some() {
         return Ok(());
     }
+    if auto && crate::card::require_card(cfg, &id).is_err() {
+        return Ok(());
+    }
     crate::card::require_card(cfg, &id)?;
     let here;
     let repo = match repo {
+        Some(r) if auto && cfg.repo(r).is_none() => return Ok(()),
         Some(r) if cfg.repo(r).is_none() => anyhow::bail!("repo {r} is not in the config"),
         Some(r) => Some(r),
         None => {

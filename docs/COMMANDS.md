@@ -337,7 +337,9 @@ automatically: in a herdr pane (`HERDR_ENV=1`) without `TWIG_CARD_ID`, it runs `
 which prints nothing unless the directory is inside a card. The shell checks both variables
 before starting twig, so terminals outside herdr pay nothing. `twig doctor` warns when run in
 such a pane. The environment is recomputed from the current config, never saved, so no secrets
-are stored. PowerShell and fish profiles are not touched: use `twig env` by hand there.
+are stored. PowerShell and fish profiles are not touched: use `twig env` by hand there. Limits: the hook only helps when the shell starts inside a
+card folder, and it cannot relaunch `run`; there is no saved per-pane snapshot, so a pane
+restored elsewhere needs `twig herdr <id>`.
 
 ## `twig refresh <id> [--refetch]`
 
