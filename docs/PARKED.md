@@ -26,8 +26,9 @@ cache (`.ado.json` / `.gh.json`) and, with neither, writes `null` and warns.
 
 - **az:** `state` is `System.State`; `children` are the `System.LinkTypes.Hierarchy-Forward`
   relations of the work item.
-- **gh:** `state` is the issue state; `children` is `null` (`gh issue view` doesn't return
-  sub-issues).
+- **gh:** `state` is the issue state; `children` are the issue's sub-issues (`subIssues` in
+  `gh issue view --json`). With a `gh` too old to know `subIssues`, or a cache saved by one,
+  `children` is `null`.
 
 ## Lifecycle
 

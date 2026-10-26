@@ -91,7 +91,12 @@ pub fn inside_workspace(id: &str) -> bool {
     if sys::which("herdr").is_none() || !server_up() {
         return false;
     }
-    matches!(find_workspace(id), Ok(Some(ws)) if ws == here)
+    same_workspace(&here, find_workspace(id).ok().flatten().as_deref())
+}
+
+/// Whether `here` (our `HERDR_WORKSPACE_ID`) is the card's workspace `found`.
+pub fn same_workspace(here: &str, found: Option<&str>) -> bool {
+    found == Some(here)
 }
 
 /// Panes whose agent is busy: `working` or `blocked` (waiting on the user).
@@ -377,6 +382,13 @@ pub fn open(ws: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_workspace_only_matches_the_cards_own() {
+        assert!(same_workspace("w1", Some("w1")));
+        assert!(!same_workspace("w1", Some("w2")));
+        assert!(!same_workspace("w1", None));
+    }
     use serde_json::json;
 
     #[test]

@@ -11,6 +11,7 @@ use serde_json::Value;
 
 use crate::card::{self, CardRef};
 use crate::config::Config;
+use crate::provider::{CardInfo, Provider};
 use crate::{provider, ui};
 
 pub const FILE: &str = ".parked.json";
@@ -60,11 +61,20 @@ fn provider_data(cfg: &Config, id: &str) -> (Option<String>, Option<Vec<Value>>)
     let first = card::repos_ordered(cfg, &cfg.card_dir(id))
         .first()
         .and_then(|r| cfg.repo_path(r));
-    let info = provider::refetch(cfg, &cref, first.as_deref()).or_else(|| {
+    let fetched = provider::refetch(cfg, &cref, first.as_deref());
+    let cached = fs::read_to_string(provider::cache_file(cfg, id)).ok();
+    data_from(p.as_ref(), fetched, cached.as_deref())
+}
+
+/// Pure part of [`provider_data`]: the fresh card if any, else the cached raw data.
+fn data_from(
+    p: &dyn Provider,
+    fetched: Option<CardInfo>,
+    cached: Option<&str>,
+) -> (Option<String>, Option<Vec<Value>>) {
+    let info = fetched.or_else(|| {
         ui::warn(format!("{} unavailable: using the card cache", p.cli()));
-        fs::read_to_string(provider::cache_file(cfg, id))
-            .ok()
-            .and_then(|raw| p.parse_card(&raw))
+        cached.and_then(|raw| p.parse_card(raw))
     });
     let Some(info) = info else {
         ui::warn("no provider data nor cache: state and children recorded as null");
@@ -86,7 +96,7 @@ pub fn write_new(cfg: &Config, id: &str) -> Result<(Marker, bool)> {
     let (state, children) = provider_data(cfg, id);
     let m = Marker {
         v: VERSION,
-        since: now_local(),
+        since: now_local().unwrap_or_else(now_utc),
         state,
         children,
     };
@@ -97,7 +107,7 @@ pub fn write_new(cfg: &Config, id: &str) -> Result<(Marker, bool)> {
 
 /// Local time as ISO 8601 with offset (`2026-10-26T14:03:00-03:00`).
 #[cfg(unix)]
-fn now_local() -> String {
+fn now_local() -> Option<String> {
     // SAFETY: `time` and `localtime_r` only write into the zeroed `tm` we own.
     let tm = unsafe {
         let t = libc::time(std::ptr::null_mut());
@@ -107,7 +117,7 @@ fn now_local() -> String {
     };
     let off = tm.tm_gmtoff;
     let (sign, a) = if off < 0 { ('-', -off) } else { ('+', off) };
-    format!(
+    Some(format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}{sign}{:02}:{:02}",
         tm.tm_year + 1900,
         tm.tm_mon + 1,
@@ -117,18 +127,43 @@ fn now_local() -> String {
         tm.tm_sec,
         a / 3600,
         a % 3600 / 60
-    )
+    ))
 }
 
 #[cfg(not(unix))]
-fn now_local() -> String {
+fn now_local() -> Option<String> {
     // PowerShell's round-trip format has fractional seconds: cut them, keep the offset
     let out = crate::sys::output(crate::sys::tool("powershell").args([
         "-NoProfile",
         "-Command",
         "Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz'",
     ]));
-    out.map(|s| s.trim().to_string()).unwrap_or_default()
+    let s = out.ok()?.trim().to_string();
+    (!s.is_empty()).then_some(s)
+}
+
+/// UTC fallback (`+00:00`) when the local time can't be had, so `since` is never empty.
+fn now_utc() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
+    let (days, rem) = (secs.div_euclid(86400), secs.rem_euclid(86400));
+    // civil-from-days (Howard Hinnant)
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}+00:00",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
 }
 
 #[cfg(test)]
@@ -150,7 +185,10 @@ mod tests {
     #[test]
     fn now_is_iso_8601_with_offset() {
         let re = regex::Regex::new(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$").unwrap();
-        assert!(re.is_match(&now_local()), "{}", now_local());
+        let local = now_local().unwrap();
+        assert!(re.is_match(&local), "{local}");
+        assert!(re.is_match(&now_utc()), "{}", now_utc());
+        assert!(now_utc().starts_with("20"));
     }
 
     #[test]
@@ -194,20 +232,15 @@ mod tests {
     }
 
     #[test]
-    fn cache_fills_state_when_the_provider_is_unavailable() {
+    fn cache_fills_state_and_children_when_the_provider_is_unavailable() {
+        let cached = r#"{"fields":{"System.Title":"t","System.State":"Resolved"},"relations":[{"rel":"System.LinkTypes.Hierarchy-Forward","url":"https://dev.azure.com/o/p/_apis/wit/workItems/51234"}]}"#;
         let tmp = tempfile::tempdir().unwrap();
         let cfg = cfg_with_card(tmp.path());
-        fs::write(
-            provider::cache_file(&cfg, "7"),
-            r#"{"fields":{"System.Title":"t","System.State":"Resolved"},"relations":[{"rel":"System.LinkTypes.Hierarchy-Forward","url":"https://dev.azure.com/o/p/_apis/wit/workItems/51234"}]}"#,
-        )
-        .unwrap();
-        let (m, _) = write_new(&cfg, "7").unwrap();
-        // the provider default is az; without `az` logged in the cache is used
-        if m.state.is_some() {
-            assert_eq!(m.state.as_deref(), Some("Resolved"));
-            assert_eq!(m.children, Some(vec![51234.into()]));
-        }
+        let az = provider::current(&cfg);
+        let (state, children) = data_from(az.as_ref(), None, Some(cached));
+        assert_eq!(state.as_deref(), Some("Resolved"));
+        assert_eq!(children, Some(vec![51234.into()]));
+        assert_eq!(data_from(az.as_ref(), None, None), (None, None));
     }
 
     #[test]

@@ -691,6 +691,7 @@ pub fn park(cfg: &Config, id: Option<&str>, force: bool, undo: bool) -> Result<(
         }
         return Ok(());
     }
+    // only parking closes the workspace; `--undo` (above) just deletes the file, so it may run here
     if herdr::inside_workspace(&id) {
         bail!("this terminal is inside the herdr workspace #{id}: parking would close it; run `twig park {id}` from outside");
     }
