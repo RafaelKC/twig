@@ -80,6 +80,25 @@ pub fn find_workspace(id: &str) -> Result<Option<String>> {
         .and_then(|w| w["workspace_id"].as_str().map(String::from)))
 }
 
+/// Whether this process runs inside the card's own herdr workspace (`HERDR_WORKSPACE_ID`).
+pub fn inside_workspace(id: &str) -> bool {
+    let Some(here) = std::env::var("HERDR_WORKSPACE_ID")
+        .ok()
+        .filter(|w| !w.is_empty())
+    else {
+        return false;
+    };
+    if sys::which("herdr").is_none() || !server_up() {
+        return false;
+    }
+    same_workspace(&here, find_workspace(id).ok().flatten().as_deref())
+}
+
+/// Whether `here` (our `HERDR_WORKSPACE_ID`) is the card's workspace `found`.
+pub fn same_workspace(here: &str, found: Option<&str>) -> bool {
+    found == Some(here)
+}
+
 /// Panes whose agent is busy: `working` or `blocked` (waiting on the user).
 fn busy_panes(panes: &Value) -> Vec<String> {
     panes
@@ -363,6 +382,13 @@ pub fn open(ws: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_workspace_only_matches_the_cards_own() {
+        assert!(same_workspace("w1", Some("w1")));
+        assert!(!same_workspace("w1", Some("w2")));
+        assert!(!same_workspace("w1", None));
+    }
     use serde_json::json;
 
     #[test]

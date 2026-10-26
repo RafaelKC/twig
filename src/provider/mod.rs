@@ -86,6 +86,12 @@ pub trait Provider {
     /// Raw data (from [`Provider::fetch_card`] or the cache) as a card.
     fn parse_card(&self, raw: &str) -> Option<CardInfo>;
 
+    /// Ids of the card's child items from its raw data; `None` when the provider can't tell
+    /// (the default).
+    fn children(&self, _raw: &str) -> Option<Vec<String>> {
+        None
+    }
+
     /// The card URL without metadata (may be empty).
     fn fallback_url(&self, card: &CardRef) -> String;
 

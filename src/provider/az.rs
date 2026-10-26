@@ -108,6 +108,20 @@ impl Provider for AzureDevOps<'_> {
         (!info.title.is_empty()).then_some(info)
     }
 
+    fn children(&self, raw: &str) -> Option<Vec<String>> {
+        let d: Value = serde_json::from_str(raw).ok()?;
+        // `relations` is absent when the work item has none
+        Some(
+            d["relations"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|r| r["rel"] == "System.LinkTypes.Hierarchy-Forward")
+                .filter_map(|r| r["url"].as_str()?.rsplit('/').next().map(String::from))
+                .collect(),
+        )
+    }
+
     fn fallback_url(&self, card: &CardRef) -> String {
         self.cfg.item_url.replace("{id}", &card.number)
     }
@@ -231,6 +245,19 @@ impl Provider for AzureDevOps<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn children_are_the_hierarchy_forward_relations() {
+        let cfg = crate::config::Az::default();
+        let az = AzureDevOps::new(&cfg);
+        let raw = r#"{"relations":[
+            {"rel":"System.LinkTypes.Hierarchy-Forward","url":"https://x/_apis/wit/workItems/51234"},
+            {"rel":"System.LinkTypes.Hierarchy-Reverse","url":"https://x/_apis/wit/workItems/1"},
+            {"rel":"System.LinkTypes.Hierarchy-Forward","url":"https://x/_apis/wit/workItems/51240"}]}"#;
+        assert_eq!(az.children(raw), Some(vec!["51234".into(), "51240".into()]));
+        assert_eq!(az.children("{}"), Some(vec![]));
+        assert_eq!(az.children("not json"), None);
+    }
 
     #[test]
     fn web_url_is_built_from_the_repository() {
