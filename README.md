@@ -195,7 +195,8 @@ twig ls                             # cards, branches, uncommitted changes (*)
 twig status 52644                   # ahead/behind, dirty files, herdr agent
 twig refresh 52644 --refetch        # regenerate CLAUDE.md / workspace, refetch the card
 twig memo "validation moved to API" # (in development) note for the next agent session
-twig park 52644                     # waiting: close the herdr workspace, keep everything
+twig park 52644                     # waiting: close the herdr workspace, keep everything, mark it parked
+twig park 52644 --undo              # back from the wait: remove the marker (also `twig unpark`)
 twig rm 52644 --branches            # done: remove worktrees (and local branches)
 ```
 

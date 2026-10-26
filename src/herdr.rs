@@ -80,6 +80,20 @@ pub fn find_workspace(id: &str) -> Result<Option<String>> {
         .and_then(|w| w["workspace_id"].as_str().map(String::from)))
 }
 
+/// Whether this process runs inside the card's own herdr workspace (`HERDR_WORKSPACE_ID`).
+pub fn inside_workspace(id: &str) -> bool {
+    let Some(here) = std::env::var("HERDR_WORKSPACE_ID")
+        .ok()
+        .filter(|w| !w.is_empty())
+    else {
+        return false;
+    };
+    if sys::which("herdr").is_none() || !server_up() {
+        return false;
+    }
+    matches!(find_workspace(id), Ok(Some(ws)) if ws == here)
+}
+
 /// Panes whose agent is busy: `working` or `blocked` (waiting on the user).
 fn busy_panes(panes: &Value) -> Vec<String> {
     panes
