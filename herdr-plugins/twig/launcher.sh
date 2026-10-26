@@ -2,7 +2,7 @@
 # herdr popup launcher: asks for one line, runs it in the foreground with the full output
 # and the real tty (twig's prompts read /dev/tty), then waits for enter before closing.
 # `new 123` runs `twig new 123`; if the first word isn't a twig subcommand, the line runs
-# as a plain shell command. Empty line or Esc closes without running anything.
+# as a plain shell command. Empty line or Esc (first key) closes without running anything.
 set -u
 
 # the herdr server's PATH may not include ~/.local/bin or ~/.cargo/bin
@@ -11,6 +11,11 @@ for candidate in "$HOME/.local/bin/twig" "$HOME/.cargo/bin/twig"; do
   [ -n "$twig" ] && break
   [ -x "$candidate" ] && twig=$candidate
 done
+# lines like `cd x && twig ls` (shell branch) must find it too
+if [ -n "$twig" ]; then
+  PATH="$(dirname "$twig"):$PATH"
+  export PATH
+fi
 
 # the popup must not inherit the env of a card pane it was opened from
 for name in $(env | sed -n 's/^\(TWIG_[A-Za-z0-9_]*\)=.*/\1/p'); do
@@ -27,8 +32,20 @@ confirm_close() {
 }
 
 printf 'twig> '
-IFS= read -r line || exit 0
 esc=$(printf '\033')
+if [ -t 0 ]; then
+  # read the first key on its own so a bare Esc (or enter / ctrl-d) closes right away
+  saved=$(stty -g 2>/dev/null || true)
+  stty -icanon min 1 2>/dev/null || true
+  key=$(dd bs=1 count=1 2>/dev/null)
+  [ -n "$saved" ] && stty "$saved" 2>/dev/null
+  [ -z "$key" ] && exit 0
+  case "$key" in "$esc") exit 0 ;; esac
+  IFS= read -r rest || true
+  line=$key$rest
+else
+  IFS= read -r line || exit 0
+fi
 case "$line" in "$esc"*) exit 0 ;; esac
 # trim blanks
 line=${line#"${line%%[![:space:]]*}"}
@@ -48,7 +65,7 @@ if [ -n "$twig" ]; then
       subs=$("$twig" --help 2>/dev/null | awk '
         /^Commands:/ { f = 1; next }
         /^[^ ]/ { f = 0 }
-        f && NF { print $1; if (match($0, /\[alias: [^]]*\]/)) print substr($0, RSTART + 8, RLENGTH - 9) }')
+        f && NF { print $1; if (match($0, /\[alias: [^]]*\]/)) { a = substr($0, RSTART + 8, RLENGTH - 9); gsub(/, */, "\n", a); print a } }')
       for s in $subs; do
         [ "$s" = "$first" ] && is_twig=1
       done

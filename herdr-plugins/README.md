@@ -36,7 +36,7 @@ Requirements: `twig` on the herdr server's PATH, or at `~/.local/bin/twig` /
 2. it runs in the foreground with the full output, and twig's interactive prompts work (the
    popup is a real terminal);
 3. it shows `[exit N]` and `[enter] fechar / close`; the popup closes only after enter.
-   An empty line or Esc + enter closes without running anything.
+   An empty line or Esc as the first key closes without running anything.
 
 It finds `twig` like `open-code.sh` and drops the card env (`TWIG_*` except the config
 overrides, and `PORT`) in case the popup was opened from a card pane. Unix only for now (no

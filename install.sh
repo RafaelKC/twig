@@ -493,7 +493,7 @@ description = "open card in VS Code"
 '
     ok "shortcut prefix+shift+o → twig.open-code"
   fi
-  if grep -qs 'key = "prefix+shift+s"' "$HERDR_CONFIG"; then
+  if grep -Eqs 'key[[:space:]]*=[[:space:]]*"prefix\+shift\+s"' "$HERDR_CONFIG"; then
     if ! grep -qs "$pdir/launcher.sh" "$HERDR_CONFIG"; then
       warn "prefix+shift+s is already bound to another herdr shortcut; use a popup with \"sh $pdir/launcher.sh\" in $HERDR_CONFIG if you want the twig launcher"
     fi
