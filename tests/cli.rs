@@ -1089,6 +1089,35 @@ fn rm_works_without_herdr() {
     assert!(!s.path("wt/123").exists());
 }
 
+#[test]
+fn park_closes_the_workspace_and_keeps_the_card() {
+    let (s, log) = rm_sandbox("idle");
+    let o = s.run(&["park", "123"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "close the card's window by hand");
+    assert!(s.path("wt/123/r1").exists());
+    assert!(herdr_calls(&log).contains("workspace close w1"));
+}
+
+#[test]
+fn park_blocks_on_a_running_agent_unless_forced() {
+    let (s, log) = rm_sandbox("working");
+    let o = s.run(&["park", "123"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "an agent is running");
+    assert!(!herdr_calls(&log).contains("workspace close"));
+
+    assert_exit(&s.run(&["park", "-f", "123"]), 0);
+    assert!(herdr_calls(&log).contains("workspace close w1"));
+    assert!(s.path("wt/123/r1").exists());
+}
+
+#[test]
+fn park_unknown_card_fails() {
+    let (s, _log) = rm_sandbox("idle");
+    assert_exit(&s.run(&["park", "999"]), 1);
+}
+
 // ───────────────────────── open-card ─────────────────────────
 
 const CARD_URL: &str = "https://dev.azure.com/o/p/_workitems/edit/123";

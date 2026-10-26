@@ -270,6 +270,17 @@ enum Cmd {
         #[arg(short, long)]
         force: bool,
     },
+    /// Close the card's herdr workspace, keeping worktrees, branches, memo and agent sessions.
+    ///
+    /// Refuses while an agent is running in the workspace (unless --force). `twig open <ID>`
+    /// brings the card back. VS Code can't be closed from the CLI: close its window by hand.
+    Park {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
+        id: Option<String>,
+        /// Park even with a running agent.
+        #[arg(short, long)]
+        force: bool,
+    },
     /// Remove finished cards: every branch merged into the base, or the work item closed.
     ///
     /// Lists the candidates and asks per card (or --yes). Removal is `twig rm`: it refuses
@@ -424,6 +435,7 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Ports { id: Some(id), .. }
         | Cmd::Env { id: Some(id), .. }
         | Cmd::Status { id: Some(id), .. }
+        | Cmd::Park { id: Some(id), .. }
         | Cmd::OpenCard { id: Some(id) }
         | Cmd::Memo { card: Some(id), .. }
         | Cmd::Open { id: Some(id), .. }
@@ -431,6 +443,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Open { id: None, .. }
         | Cmd::Code { id: None }
         | Cmd::Pr { id: None, .. }
+        | Cmd::Park { id: None, .. }
         | Cmd::Ports { id: None, .. }
         | Cmd::Env { id: None, .. }
         | Cmd::OpenCard { id: None }
@@ -532,6 +545,7 @@ fn run(cli: Cli) -> Result<()> {
             branches,
             force,
         } => commands::rm(&cfg, &id, branches, force),
+        Cmd::Park { id, force } => commands::park(&cfg, id.as_deref(), force),
         Cmd::Sync {
             id,
             merge,
@@ -603,6 +617,7 @@ fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
         | Cmd::Code { id: Some(id) }
         | Cmd::Status { id: Some(id), .. }
         | Cmd::Pr { id: Some(id), .. }
+        | Cmd::Park { id: Some(id), .. }
         | Cmd::Ports { id: Some(id), .. }
         | Cmd::Env { id: Some(id), .. }
         | Cmd::Memo { card: Some(id), .. } => Some(id),

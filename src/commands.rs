@@ -661,6 +661,33 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
     Ok(())
 }
 
+/// `twig park [id]`: close the herdr workspace and leave everything else (worktrees, branches,
+/// memo, agent sessions) alone. `twig open` recreates the workspace.
+pub fn park(cfg: &Config, id: Option<&str>, force: bool) -> Result<()> {
+    let id = match id {
+        Some(id) => id.to_string(),
+        None => match card::infer(cfg) {
+            card::Current::Card(id) => id,
+            card::Current::Dir(_) => bail!("not inside a card: pass the card id"),
+        },
+    };
+    card::require_card(cfg, &id)?;
+    if !force {
+        let busy = herdr::running_agents(&id);
+        if !busy.is_empty() {
+            bail!("an agent is running in the herdr workspace #{id} ({}), stop it first (or use --force)", busy.join(", "));
+        }
+    }
+    herdr::close_workspace(&id);
+    // the `code` CLI has no way to close a window, and killing the process by title is not
+    // reliable across platforms (one process serves every window, WSL opens a Windows one)
+    ui::warn("VS Code can't be closed by twig: close the card's window by hand");
+    ui::ok(format!(
+        "card {id} parked (`twig open {id}` brings it back)"
+    ));
+    Ok(())
+}
+
 pub fn prune(cfg: &Config, dry_run: bool) -> Result<()> {
     ui::info("looking for orphaned worktree records...");
     let mut found = false;
