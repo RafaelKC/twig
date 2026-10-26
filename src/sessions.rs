@@ -35,6 +35,19 @@ fn active(cfg: &Config) -> bool {
     cfg.ai.keep_sessions && cfg.ai.provider == AgentKind::Claude
 }
 
+/// Whether there is a conversation to resume in `wt`. Only Claude Code is checked (`--continue`
+/// fails without one); for the other agents this is assumed true.
+pub fn has_session(cfg: &Config, wt: &Path) -> bool {
+    if cfg.ai.provider != AgentKind::Claude {
+        return true;
+    }
+    let Some(projects) = projects_dir() else {
+        return false;
+    };
+    let found = |p: &Path| count_sessions(&projects.join(encode_cwd(p))) > 0;
+    found(wt) || wt.canonicalize().is_ok_and(|real| found(&real))
+}
+
 /// Number of sessions (`*.jsonl` transcripts) directly in `dir`.
 fn count_sessions(dir: &Path) -> usize {
     fs::read_dir(dir)

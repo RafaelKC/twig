@@ -111,6 +111,9 @@ the memo:
   (`CLAUDE_CONFIG_DIR` is honoured).
 - `twig new <id>` / `twig add-repo` move them back for the repos they create and print
   `sessions restored: api (2), web (1)`. The card path is the same, so `claude --resume` finds them.
+- With `[agent] resume_sessions = true` the agent pane of a repo that has a session starts with
+  `claude --continue` (Codex: `codex resume --last`) instead of a blank conversation, e.g. after
+  `twig park` + `twig open`, or `twig rm` + `twig new`. A first prompt from `twig new` wins.
 - `twig prune` never touches `memos/`.
 - Opt out with `[agent] keep_sessions = false`. Only the `claude` agent is supported; with
   another one nothing happens. `/rewind` checkpoints (`~/.claude/file-history`) are not archived.
