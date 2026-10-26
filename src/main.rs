@@ -188,6 +188,21 @@ enum Cmd {
         #[arg(short = 'e', long)]
         env: bool,
     },
+    /// Print `export` lines with the full environment of a card's herdr pane.
+    ///
+    /// Ports, `PORT`, the repo's `env` (every config layer) and the `TWIG_CARD_ID`/`TWIG_REPO`
+    /// markers. Without <ID>, the card of the current directory, and the repo too when inside
+    /// its worktree: `eval "$(twig env)"`. A herdr pane restored after a reboot has none of it.
+    Env {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
+        id: Option<String>,
+        /// Repo whose `env` and `PORT` to include (default: the repo of the current directory).
+        #[arg(short, long, add = ArgValueCandidates::new(complete::repos))]
+        repo: Option<String>,
+        /// For the shell rc hook: print nothing unless in a card without twig's environment.
+        #[arg(long)]
+        auto: bool,
+    },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
@@ -365,6 +380,8 @@ fn run(cli: Cli) -> Result<()> {
     match cli.cmd {
         Cmd::Completions { shell } => return complete::registration(shell),
         Cmd::Doctor { json } => return doctor::run(json),
+        // the rc hook of every herdr pane: don't even load the config when already set up
+        Cmd::Env { auto: true, .. } if std::env::var_os("TWIG_CARD_ID").is_some() => return Ok(()),
         Cmd::Update { check, version } => return selfmgmt::update(check, version),
         Cmd::Uninstall { yes } => return selfmgmt::uninstall(yes),
         Cmd::Config {
@@ -405,6 +422,7 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Rm { id, .. }
         | Cmd::Pr { id: Some(id), .. }
         | Cmd::Ports { id: Some(id), .. }
+        | Cmd::Env { id: Some(id), .. }
         | Cmd::Status { id: Some(id), .. }
         | Cmd::OpenCard { id: Some(id) }
         | Cmd::Memo { card: Some(id), .. }
@@ -414,6 +432,7 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Code { id: None }
         | Cmd::Pr { id: None, .. }
         | Cmd::Ports { id: None, .. }
+        | Cmd::Env { id: None, .. }
         | Cmd::OpenCard { id: None }
         | Cmd::Memo { card: None, .. } => match card::infer(&cfg) {
             card::Current::Card(id) => Some(id),
@@ -427,7 +446,7 @@ fn run(cli: Cli) -> Result<()> {
     }
     let json = matches!(
         cli.cmd,
-        Cmd::Ls { json: true } | Cmd::Status { json: true, .. }
+        Cmd::Ls { json: true } | Cmd::Status { json: true, .. } | Cmd::Env { .. }
     );
     let result = match cli.cmd {
         Cmd::New {
@@ -537,6 +556,7 @@ fn run(cli: Cli) -> Result<()> {
                 )),
             },
         },
+        Cmd::Env { id, repo, auto } => procenv::show(&cfg, id.as_deref(), repo.as_deref(), auto),
         Cmd::Clean {
             dry_run,
             yes,
@@ -584,6 +604,7 @@ fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
         | Cmd::Status { id: Some(id), .. }
         | Cmd::Pr { id: Some(id), .. }
         | Cmd::Ports { id: Some(id), .. }
+        | Cmd::Env { id: Some(id), .. }
         | Cmd::Memo { card: Some(id), .. } => Some(id),
         _ => None,
     };

@@ -2662,6 +2662,74 @@ fn ports_are_deterministic_per_card_and_written_to_the_card() {
 }
 
 #[test]
+fn env_prints_the_full_pane_environment() {
+    let s = ports_sandbox();
+    append_config(
+        &s,
+        "\n[repos.a.env]\nAPI_URL = \"http://localhost:$PORT/it's\"\n",
+    );
+    assert_exit(
+        &s.run(&["new", "52644", "x", "--repos", "a,b", "--no-ado"]),
+        0,
+    );
+
+    let o = s.run(&["env", "52644", "--repo", "a"]);
+    assert_exit(&o, 0);
+    assert_eq!(
+        stdout(&o),
+        "export TWIG_CARD_ID='52644'\nexport TWIG_REPO='a'\nexport TWIG_PORT_A='4244'\n\
+         export TWIG_PORT_B='5044'\nexport PORT='4244'\n\
+         export API_URL='http://localhost:4244/it'\\''s'\n"
+    );
+
+    // inside a repo's worktree the card and the repo are inferred
+    let mut c = s.cmd(&["env"]);
+    c.current_dir(s.path("wt/52644/b"));
+    let o = s.run_with(c, "");
+    assert_exit(&o, 0);
+    assert!(
+        stdout(&o).contains("export TWIG_REPO='b'\n")
+            && stdout(&o).contains("export PORT='5044'\n"),
+        "{}",
+        stdout(&o)
+    );
+
+    assert_exit(&s.run(&["env", "52644", "--repo", "nope"]), 1);
+}
+
+#[test]
+fn env_auto_is_silent_outside_a_card_or_in_a_set_up_pane() {
+    let s = ports_sandbox();
+    assert_exit(
+        &s.run(&["new", "52644", "x", "--repos", "a", "--no-ado"]),
+        0,
+    );
+
+    let mut c = s.cmd(&["env", "--auto"]);
+    c.current_dir(&s.home);
+    let o = s.run_with(c, "");
+    assert_exit(&o, 0);
+    assert_eq!(stdout(&o), "");
+
+    let mut c = s.cmd(&["env", "--auto"]);
+    c.current_dir(s.path("wt/52644/a"))
+        .env("TWIG_CARD_ID", "52644");
+    let o = s.run_with(c, "");
+    assert_exit(&o, 0);
+    assert_eq!(stdout(&o), "");
+
+    let mut c = s.cmd(&["env", "--auto"]);
+    c.current_dir(s.path("wt/52644/a"));
+    let o = s.run_with(c, "");
+    assert_exit(&o, 0);
+    assert!(
+        stdout(&o).contains("export PORT='4244'\n"),
+        "{}",
+        stdout(&o)
+    );
+}
+
+#[test]
 fn ports_reach_herdr_panes_hooks_and_vscode() {
     let s = ports_sandbox();
     let log = herdr_builder_stub(&s);
@@ -2677,12 +2745,12 @@ fn ports_reach_herdr_panes_hooks_and_vscode() {
     let calls = fs::read_to_string(&log).unwrap();
     assert!(
         calls.contains("workspace create")
-            && calls.contains("--env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"),
+            && calls.contains("--env TWIG_CARD_ID=7 --env TWIG_REPO=a --env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"),
         "{calls}"
     );
     assert!(
         calls.contains(
-            "--label run --no-focus --env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"
+            "--label run --no-focus --env TWIG_CARD_ID=7 --env TWIG_REPO=a --env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"
         ),
         "{calls}"
     );

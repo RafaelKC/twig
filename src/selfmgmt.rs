@@ -329,7 +329,9 @@ fn remove_tool(bin: &str, pkgs: &Packages) -> Result<()> {
 /// A line install.sh appended to a shell rc file.
 fn is_twig_rc_line(l: &str) -> bool {
     let l = l.trim_end();
-    (l.starts_with("export PATH=") && l.ends_with("# twig")) || l.ends_with("# twig completions")
+    (l.starts_with("export PATH=") && l.ends_with("# twig"))
+        || l.ends_with("# twig completions")
+        || l.ends_with("# twig pane env")
 }
 
 pub fn uninstall(yes: bool) -> Result<()> {
@@ -390,7 +392,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
         if kept.len() != text.lines().count() {
             fs::write(&rc, kept.join("\n") + "\n")?;
             ui::ok(format!(
-                "twig lines (PATH, completions) removed from {}",
+                "twig lines (PATH, completions, pane env) removed from {}",
                 rc.display()
             ));
         }

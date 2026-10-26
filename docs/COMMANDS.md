@@ -16,6 +16,7 @@
 | `twig ls [--json]` | lists active cards and each repo's branch |
 | `twig status [id] [--json]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
 | `twig ports [id] [--env]` | shows the card's dev server ports; `--env` prints `export` lines |
+| `twig env [id] [--repo X]` | prints `export` lines with the full environment of a herdr pane (ports, `PORT`, repo `env`, markers) |
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
 | `twig memo [text] [-c id]` (in development) | appends a dated line to the card memory (`MEMORY.md`, survives `rm`); without text, shows it. See [MEMORY.md](MEMORY.md) |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
@@ -208,13 +209,14 @@ Opens the card's workspace in herdr. If it doesn't exist, creates:
 - `agent` tab: one pane per repo running `agent.command` (`claude` or `codex` by default);
 - `run` tab: one pane per repo that has `run` in the config, already starting the project.
 
-Every pane it creates gets the card's ports (`TWIG_PORT_<REPO>`, `PORT`) and the repo's `env` as
+Every pane it creates gets `TWIG_CARD_ID`/`TWIG_REPO`, the card's ports (`TWIG_PORT_<REPO>`, `PORT`) and the repo's `env` as
 environment variables (see [CONFIG.md → `[ports]`](CONFIG.md#ports)). On `twig new`, the agents
 can start with a first message (`--prompt` / the template's `agent_prompt`).
 
 If the workspace already exists, it just focuses it and recreates the panes that are missing
 (a closed pane comes back; `twig add-repo <id> <repo>` does the same). An existing pane keeps the
-environment it was created with: after changing `port`/`env`, close it and run `twig herdr <id>`.
+environment it was created with: after changing `port`/`env`, close it and run `twig herdr <id>`
+(or `eval "$(twig env)"` in it; see [`twig env`](#twig-env-id---repo-repo---auto)).
 
 ## `twig code [id]`
 
@@ -313,6 +315,29 @@ directory.
 twig ports 52644
 eval "$(twig ports --env)"     # inside the card folder
 ```
+
+## `twig env [id] [--repo <repo>] [--auto]`
+
+Prints `export` lines with everything a herdr pane of the card receives: `TWIG_CARD_ID` and
+`TWIG_REPO` (markers that tell a pane set up by twig from a bare shell), every `TWIG_PORT_*`,
+`PORT` and the repo's `env`, resolved through all the config layers (user config, the repo's
+`.twig.toml`, the card's `.twig.toml`, `TWIG__*`). Without `<id>` it uses the card of the current
+directory, and the repo too when inside its worktree.
+
+```bash
+eval "$(twig env)"                    # inside a card's repo folder, in any terminal
+eval "$(twig env 52644 --repo api)"
+```
+
+herdr restores a card's layout after a reboot, but its panes are fresh shells without the
+environment twig injected (the `dotnet run` that needed `ASPNETCORE_ENVIRONMENT` starts as
+`Production`). Two ways out: run `eval "$(twig env)"` in the pane, or close the panes and run
+`twig herdr <id>`. `install.sh` also adds a line to `~/.bashrc` / `~/.zshrc` that does it
+automatically: in a herdr pane (`HERDR_ENV=1`) without `TWIG_CARD_ID`, it runs `twig env --auto`,
+which prints nothing unless the directory is inside a card. The shell checks both variables
+before starting twig, so terminals outside herdr pay nothing. `twig doctor` warns when run in
+such a pane. The environment is recomputed from the current config, never saved, so no secrets
+are stored. PowerShell and fish profiles are not touched: use `twig env` by hand there.
 
 ## `twig refresh <id> [--refetch]`
 

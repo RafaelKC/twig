@@ -79,6 +79,58 @@ pub fn of(cfg: &Config, id: &str, repo: Option<&str>) -> Vec<(String, String)> {
     vars
 }
 
+/// Environment of a herdr pane (and of `twig env`): `of` plus the markers that tell a pane
+/// twig set up from a shell herdr restored without the environment (`TWIG_CARD_ID`, `TWIG_REPO`).
+pub fn pane(cfg: &Config, id: &str, repo: Option<&str>) -> Vec<(String, String)> {
+    let mut vars = vec![("TWIG_CARD_ID".to_string(), id.to_string())];
+    if let Some(r) = repo {
+        vars.push(("TWIG_REPO".to_string(), r.to_string()));
+    }
+    vars.extend(of(cfg, id, repo));
+    vars
+}
+
+/// Quote for a POSIX shell (`'` closed, escaped and reopened inside).
+fn sh_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+/// `twig env [id] [--repo X] [--auto]`: `export` lines with everything a pane of the card
+/// receives (ports, `PORT`, the repo's `env` with every config layer, the markers).
+///
+/// `auto` is for the shell rc hook: it prints nothing, and never fails, unless the current
+/// directory is inside a card and this shell has no twig environment yet.
+pub fn show(cfg: &Config, id: Option<&str>, repo: Option<&str>, auto: bool) -> anyhow::Result<()> {
+    let id = match id {
+        Some(id) => id.to_string(),
+        None => match crate::card::infer(cfg) {
+            crate::card::Current::Card(id) => id,
+            crate::card::Current::Dir(_) if auto => return Ok(()),
+            crate::card::Current::Dir(dir) => anyhow::bail!(
+                "{} is not inside a card; usage: twig env <id>",
+                dir.display()
+            ),
+        },
+    };
+    if auto && std::env::var_os("TWIG_CARD_ID").is_some() {
+        return Ok(());
+    }
+    crate::card::require_card(cfg, &id)?;
+    let here;
+    let repo = match repo {
+        Some(r) if cfg.repo(r).is_none() => anyhow::bail!("repo {r} is not in the config"),
+        Some(r) => Some(r),
+        None => {
+            here = crate::card::repo_here(cfg, &id);
+            here.as_deref()
+        }
+    };
+    for (k, v) in pane(cfg, &id, repo) {
+        println!("export {k}={}", sh_quote(&v));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,6 +156,32 @@ mod tests {
         assert_eq!(expand("a$MISSING-b", look), "a-b");
         assert_eq!(expand("cost $$5 and $ alone", look), "cost $5 and $ alone");
         assert_eq!(expand("${unclosed", look), "${unclosed");
+    }
+
+    #[test]
+    fn quotes_for_the_shell() {
+        assert_eq!(sh_quote("a b"), "'a b'");
+        assert_eq!(sh_quote("it's $x"), r"'it'\''s $x'");
+    }
+
+    #[test]
+    fn pane_env_starts_with_the_markers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        std::fs::write(
+            &file,
+            "version = 1\n[repos.api]\nport = 5000\n[repos.api.env]\nMODE = \"dev-$PORT\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load_from(&file).unwrap();
+        let get = |v: &[(String, String)], k: &str| {
+            v.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone())
+        };
+        let v = pane(&cfg, "7", Some("api"));
+        assert_eq!(get(&v, "TWIG_CARD_ID").as_deref(), Some("7"));
+        assert_eq!(get(&v, "TWIG_REPO").as_deref(), Some("api"));
+        let v = pane(&cfg, "7", None);
+        assert_eq!(get(&v, "TWIG_REPO"), None);
     }
 
     #[test]

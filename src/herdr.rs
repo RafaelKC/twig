@@ -164,9 +164,9 @@ fn tab_panes(ws: &str, tab: &str) -> Result<Vec<(String, String, String)>> {
         .collect())
 }
 
-/// `--env K=V` arguments for a new pane of `repo` (the card's ports and the repo's `env`).
+/// `--env K=V` arguments for a new pane of `repo` (twig's markers, the card's ports and the repo's `env`).
 fn env_args(cfg: &Config, id: &str, repo: &str) -> Vec<String> {
-    procenv::of(cfg, id, Some(repo))
+    procenv::pane(cfg, id, Some(repo))
         .into_iter()
         .flat_map(|(k, v)| ["--env".to_string(), format!("{k}={v}")])
         .collect()
