@@ -329,7 +329,9 @@ fn remove_tool(bin: &str, pkgs: &Packages) -> Result<()> {
 /// A line install.sh appended to a shell rc file.
 fn is_twig_rc_line(l: &str) -> bool {
     let l = l.trim_end();
-    (l.starts_with("export PATH=") && l.ends_with("# twig")) || l.ends_with("# twig completions")
+    (l.starts_with("export PATH=") && l.ends_with("# twig"))
+        || l.ends_with("# twig completions")
+        || l.ends_with("# twig pane env")
 }
 
 pub fn uninstall(yes: bool) -> Result<()> {
@@ -390,7 +392,7 @@ pub fn uninstall(yes: bool) -> Result<()> {
         if kept.len() != text.lines().count() {
             fs::write(&rc, kept.join("\n") + "\n")?;
             ui::ok(format!(
-                "twig lines (PATH, completions) removed from {}",
+                "twig lines (PATH, completions, pane env) removed from {}",
                 rc.display()
             ));
         }
@@ -482,6 +484,29 @@ pub fn uninstall(yes: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn self_update_repo_ignores_the_pane_marker() {
+        if std::env::var_os("TWIG_REPO").is_some() {
+            return;
+        }
+        std::env::set_var("TWIG_PANE_REPO", "api");
+        assert_eq!(repo(), DEFAULT_REPO);
+    }
+
+    #[test]
+    fn recognizes_the_twig_rc_lines() {
+        assert!(is_twig_rc_line(
+            "export PATH=\"$HOME/.local/bin:$PATH\"  # twig"
+        ));
+        assert!(is_twig_rc_line(
+            "COMPLETE=bash twig | source  # twig completions"
+        ));
+        assert!(is_twig_rc_line(
+            "if [ \"$HERDR_ENV\" = 1 ]; then eval \"$(twig env --auto 2>/dev/null)\"; fi  # twig pane env"
+        ));
+        assert!(!is_twig_rc_line("export PATH=/usr/bin"));
+    }
 
     #[test]
     fn compares_versions() {

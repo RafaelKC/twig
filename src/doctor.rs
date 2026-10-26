@@ -208,6 +208,21 @@ pub fn run(json: bool) -> Result<()> {
         }
     }
 
+    // a pane restored by herdr after a reboot is a fresh shell: no ports, `PORT` or repo `env`
+    if std::env::var("HERDR_ENV").as_deref() == Ok("1")
+        && std::env::var_os("TWIG_CARD_ID").is_none()
+    {
+        if let crate::card::Current::Card(id) = crate::card::infer(&cfg) {
+            r.section("herdr pane");
+            r.warn(format!(
+                "this pane is in card {id} but has no twig environment (restored by herdr?); run `eval \"$(twig env)\"`, or reopen the card with `twig herdr {id}`"
+            ));
+            r.info(
+                "the installer adds a hook to ~/.bashrc/~/.zshrc that does this in every new pane",
+            );
+        }
+    }
+
     r.section("update check");
     if crate::updatecheck::env_disabled() {
         r.info("disabled by TWIG_NO_UPDATE_CHECK");

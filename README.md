@@ -212,6 +212,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `memo [text] [-c id]` | (in development) append a dated line to the card memory, kept across sessions and `rm`; no text shows it |
 | `sync <id> [--merge\|--rebase] [-n]` | fetch the base branch and rebase/merge it into every repo of the card |
 | `clean [-n] [-y]` | remove finished cards (branches merged or work item closed), asking per card |
+| `env [id] [--repo X]` | print `export` lines with the full env of a herdr pane (ports, `PORT`, repo `env`); fixes panes herdr restored after a reboot |
 | `ports [id] [--env]` | show the card's dev server ports (deterministic per card, given to the panes as `TWIG_PORT_<REPO>` / `PORT`) |
 | `pr [id] [--draft] [-n]` | push each repo's branch and open one PR per repo, linked to the card and to each other |
 | `rm <id> [-f]` | remove the card and its herdr workspace (refuses with uncommitted changes or a running agent; `-f` overrides) |

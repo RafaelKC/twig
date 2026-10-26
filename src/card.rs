@@ -209,6 +209,19 @@ pub fn infer(cfg: &Config) -> Current {
     )
 }
 
+/// The repo of the card whose worktree contains the current directory, if any.
+pub fn repo_here(cfg: &Config, id: &str) -> Option<String> {
+    let cwd = std::env::current_dir().ok()?;
+    let dir = cfg.card_dir(id);
+    let real = dir.canonicalize().unwrap_or_else(|_| dir.clone());
+    let rest = cwd
+        .strip_prefix(&dir)
+        .or_else(|_| cwd.strip_prefix(&real))
+        .ok()?;
+    let first = rest.components().next()?.as_os_str().to_string_lossy();
+    repos_ordered(cfg, &dir).into_iter().find(|r| *r == first)
+}
+
 fn rel_to_worktrees(d: &Path, wt: &Path, wt_real: &Path) -> Option<PathBuf> {
     let real = d.canonicalize().unwrap_or_else(|_| d.to_path_buf());
     [d, real.as_path()]

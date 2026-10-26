@@ -536,6 +536,27 @@ install_completions() {
   fi
 }
 
+# shellcheck disable=SC2016 # the rc line must expand when the rc file runs, not now
+install_pane_env() {
+  case "$(basename "${SHELL:-sh}")" in
+    bash) rc="$HOME/.bashrc" ;;
+    zsh) rc="$HOME/.zshrc" ;;
+    *)
+      info "pane env: add \`if [ \"\$HERDR_ENV\" = 1 ] && [ -z \"\$TWIG_CARD_ID\" ]; then eval \"\$(twig env --auto)\"; fi\` to your shell's startup file"
+      return 0
+      ;;
+  esac
+  # herdr restores a card's layout after a reboot with fresh shells; this sets the twig env
+  # again. The shell tests the two variables itself, so terminals outside herdr never run twig.
+  line='if [ "$HERDR_ENV" = 1 ] && [ -z "$TWIG_CARD_ID" ] && command -v twig >/dev/null 2>&1; then eval "$(twig env --auto 2>/dev/null)"; fi  # twig pane env'
+  if grep -qs '# twig pane env' "$rc"; then
+    ok "pane env hook already enabled in $rc"
+  else
+    printf '\n%s\n' "$line" >>"$rc"
+    ok "pane env hook enabled in $rc (restores twig's env in herdr panes after a reboot)"
+  fi
+}
+
 write_config() {
   [ -f "$CONFIG_FILE" ] && { ok "config kept: $CONFIG_FILE"; return; }
   section "config"
@@ -603,6 +624,7 @@ install_binary
 install_skill
 install_herdr_plugin
 install_completions
+install_pane_env
 
 if [ "$MODE" = install ]; then
   write_config

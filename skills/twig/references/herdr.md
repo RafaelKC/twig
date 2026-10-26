@@ -166,7 +166,7 @@ this if the user asks for another agent; don't create layouts on your own.
   repo's pane is found by its `cwd` (`~/.wt/<id>/<repo>`).
 - Panes twig creates carry the card's ports and the repo's `env` (`herdr ... --env`). A pane you
   create yourself doesn't: pass them with `--env` (`twig ports <id> --env` lists them) or run
-  `eval "$(twig ports --env)"` inside it.
+  `eval "$(twig env)"` inside it (ports, `PORT` and the repo's `env`; also fixes panes herdr restored after a reboot).
 - Extra panes and tabs you create don't get in twig's way: `twig add-repo` and
   `twig herdr` only create what's missing from the default layout and leave the rest alone.
 - Don't reuse the `agent`/`run` tabs for something else; create a new tab.

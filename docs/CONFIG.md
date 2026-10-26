@@ -277,8 +277,8 @@ For variables named the way your project expects (`ASPNETCORE_URLS`, `Cors__Orig
 `VITE_API_URL`...), use the repo's [`env`](#repo-environment-env). They are set on every herdr
 pane twig creates for the card (`agent` and `run` tabs), on the
 `install`/`post_create` commands and hooks, on the VS Code tasks (`run: <repo>`, `PORT` too) and
-terminals, and written to `<card>/.twig-ports.env`. Outside those, `twig ports --env` prints
-`export` lines. A herdr pane that already existed keeps its old environment: close it and run
+terminals, and written to `<card>/.twig-ports.env`. Outside those, `twig env` prints
+`export` lines with all of it (`twig ports --env` only the ports). A herdr pane that already existed keeps its old environment: close it and run
 `twig herdr <id>` to recreate it.
 
 ```toml
