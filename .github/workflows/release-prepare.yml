@@ -1,0 +1,80 @@
+name: release-prepare
+
+# Manual release, step 1 of 2: Actions > release-prepare > Run workflow, with the version.
+# Bumps Cargo.toml on release/vX.Y.Z, opens the PR "release vX.Y.Z" and turns on auto-merge.
+# Once `check`, `test-macos` and `windows` pass the PR merges, and release-tag.yml tags it.
+# Same flow as scripts/release.sh, without a local checkout. See docs/RELEASING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "version to release, X.Y.Z (no leading v)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    # Only the maintainer, and only from main (the dispatch form lets you pick any branch).
+    if: >-
+      github.actor == 'RafaelKC'
+      && github.triggering_actor == 'RafaelKC'
+      && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    env:
+      # A PAT (not github.token): pushes and PRs made with github.token do not trigger ci.yml.
+      GH_TOKEN: ${{ secrets.AGENT_PAT }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.AGENT_PAT }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: check version
+        run: |
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::version must be X.Y.Z, got '$VERSION'"; exit 1 ;;
+          esac
+          tag="v$VERSION"
+          branch="release/$tag"
+          current=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          [ "$current" != "$VERSION" ] || { echo "::error::Cargo.toml is already at $VERSION"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::error::tag $tag already exists"; exit 1
+          fi
+          if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null; then
+            echo "::error::branch $branch already exists"; exit 1
+          fi
+          echo "TAG=$tag" >>"$GITHUB_ENV"
+          echo "BRANCH=$branch" >>"$GITHUB_ENV"
+          echo "CURRENT=$current" >>"$GITHUB_ENV"
+      - name: bump and test
+        run: |
+          # only the [package] version (the first `version = ` line)
+          awk -v v="$VERSION" '!done && /^version = "/ { print "version = \"" v "\""; done = 1; next } { print }' \
+            Cargo.toml >Cargo.toml.tmp && mv Cargo.toml.tmp Cargo.toml
+          cargo test --quiet # also refreshes Cargo.lock
+      - name: commit, push and open the PR
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add Cargo.toml Cargo.lock
+          git commit -m "release $TAG"
+          git push -u origin "$BRANCH"
+          pr=$(gh pr create --base main --head "$BRANCH" --title "release $TAG" \
+            --body "Version bump $CURRENT -> $VERSION, opened by release-prepare. Merging it makes release-tag.yml push the tag $TAG, which publishes the release.")
+          echo "PR: $pr" >>"$GITHUB_STEP_SUMMARY"
+          if gh pr merge "$pr" --auto --squash --subject "release $TAG"; then
+            echo "auto-merge on: the release goes out once the checks pass" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::could not enable auto-merge (Settings > General > Allow auto-merge); merge $pr by hand"
+          fi

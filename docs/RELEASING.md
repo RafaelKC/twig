@@ -27,6 +27,24 @@ Step 2 (`--tag`), run from an up-to-date and clean `main`:
 
 Both steps refuse to run if the tag already exists locally or on `origin`.
 
+## Cut a release from GitHub Actions
+
+The same flow without a local checkout: Actions > **release-prepare** > Run workflow, branch
+`main`, version `0.2.0`.
+
+1. [`release-prepare.yml`](../.github/workflows/release-prepare.yml) bumps the version on
+   `release/v0.2.0`, runs the tests, opens the PR `release v0.2.0` and turns on auto-merge (squash);
+2. once `check`, `test-macos` and `windows` pass, the PR merges;
+3. [`release-tag.yml`](../.github/workflows/release-tag.yml) sees the `release v0.2.0` commit on
+   `main`, checks `Cargo.toml`, creates the annotated tag `v0.2.0` and pushes it, which starts
+   `release.yml`.
+
+Only `RafaelKC` can run it: both workflows skip their job for any other actor, and
+`release-prepare` only runs from `main`. They use the `AGENT_PAT` secret, because pushes, PRs and
+tags made with `github.token` don't trigger other workflows (the CI checks and `release.yml`).
+Auto-merge must be allowed in Settings > General; without it the PR stays open and is merged by
+hand, and the tag still follows the merge.
+
 ## Branch rules for `main`
 
 Recommended ruleset (Settings > Rules > Rulesets), configured by hand in GitHub:
