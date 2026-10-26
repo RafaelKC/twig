@@ -185,6 +185,7 @@ echo 'source <(COMPLETE=bash twig)  # twig completions' >> ~/.bashrc
 ```bash
 twig new 52644                      # create the card with the default repos
 twig new 52644 --repos api,ui-kit   # pick the repos
+twig new 52644 --repos api,ui-kit --branch-for api=feature/52644-api  # a different branch per repo
 twig add-repo 52644 web             # add a repo later (or restore closed panes)
 twig open 52644                     # open the card in the default target (herdr or code)
 twig open-card 52644              # open the card page in the browser

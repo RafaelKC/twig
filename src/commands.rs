@@ -17,6 +17,7 @@ pub struct NewArgs {
     pub template: Option<String>,
     pub repos: Option<Vec<String>>,
     pub branch: Option<String>,
+    pub branch_for: Vec<(String, String)>,
     pub base: Option<String>,
     pub fix: bool,
     pub install: bool,
@@ -31,6 +32,7 @@ pub struct AddRepoArgs {
     pub id: String,
     pub repos: Vec<String>,
     pub branch: Option<String>,
+    pub branch_for: Vec<(String, String)>,
     pub base: Option<String>,
     pub fix: bool,
     pub install: bool,
@@ -137,6 +139,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     if repos.is_empty() {
         bail!("no repos: pass --repos or set `default = true` on some repo in the config");
     }
+    card::check_branch_for(&a.branch_for, &repos)?;
     // validate (and register) the repos before creating anything
     let mut paths = vec![];
     for r in &repos {
@@ -191,6 +194,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         id: &cref.number,
         slug: &slug,
         forced: a.branch.as_deref(),
+        forced_for: &a.branch_for,
         base: &base,
         prefix: &prefix,
     };
@@ -288,6 +292,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     check_code_flag(cfg, a.code)?;
     let dir = card::require_card(cfg, &a.id)?;
 
+    card::check_branch_for(&a.branch_for, &a.repos)?;
     let mut paths = vec![];
     for r in &a.repos {
         paths.push(card::ensure_repo(cfg, r)?);
@@ -320,6 +325,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
         id: &cref.number,
         slug: &slug,
         forced: a.branch.as_deref(),
+        forced_for: &a.branch_for,
         base: &base,
         prefix: &prefix,
     };

@@ -738,6 +738,10 @@ fn completions_offer_cards_repos_and_templates() {
     assert_eq!(complete(&s, &["new", "1", "--repos", ""]), ["a", "b"]);
     assert_eq!(complete(&s, &["add-repo", "52644", ""]), ["a", "b"]);
     assert_eq!(
+        complete(&s, &["new", "1", "--branch-for", ""]),
+        ["a=", "b="]
+    );
+    assert_eq!(
         complete(&s, &["new", "1", "--template", ""]),
         ["fullstack", "hotfix"]
     );
@@ -1458,6 +1462,75 @@ fn new_branch_flag_forces_the_branch() {
     let o = s.run(&["new", "10", "--no-ado", "--branch", "custom/thing"]);
     assert_exit(&o, 0);
     assert_eq!(branch_of(s.path("wt/10/a")), "custom/thing");
+}
+
+#[test]
+fn new_branch_for_mixes_with_branch() {
+    let s = new_sandbox();
+    let o = s.run(&[
+        "new",
+        "11",
+        "--no-ado",
+        "--repos",
+        "a,b",
+        "--branch",
+        "all/11",
+        "--branch-for",
+        "a=feature/11-api",
+    ]);
+    assert_exit(&o, 0);
+    assert_eq!(branch_of(s.path("wt/11/a")), "feature/11-api");
+    assert_eq!(branch_of(s.path("wt/11/b")), "all/11");
+}
+
+#[test]
+fn new_branch_for_without_branch_falls_back_to_the_normal_resolution() {
+    let s = new_sandbox();
+    let o = s.run(&[
+        "new",
+        "12",
+        "s",
+        "--no-ado",
+        "--repos",
+        "a,b",
+        "--branch-for",
+        "b=feature/12-tela",
+    ]);
+    assert_exit(&o, 0);
+    assert_eq!(branch_of(s.path("wt/12/a")), "feat/12-s");
+    assert_eq!(branch_of(s.path("wt/12/b")), "feature/12-tela");
+}
+
+#[test]
+fn branch_for_rejects_a_repo_outside_the_card_and_a_bad_format() {
+    let s = new_sandbox();
+    let o = s.run(&["new", "13", "--no-ado", "--branch-for", "b=x/13"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "not among the card's repos");
+    assert!(!s.path("wt/13").exists());
+    let o = s.run(&["new", "13", "--no-ado", "--branch-for", "nobranch"]);
+    assert_exit(&o, 2);
+    assert_has(&o, "<repo>=<branch>");
+}
+
+#[test]
+fn add_repo_branch_for_wins_over_branch() {
+    let s = new_sandbox();
+    assert_exit(&s.run(&["new", "14", "s", "--no-ado"]), 0);
+    let o = s.run(&[
+        "add-repo",
+        "14",
+        "b",
+        "--branch",
+        "x/14",
+        "--branch-for",
+        "b=y/14",
+    ]);
+    assert_exit(&o, 0);
+    assert_eq!(branch_of(s.path("wt/14/b")), "y/14");
+    let o = s.run(&["add-repo", "14", "b", "--branch-for", "a=z"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "not among the card's repos");
 }
 
 #[test]

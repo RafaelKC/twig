@@ -293,10 +293,35 @@ fn remote_branches_with_id(repo: &Path, id: &str) -> Vec<String> {
         .collect()
 }
 
+/// Parse a `--branch-for` value: `<repo>=<branch>`.
+pub fn parse_branch_for(s: &str) -> Result<(String, String), String> {
+    match s.split_once('=') {
+        Some((r, b)) if !r.trim().is_empty() && !b.trim().is_empty() => {
+            Ok((r.trim().to_string(), b.trim().to_string()))
+        }
+        _ => Err(format!("invalid value {s:?}: expected <repo>=<branch>")),
+    }
+}
+
+/// Every `--branch-for` repo must be one of the card's repos.
+pub fn check_branch_for(forced_for: &[(String, String)], repos: &[String]) -> Result<()> {
+    for (r, _) in forced_for {
+        if !repos.contains(r) {
+            bail!(
+                "--branch-for {r}=...: {r} is not among the card's repos ({})",
+                repos.join(", ")
+            );
+        }
+    }
+    Ok(())
+}
+
 pub struct BranchOpts<'a> {
     pub id: &'a str,
     pub slug: &'a str,
     pub forced: Option<&'a str>,
+    /// `--branch-for repo=branch`: wins over `forced` in that repo.
+    pub forced_for: &'a [(String, String)],
     pub base: &'a str,
     pub prefix: &'a str,
 }
@@ -307,7 +332,13 @@ enum Origin {
 }
 
 fn resolve_branch(repo_name: &str, repo: &Path, o: &BranchOpts) -> (String, Origin) {
-    if let Some(f) = o.forced {
+    let forced = o
+        .forced_for
+        .iter()
+        .find(|(r, _)| r == repo_name)
+        .map(|(_, b)| b.as_str())
+        .or(o.forced);
+    if let Some(f) = forced {
         let origin = if sys::git_ref_exists(repo, &format!("refs/remotes/origin/{f}")) {
             Origin::Remote
         } else {
