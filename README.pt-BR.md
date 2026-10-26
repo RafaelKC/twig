@@ -194,6 +194,7 @@ twig ls                             # cards, branches, alterações não commita
 twig status 52644                   # ahead/behind, arquivos alterados, agente do herdr
 twig refresh 52644 --refetch        # regenera CLAUDE.md / workspace, rebusca o card
 twig memo "validação foi pra API"   # (em desenvolvimento) nota para a próxima sessão do agente
+twig park 52644                     # parado: fecha o workspace do herdr, mantém tudo
 twig rm 52644 --branches            # terminou: remove worktrees (e branches locais)
 ```
 
