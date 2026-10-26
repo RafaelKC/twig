@@ -498,7 +498,7 @@ description = "open card in VS Code"
       warn "prefix+shift+s is already bound to another herdr shortcut; use a popup with \"sh $pdir/launcher.sh\" in $HERDR_CONFIG if you want the twig launcher"
     fi
   else
-    block="$block[[keys.command]]
+    block="${block}[[keys.command]]
 key = \"prefix+shift+s\"
 type = \"popup\"
 command = \"sh $pdir/launcher.sh\"
@@ -511,6 +511,7 @@ description = \"twig launcher\"
   if [ -n "$block" ]; then
     mkdir -p "$(dirname "$HERDR_CONFIG")"
     {
+      # shellcheck disable=SC2016 # backticks are literal text in the comment
       printf '\n# twig:begin (managed by the twig installer; `twig uninstall` removes it)\n'
       printf '%s' "$block"
       printf '# twig:end\n'
