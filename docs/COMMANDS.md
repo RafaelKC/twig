@@ -17,6 +17,7 @@
 | `twig status [id] [--json]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
 | `twig ports [id] [--env]` | shows the card's dev server ports; `--env` prints `export` lines |
 | `twig env [id] [--repo X]` | prints `export` lines with the full environment of a herdr pane (ports, `PORT`, repo `env`, markers) |
+| `twig run [id] start\|stop\|restart [--repos a,b]` | starts, stops (Ctrl+C) or restarts the apps of the card's `run` tab in herdr |
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
 | `twig memo [text] [-c id]` (in development) | appends a dated line to the card memory (`MEMORY.md`, survives `rm`); without text, shows it. See [MEMORY.md](MEMORY.md) |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
@@ -379,6 +380,24 @@ there is nothing to close.
 VS Code is not closed: the `code` CLI cannot close a window, so `park` warns and you close
 it by hand. To come back, `twig open <id>` (or `twig herdr <id>` / `twig code <id>`) recreates
 the workspace; the agent resumes its session.
+
+## `twig run [id] start|stop|restart [--repos a,b]`
+
+Controls the apps of the card's `run` tab in herdr (each repo's `run` command, with the card's
+ports). Without an id, the card of the current directory.
+
+- `stop`: sends Ctrl+C to each repo's pane in the `run` tab. The app exits and the pane's shell
+  stays open; panes and tab are not closed. A repo without a pane only prints a warning.
+- `start`: recalculates the card's ports (like `refresh`), creates the `run` tab and the panes
+  that are missing and runs the `run` command. If the pane already exists, sends Ctrl+C first
+  (and waits a moment for the prompt) so the process is not duplicated.
+- `restart`: `stop` followed by `start`.
+- Without `--repos`, acts on every repo of the card that has a `run` command, with or without
+  `autorun` (`autorun` only decides what starts by itself on `new` / `herdr`). With `--repos`,
+  only the listed ones; a repo outside the card or without `run` is an error.
+
+Prints one short line per repo (`[api] stopped`, `[web] running`). Errors if the card has no
+herdr workspace (`twig herdr <id>` creates it) or the herdr server is not running.
 
 ## `twig memo [TEXT] [--card <id>]`
 
