@@ -80,7 +80,7 @@ profiles (5.1 and, if installed, 7), the config in `%APPDATA%\twig\config.toml`.
 6. **twig**: downloads the release for the OS/arch, verifies the checksum and, when
    `cosign` is installed, the Sigstore signature (see [RELEASING.md](RELEASING.md)).
    Installs the binary, the AI skill (`~/.claude/skills/twig`, or `~/.agents/skills/twig` for Codex), the herdr plugin (linked,
-   plus the `prefix+shift+o` shortcut unless that key is taken) and shell completions (a
+   plus the `prefix+shift+o` and `prefix+shift+s` (launcher popup) shortcuts unless those keys are taken) and shell completions (a
    `# twig completions` line in `~/.bashrc` / `~/.zshrc`, or a fish completions file).
 7. **Config**: only if `~/.config/twig/config.toml` doesn't exist. Asks for the repos folder
    and the worktrees folder and writes the provider, organization and `vscode.enabled`

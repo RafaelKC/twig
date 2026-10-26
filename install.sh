@@ -480,22 +480,41 @@ install_herdr_plugin() {
   fi
 
   if grep -qs '# twig:begin' "$HERDR_CONFIG"; then
-    : # shortcut already added by a previous install
-  elif grep -qs 'key = "prefix+shift+o"' "$HERDR_CONFIG"; then
-    warn "prefix+shift+o is already bound to another herdr shortcut; point it to \"twig.open-code\" in $HERDR_CONFIG if you want"
+    : # shortcuts already added by a previous install
   else
-    mkdir -p "$(dirname "$HERDR_CONFIG")"
-    cat >>"$HERDR_CONFIG" <<'EOF'
-
-# twig:begin (managed by the twig installer; `twig uninstall` removes it)
-[[keys.command]]
+    block=""
+    if grep -qs 'key = "prefix+shift+o"' "$HERDR_CONFIG"; then
+      warn "prefix+shift+o is already bound to another herdr shortcut; point it to \"twig.open-code\" in $HERDR_CONFIG if you want"
+    else
+      block='[[keys.command]]
 key = "prefix+shift+o"
 type = "plugin_action"
 command = "twig.open-code"
 description = "open card in VS Code"
-# twig:end
-EOF
-    ok "shortcut prefix+shift+o → twig.open-code"
+'
+      ok "shortcut prefix+shift+o → twig.open-code"
+    fi
+    if grep -qs 'key = "prefix+shift+s"' "$HERDR_CONFIG"; then
+      warn "prefix+shift+s is already bound to another herdr shortcut; use a popup with \"sh $pdir/launcher.sh\" in $HERDR_CONFIG if you want the twig launcher"
+    else
+      block="$block[[keys.command]]
+key = \"prefix+shift+s\"
+type = \"popup\"
+command = \"sh $pdir/launcher.sh\"
+width = \"70%\"
+height = \"60%\"
+description = \"twig launcher\"
+"
+      ok "shortcut prefix+shift+s → twig launcher (popup)"
+    fi
+    if [ -n "$block" ]; then
+      mkdir -p "$(dirname "$HERDR_CONFIG")"
+      {
+        printf '\n# twig:begin (managed by the twig installer; `twig uninstall` removes it)\n'
+        printf '%s' "$block"
+        printf '# twig:end\n'
+      } >>"$HERDR_CONFIG"
+    fi
   fi
   herdr server reload-config >/dev/null 2>&1 || true
 }

@@ -50,7 +50,7 @@ Current: v0.4.0 (GitHub `owner/repo#123` ids and `open-card` for `gh` ([#4](http
   - [x] Puts `twig` on the PATH and installs shell completions (dynamic since v0.4.0: a one-line hook in the shell rc that completes card ids, repos and templates)
   - [x] Checks and installs dependencies (see [DEPENDENCIES.md](DEPENDENCIES.md))
   - [x] Asks for the folder where repos live and the worktrees folder (default `~/.wt`)
-  - [x] Installs the AI skill and the herdr plugin (with the `prefix+shift+o` shortcut)
+  - [x] Installs the AI skill and the herdr plugin (with the `prefix+shift+o` and `prefix+shift+s` launcher shortcuts)
   - [ ] Installs the third-party plugins approved in `herdr-plugins/README.md` (pinned refs) and writes the shortcuts to herdr's `config.toml` without duplicating them
 - [x] `twig update`: finds a newer release and reinstalls twig, plugin and skill
   - [x] Update hint after commands: cached check, stderr only, `[update]` config / `TWIG_NO_UPDATE_CHECK` ([#20](https://github.com/RafaelKC/twig/issues/20))
