@@ -688,7 +688,7 @@ General help, or detailed help for one command. Every command also accepts `-h` 
 | Item | What it does |
 |---|---|
 | Completions | commands, options, card ids, repos and templates (see [`twig completions`](#twig-completions-shell)) |
-| herdr plugin | `open-code` action (`prefix+shift+o`): opens the focused card in VS Code |
+| herdr plugin | `open-code` action (`prefix+shift+o`): opens the focused card in VS Code; `launcher.sh` popup (`prefix+shift+s`): runs a twig/shell command |
 | Claude Code skill | `skills/twig/`: teaches the agent the card workflow and custom herdr layouts |
 
 ## Open questions

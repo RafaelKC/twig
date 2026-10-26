@@ -211,8 +211,16 @@ fn remove_running_exe(exe: &Path) {
 
 // ───────────────────────── uninstall ─────────────────────────
 
-/// Removes the `# twig:begin` … `# twig:end` block the installer appended. Returns whether it changed.
+/// Removes every `# twig:begin` … `# twig:end` block the installer appended. Returns whether it changed.
 fn strip_herdr_block(text: &str) -> Option<String> {
+    let mut out = strip_one_herdr_block(text)?;
+    while let Some(next) = strip_one_herdr_block(&out) {
+        out = next;
+    }
+    Some(out)
+}
+
+fn strip_one_herdr_block(text: &str) -> Option<String> {
     let start = text.find(HERDR_BLOCK_BEGIN)?;
     let end_rel = text[start..].find(HERDR_BLOCK_END)?;
     let mut end = start + end_rel + HERDR_BLOCK_END.len();
@@ -527,5 +535,17 @@ mod tests {
             strip_herdr_block("[ui]\n\n# twig:begin\nk\n# twig:end\n").unwrap(),
             "[ui]\n"
         );
+    }
+
+    #[test]
+    fn removes_a_block_with_two_entries() {
+        let text = "[ui]\n\n# twig:begin (managed)\n[[keys.command]]\nkey = \"prefix+shift+o\"\n\n[[keys.command]]\nkey = \"prefix+shift+s\"\n# twig:end\n\n[other]\nx = 1\n";
+        assert_eq!(strip_herdr_block(text).unwrap(), "[ui]\n\n[other]\nx = 1\n");
+    }
+
+    #[test]
+    fn removes_every_twig_block() {
+        let text = "[ui]\n\n# twig:begin (managed)\n[[keys.command]]\nkey = \"a\"\n# twig:end\n\n[other]\nx = 1\n\n# twig:begin (managed)\n[[keys.command]]\nkey = \"b\"\n# twig:end\n";
+        assert_eq!(strip_herdr_block(text).unwrap(), "[ui]\n\n[other]\nx = 1\n");
     }
 }

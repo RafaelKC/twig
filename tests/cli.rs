@@ -440,6 +440,81 @@ fn herdr_plugin_opens_the_focused_card() {
     );
 }
 
+/// Runs `herdr-plugins/twig/launcher.sh` with `input` on stdin, from a card pane's env.
+fn run_launcher(input: &str) -> (Sandbox, Output) {
+    let s = Sandbox::new();
+    s.valid_config("");
+    symlink(env!("CARGO_BIN_EXE_twig"), s.bin.join("twig")).unwrap();
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("herdr-plugins/twig/launcher.sh");
+    let mut c = Command::new(real("sh"));
+    c.arg(&script)
+        .env_clear()
+        .env("PATH", format!("{}:/usr/bin:/bin", s.bin.display()))
+        .env("HOME", &s.home)
+        .env("TWIG_CONFIG", &s.config)
+        .env("TWIG_CARD_ID", "123")
+        .env("PORT", "4244");
+    let o = s.run_with(c, input);
+    (s, o)
+}
+
+#[test]
+fn herdr_launcher_runs_twig_subcommands_and_shows_the_exit_code() {
+    let (_s, o) = run_launcher("ls --help\n\n");
+    assert_exit(&o, 0);
+    let out = stdout(&o);
+    assert!(out.contains("Usage: twig ls"), "{out}");
+    assert!(out.contains("[exit 0]") && out.contains("[enter]"), "{out}");
+}
+
+#[test]
+fn herdr_launcher_recognises_twig_aliases_and_flags() {
+    let (_s, o) = run_launcher("st --help\n\n");
+    assert!(stdout(&o).contains("Usage: twig status"), "{}", stdout(&o));
+    let (_s, o) = run_launcher("--version\n\n");
+    assert!(stdout(&o).contains("twig"), "{}", stdout(&o));
+    assert!(stdout(&o).contains("[exit 0]"), "{}", stdout(&o));
+    let (_s, o) = run_launcher("echo hi-there\n\n");
+    assert!(stdout(&o).contains("hi-there"), "{}", stdout(&o));
+}
+
+#[test]
+fn herdr_launcher_finds_twig_in_shell_lines_via_local_bin() {
+    let s = Sandbox::new();
+    s.valid_config("");
+    let lb = s.home.join(".local/bin");
+    fs::create_dir_all(&lb).unwrap();
+    symlink(env!("CARGO_BIN_EXE_twig"), lb.join("twig")).unwrap();
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("herdr-plugins/twig/launcher.sh");
+    let mut c = Command::new(real("sh"));
+    c.arg(&script)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("HOME", &s.home)
+        .env("TWIG_CONFIG", &s.config);
+    let o = s.run_with(c, "twig ls --help && true\n\n");
+    assert!(stdout(&o).contains("Usage: twig ls"), "{}", stdout(&o));
+}
+
+#[test]
+fn herdr_launcher_runs_other_commands_in_the_shell_without_the_card_env() {
+    let (_s, o) =
+        run_launcher("echo \"card=${TWIG_CARD_ID:-none} port=${PORT:-none}\"; exit 3\n\n");
+    assert_exit(&o, 0);
+    let out = stdout(&o);
+    assert!(out.contains("card=none port=none"), "{out}");
+    assert!(out.contains("[exit 3]"), "{out}");
+}
+
+#[test]
+fn herdr_launcher_closes_on_an_empty_line_or_esc() {
+    for input in ["\n", "\u{1b}\n"] {
+        let (_s, o) = run_launcher(input);
+        assert_exit(&o, 0);
+        assert!(!stdout(&o).contains("[exit"), "{}", stdout(&o));
+    }
+}
+
 // ───────────────────────── open ─────────────────────────
 
 /// Card `123` with a `code` stub and a `herdr` stub that logs its calls and reports a workspace `123`.

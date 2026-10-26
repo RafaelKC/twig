@@ -283,7 +283,7 @@ Full example: [examples/config.toml](examples/config.toml). Every field:
 
 | | |
 |---|---|
-| [herdr-plugins/twig](herdr-plugins/README.md) | herdr plugin: `prefix+shift+o` opens the focused card in VS Code |
+| [herdr-plugins/twig](herdr-plugins/README.md) | herdr plugin: `prefix+shift+o` opens the focused card in VS Code, `prefix+shift+s` a popup to run twig commands |
 | [skills/twig](skills/twig/SKILL.md) | AI agent skill: how to use twig, plus building custom herdr tabs, panes and workspaces |
 
 ## Project layout
