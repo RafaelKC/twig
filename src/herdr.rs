@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::{card, procenv, sys, ui};
+use crate::{card, procenv, sessions, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
     let out = sys::output(sys::tool("herdr").args(args))?;
@@ -275,6 +275,16 @@ fn agent_command(cfg: &Config, id: &str, repo: &str, prompt: Option<&str>) -> St
     }
 }
 
+/// Command for an agent pane being created: a first prompt wins; otherwise, with
+/// `[agent] resume_sessions`, resume the last conversation of `wt` if there is one.
+fn pane_command(cfg: &Config, id: &str, repo: &str, wt: &Path, prompt: Option<&str>) -> String {
+    let has_prompt = prompt.is_some_and(|p| !p.trim().is_empty());
+    if !has_prompt && cfg.ai.resume_sessions && sessions::has_session(cfg, wt) {
+        return format!("{} {}", cfg.ai.command(), cfg.ai.provider.resume_args());
+    }
+    agent_command(cfg, id, repo, prompt)
+}
+
 /// Create in herdr whatever the card is missing. Idempotent: existing things are left alone,
 /// and panes closed by the user come back. `prompt` is the first message of the agents started
 /// now (only `twig new` passes one).
@@ -317,7 +327,7 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
             &ws,
             "agent",
             repo,
-            &agent_command(cfg, id, repo, prompt),
+            &pane_command(cfg, id, repo, &dir.join(repo), prompt),
             &dir.join(repo),
             fresh && i == 0,
         )?;
@@ -383,6 +393,25 @@ mod tests {
         );
         assert_eq!(agent_command(&cfg, "1", "api", Some("  ")), "claude");
         assert_eq!(agent_command(&cfg, "1", "api", None), "claude");
+    }
+
+    #[test]
+    fn resume_replaces_the_bare_command_only_when_enabled() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        std::fs::write(&file, "version = 1\n[agent]\nprovider = \"codex\"\n").unwrap();
+        let wt = tmp.path().join("wt");
+        let mut cfg = Config::load_from(&file).unwrap();
+        assert_eq!(pane_command(&cfg, "1", "api", &wt, None), "codex");
+        cfg.ai.resume_sessions = true;
+        assert_eq!(
+            pane_command(&cfg, "1", "api", &wt, None),
+            "codex resume --last"
+        );
+        assert_eq!(
+            pane_command(&cfg, "1", "api", &wt, Some("hi")),
+            "codex 'hi'"
+        );
     }
 
     #[test]

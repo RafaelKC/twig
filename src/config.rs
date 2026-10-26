@@ -110,6 +110,8 @@ pub struct Ai {
     context_file: String,
     /// `twig rm` archives the agent's sessions and `twig new` restores them (Claude Code only)
     pub keep_sessions: bool,
+    /// when twig reopens a card's workspace, the agent resumes its last conversation
+    pub resume_sessions: bool,
 }
 
 impl Default for Ai {
@@ -119,6 +121,7 @@ impl Default for Ai {
             command: String::new(),
             context_file: String::new(),
             keep_sessions: true,
+            resume_sessions: false,
         }
     }
 }
@@ -165,6 +168,14 @@ impl AgentKind {
         match self {
             Self::Claude => "claude",
             Self::Codex => "codex",
+        }
+    }
+
+    /// Arguments that make the agent resume the last conversation of its working directory.
+    pub fn resume_args(self) -> &'static str {
+        match self {
+            Self::Claude => "--continue",
+            Self::Codex => "resume --last",
         }
     }
 

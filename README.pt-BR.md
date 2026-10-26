@@ -243,7 +243,8 @@ que falta (consolidação, limite de tamanho, exportar no `rm`) estão em
 
 Do mesmo modo (experimental), o `twig rm` arquiva as sessões do Claude Code dos repos do card em
 `memos/<id>-<provider>/sessions/<repo>/` e o `twig new` / `twig add-repo` as restauram; desative
-com `[agent] keep_sessions = false`. Transcrições podem conter segredos; veja
+com `[agent] keep_sessions = false`. Com `[agent] resume_sessions = true`, reabrir o workspace do
+card retoma a última conversa (`claude --continue`, `codex resume --last`). Transcrições podem conter segredos; veja
 [docs/MEMORY.md](docs/MEMORY.md#agent-sessions).
 
 ## Configuração

@@ -243,7 +243,8 @@ what is missing (consolidation, size cap, export on `rm`) in [docs/MEMORY.md](do
 
 Similarly (experimental), `twig rm` archives the Claude Code sessions of the card's repos in
 `memos/<id>-<provider>/sessions/<repo>/` and `twig new` / `twig add-repo` restore them; turn it
-off with `[agent] keep_sessions = false`. Transcripts may contain secrets; see
+off with `[agent] keep_sessions = false`. With `[agent] resume_sessions = true`, reopening a
+card's workspace resumes the last conversation (`claude --continue`, `codex resume --last`). Transcripts may contain secrets; see
 [docs/MEMORY.md](docs/MEMORY.md#agent-sessions).
 
 ## Configuration

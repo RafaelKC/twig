@@ -22,6 +22,7 @@ version = 1                       # schema version, so `twig update` can migrate
 provider = "claude"               # "claude" | "codex"
 # command      = "claude"         # what `twig herdr` runs in the agent tab (default: the provider's)
 # context_file = "CLAUDE.md"      # card context file (default: CLAUDE.md / AGENTS.md)
+# resume_sessions = false        # resume the last conversation when reopening a card
 # keep_sessions = true            # archive/restore Claude Code sessions on rm/new (experimental)
 
 [provider]
@@ -154,6 +155,7 @@ clone.
 | `provider` | `"claude"` | agent chosen at install: `claude` (Claude Code) or `codex` (Codex). Anything else is rejected |
 | `command` | the provider's (`claude` / `codex`) | command that starts the agent in herdr's `agent` tab |
 | `context_file` | the provider's (`CLAUDE.md` / `AGENTS.md`) | name of the card's context file; a file name, not a path |
+| `resume_sessions` | `false` | when twig creates an agent pane (`twig open` / `herdr` after `park`, a closed pane, a restored card) without a first prompt, it runs `claude --continue` (Codex: `codex resume --last`) so the last conversation of that repo continues. For Claude, only if the repo has a saved session. Needs the harness to still hold the session (see `keep_sessions`) |
 | `keep_sessions` | `true` | (experimental) `twig rm` moves the Claude Code sessions of the card's repos to `memos/<id>-<provider>/sessions/<repo>/` and `twig new` / `twig add-repo` restore them. Claude Code only; see [MEMORY.md](MEMORY.md#agent-sessions) |
 
 The section used to be called `[ai]`; the old name is still accepted.
