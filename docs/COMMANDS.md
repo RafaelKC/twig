@@ -61,6 +61,7 @@ is `--branch` or `--branches`), so check the table or `--help` of the command yo
 | `--template` | `-t` | `new` |
 | `--repos` | `-r` | `new` |
 | `--branch` | `-b` | `new`, `add-repo` |
+| `--branch-for` | | `new`, `add-repo` |
 | `--branches` | `-b` | `rm`, `clean` |
 | `--base` | `-B` | `new`, `add-repo` |
 | `--fix` | `-F` | `new`, `add-repo` |
@@ -125,6 +126,7 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 | `--template NAME` | applies a preset from `templates.toml` (repos, agent, install, branch prefix/base, hooks); without it, `[templates] default`. Explicit flags below override it |
 | `--repos a,b` | the card's repos; without it, the template's, else the repos with `default = true` |
 | `--branch NAME` | forces this branch in every repo |
+| `--branch-for REPO=NAME` | forces this branch in one repo (repeatable, wins over `--branch`); the repo must be one of the card's repos; a branch missing on origin is created from the base |
 | `--base NAME` | base for the new branch (default: `git.base_branch`) |
 | `--fix` | new branch with the `fix/` prefix (a story that turned into a fix) |
 | `--install` | runs each repo's `install` in the worktree |
@@ -135,9 +137,10 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 **Branch selection**, repo by repo:
 
-1. `--branch`, if given.
-2. A branch on origin whose name contains the `<id>`; if there are several, it asks.
-3. Nothing found → creates `<prefix>/<id>-<slug>` from `origin/<base>`.
+1. `--branch-for <repo>=<branch>` for that repo, if given.
+2. `--branch`, if given.
+3. A branch on origin whose name contains the `<id>`; if there are several, it asks.
+4. Nothing found → creates `<prefix>/<id>-<slug>` from `origin/<base>`.
    The prefix comes from `git.branch_prefix` based on the work item type.
 
 **What else happens**
@@ -160,6 +163,7 @@ Adds more repos to an existing card. Safe to run again:
 | Option | Description |
 |---|---|
 | `--branch NAME` | forces this branch in the new repos |
+| `--branch-for REPO=NAME` | forces this branch in one of the new repos (repeatable, wins over `--branch`) |
 | `--base NAME` | base for the new branch |
 | `--fix` | new branch with the `fix/` prefix |
 | `--herdr` | opens herdr at the end |

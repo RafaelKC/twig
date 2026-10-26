@@ -53,7 +53,7 @@ struct Cli {
 enum Cmd {
     /// Create the card: worktrees, herdr workspace and, if enabled, .code-workspace.
     ///
-    /// Branch, per repo: --branch; else a branch on origin with <id> in its name
+    /// Branch, per repo: --branch-for; else --branch; else a branch on origin with <id> in its name
     /// (asks if there are several); else creates <prefix>/<id>-<slug> from origin/<base>.
     New {
         /// Card/issue id in the provider (accepts "123-slug"; with provider gh also
@@ -70,6 +70,9 @@ enum Cmd {
         /// Force this branch in every repo.
         #[arg(short = 'b', long)]
         branch: Option<String>,
+        /// Force a branch in one repo, as <repo>=<branch>; repeatable, wins over --branch.
+        #[arg(long, value_name = "REPO=BRANCH", value_parser = card::parse_branch_for, add = ArgValueCandidates::new(complete::repos_eq))]
+        branch_for: Vec<(String, String)>,
         /// Base for the new branch (default: git.base_branch).
         #[arg(short = 'B', long)]
         base: Option<String>,
@@ -107,6 +110,9 @@ enum Cmd {
         /// Force this branch in the new repos.
         #[arg(short = 'b', long)]
         branch: Option<String>,
+        /// Force a branch in one repo, as <repo>=<branch>; repeatable, wins over --branch.
+        #[arg(long, value_name = "REPO=BRANCH", value_parser = card::parse_branch_for, add = ArgValueCandidates::new(complete::repos_eq))]
+        branch_for: Vec<(String, String)>,
         /// Base for the new branch.
         #[arg(short = 'B', long)]
         base: Option<String>,
@@ -483,6 +489,7 @@ fn run(cli: Cli) -> Result<()> {
             template,
             repos,
             branch,
+            branch_for,
             base,
             fix,
             install,
@@ -499,6 +506,7 @@ fn run(cli: Cli) -> Result<()> {
                 template,
                 repos,
                 branch,
+                branch_for,
                 base,
                 fix,
                 install,
@@ -513,6 +521,7 @@ fn run(cli: Cli) -> Result<()> {
             id,
             repos,
             branch,
+            branch_for,
             base,
             fix,
             install,
@@ -525,6 +534,7 @@ fn run(cli: Cli) -> Result<()> {
                 id,
                 repos,
                 branch,
+                branch_for,
                 base,
                 fix,
                 install,
