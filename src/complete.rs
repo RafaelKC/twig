@@ -41,6 +41,13 @@ pub fn cards_or_targets() -> Vec<CompletionCandidate> {
     c
 }
 
+/// `twig run <TAB>`: a card id or the action.
+pub fn cards_or_run_actions() -> Vec<CompletionCandidate> {
+    let mut c = cards();
+    c.extend(["start", "stop", "restart"].map(CompletionCandidate::new));
+    c
+}
+
 pub fn repos() -> Vec<CompletionCandidate> {
     Config::load()
         .map(|cfg| cfg.repos.keys().map(CompletionCandidate::new).collect())

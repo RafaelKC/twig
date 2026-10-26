@@ -210,6 +210,21 @@ enum Cmd {
         #[arg(long)]
         auto: bool,
     },
+    /// Start, stop or restart the apps of the card's `run` tab in herdr.
+    ///
+    /// `stop` sends Ctrl+C to each repo's pane (the pane and tab stay open); `start` creates
+    /// the tab/panes that are missing and runs each repo's `run` command, interrupting a pane
+    /// that is already running it first; `restart` is both. Without --repos, every repo of the
+    /// card with a `run` command (with or without `autorun`). Without <ID>, the card of the
+    /// current directory: `twig run restart`.
+    Run {
+        /// Card id (optional) followed by the action: `twig run [ID] start|stop|restart`.
+        #[arg(num_args = 1..=2, value_name = "ID] [ACTION", add = ArgValueCandidates::new(complete::cards_or_run_actions))]
+        args: Vec<String>,
+        /// Only these repos (comma-separated); each must be in the card and have `run`.
+        #[arg(short, long, value_delimiter = ',', add = ArgValueCandidates::new(complete::repos))]
+        repos: Vec<String>,
+    },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
@@ -460,6 +475,13 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Memo { card: Some(id), .. }
         | Cmd::Open { id: Some(id), .. }
         | Cmd::Code { id: Some(id) } => Some(id.clone()),
+        Cmd::Run { args, .. } => match parse_run_args(args)? {
+            (Some(id), _) => Some(id),
+            (None, _) => match card::infer(&cfg) {
+                card::Current::Card(id) => Some(id),
+                card::Current::Dir(_) => None,
+            },
+        },
         Cmd::Open { id: None, .. }
         | Cmd::Code { id: None }
         | Cmd::Pr { id: None, .. }
@@ -570,6 +592,23 @@ fn run(cli: Cli) -> Result<()> {
             branches,
             force,
         } => commands::rm(&cfg, &id, branches, force),
+        Cmd::Run { args, repos } => {
+            let (id, action) = parse_run_args(&args)?;
+            let id = match id {
+                Some(id) => id,
+                None => match card::infer(&cfg) {
+                    card::Current::Card(id) => id,
+                    card::Current::Dir(dir) => {
+                        return Err(anyhow::anyhow!(
+                            "{} is not inside a card; usage: twig run <id> {}",
+                            dir.display(),
+                            "start|stop|restart"
+                        ))
+                    }
+                },
+            };
+            herdr::run_apps(&cfg, &id, action, &repos)
+        }
         Cmd::Park { id, force, undo } => commands::park(&cfg, id.as_deref(), force, undo),
         Cmd::Unpark { id } => commands::park(&cfg, id.as_deref(), false, true),
         Cmd::Sync {
@@ -630,6 +669,18 @@ fn run(cli: Cli) -> Result<()> {
     result
 }
 
+/// `twig run [ID] ACTION`: the id is optional, the action is always the last argument.
+fn parse_run_args(args: &[String]) -> Result<(Option<String>, herdr::RunAction)> {
+    let (id, action) = match args {
+        [action] => (None, action),
+        [id, action] => (Some(id.clone()), action),
+        _ => anyhow::bail!("usage: twig run [id] start|stop|restart"),
+    };
+    let action = <herdr::RunAction as clap::ValueEnum>::from_str(action, true)
+        .map_err(|_| anyhow::anyhow!("unknown action {action:?}: use start, stop or restart"))?;
+    Ok((id, action))
+}
+
 /// Ids of existing cards may be typed as `owner/repo#123`: turn them into the card folder name.
 fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
     let id = match cmd {
@@ -638,6 +689,7 @@ fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
         | Cmd::Refresh { id, .. }
         | Cmd::Sync { id, .. }
         | Cmd::Rm { id, .. } => Some(id),
+        Cmd::Run { args, .. } if args.len() == 2 => args.first_mut(),
         Cmd::Open { id: Some(id), .. }
         | Cmd::OpenCard { id: Some(id) }
         | Cmd::Code { id: Some(id) }

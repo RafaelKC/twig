@@ -10,7 +10,7 @@ use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
 use crate::config::Config;
-use crate::{card, procenv, sessions, sys, ui};
+use crate::{card, ports, procenv, sessions, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
     let out = sys::output(sys::tool("herdr").args(args))?;
@@ -361,6 +361,139 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
     Ok(ws)
 }
 
+/// What `twig run` does to the apps of the `run` tab.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum RunAction {
+    Start,
+    Stop,
+    Restart,
+}
+
+/// Repos `twig run` acts on: the card's repos that have a `run` command (with or without
+/// `autorun`), or exactly `requested`, which must belong to the card and have a `run`.
+pub fn run_targets(
+    cfg: &Config,
+    card_repos: &[String],
+    requested: &[String],
+) -> Result<Vec<String>> {
+    let has_run = |r: &str| cfg.repo(r).is_some_and(|c| !c.run.is_empty());
+    if requested.is_empty() {
+        let all: Vec<String> = card_repos.iter().filter(|r| has_run(r)).cloned().collect();
+        if all.is_empty() {
+            bail!("no repo of the card has a `run` command");
+        }
+        return Ok(all);
+    }
+    for r in requested {
+        if !card_repos.contains(r) {
+            bail!("repo {r} is not in the card");
+        }
+        if !has_run(r) {
+            bail!("repo {r} has no `run` command");
+        }
+    }
+    Ok(card_repos
+        .iter()
+        .filter(|r| requested.contains(r))
+        .cloned()
+        .collect())
+}
+
+/// Time for the app to exit and the shell to show its prompt again after Ctrl+C.
+const STOP_GRACE: Duration = Duration::from_millis(1500);
+
+/// `twig run`: stop, start or restart the apps of the card's `run` tab.
+pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String]) -> Result<()> {
+    let dir = card::require_card(cfg, id)?;
+    let targets = run_targets(cfg, &card::repos_ordered(cfg, &dir), requested)?;
+    if sys::which("herdr").is_none() {
+        bail!("herdr not found on PATH");
+    }
+    if !server_up() {
+        bail!("the herdr server is not running (`twig herdr {id}` starts it)");
+    }
+    let Some(ws) = find_workspace(id)? else {
+        bail!("card {id} has no herdr workspace (`twig herdr {id}` creates it)");
+    };
+    if matches!(action, RunAction::Stop | RunAction::Restart) {
+        let mut sent = false;
+        for repo in &targets {
+            match run_pane(&ws, &dir.join(repo))? {
+                Some(pane) => {
+                    if sys::quiet(sys::tool("herdr").args(["pane", "send-keys", &pane, "C-c"])) {
+                        sent = true;
+                        if action == RunAction::Stop {
+                            ui::ok(format!("[{}] stopped", cfg.short(repo)));
+                        }
+                    } else if action == RunAction::Stop {
+                        bail!("[{}] could not send Ctrl+C to the pane", cfg.short(repo));
+                    }
+                }
+                None if action == RunAction::Stop => {
+                    ui::warn(format!("[{}] no pane in the run tab", cfg.short(repo)))
+                }
+                None => {}
+            }
+        }
+        if sent && action == RunAction::Restart {
+            thread::sleep(STOP_GRACE);
+        }
+    }
+    if matches!(action, RunAction::Start | RunAction::Restart) {
+        ports::write(cfg, id)?;
+        for repo in &targets {
+            let wt = dir.join(repo);
+            let cmd = &cfg.repo(repo).context("repo without config")?.run;
+            let existing = run_pane(&ws, &wt)?;
+            if let Some(pane) = &existing {
+                // `start` on a running pane: interrupt first so the process isn't duplicated
+                if action == RunAction::Start {
+                    herdr_quiet(&["pane", "send-keys", pane, "C-c"]);
+                    thread::sleep(STOP_GRACE);
+                }
+                // the pane's shell keeps the environment it was created with: re-export it
+                let line = env_command(&procenv::pane(cfg, id, Some(repo)), cmd);
+                if !sys::quiet(sys::tool("herdr").args(["pane", "run", pane, &line])) {
+                    bail!(
+                        "[{}] could not run the command in the pane",
+                        cfg.short(repo)
+                    );
+                }
+            } else {
+                ensure_panel(cfg, id, &ws, "run", repo, cmd, &wt, false)?;
+            }
+            ui::ok(format!("[{}] running", cfg.short(repo)));
+        }
+    }
+    Ok(())
+}
+
+/// `cmd` prefixed with the assignments of `vars`, for a shell that already exists and so
+/// can't get them through `--env`.
+fn env_command(vars: &[(String, String)], cmd: &str) -> String {
+    let mut line = String::new();
+    for (k, v) in vars {
+        if cfg!(windows) {
+            line.push_str(&format!("$env:{k}={}; ", shell_quote(v)));
+        } else {
+            line.push_str(&format!("export {k}={}; ", shell_quote(v)));
+        }
+    }
+    line + cmd
+}
+
+/// The pane of the `run` tab that belongs to the repo worktree `wt`, if any.
+fn run_pane(ws: &str, wt: &Path) -> Result<Option<String>> {
+    let wt = wt.to_string_lossy();
+    let Some(tab) = find_tab(ws, "run")? else {
+        return Ok(None);
+    };
+    Ok(tab_panes(ws, &tab)?
+        .into_iter()
+        .find(|(_, c, f)| *c == wt || *f == wt)
+        .map(|p| p.0))
+}
+
 /// Whether `repo` starts in the `run` tab: the card's template wins over the repo's own value.
 fn autorun(cfg: &Config, repo: &str, repo_value: bool) -> bool {
     cfg.template
@@ -381,6 +514,21 @@ pub fn open(ws: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn env_command_prefixes_assignments() {
+        let vars = vec![
+            ("PORT".to_string(), "3001".to_string()),
+            ("MSG".to_string(), "it's".to_string()),
+        ];
+        let line = super::env_command(&vars, "npm start");
+        if cfg!(windows) {
+            assert_eq!(line, "$env:PORT='3001'; $env:MSG='it''s'; npm start");
+        } else {
+            assert_eq!(line, r"export PORT='3001'; export MSG='it'\''s'; npm start");
+        }
+        assert_eq!(super::env_command(&[], "x"), "x");
+    }
+
     use super::*;
 
     #[test]
@@ -461,6 +609,32 @@ mod tests {
         assert!(autorun(&cfg, "api", false));
         assert!(!autorun(&cfg, "ui", false));
         assert!(autorun(&cfg, "ui", true));
+    }
+
+    #[test]
+    fn run_targets_picks_repos_with_a_run_command() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        std::fs::write(
+            &file,
+            "version = 1\n[repos.api]\nrun = \"cargo run\"\nautorun = false\n[repos.web]\nrun = \"npm start\"\n[repos.lib]\n",
+        )
+        .unwrap();
+        let cfg = Config::load_from(&file).unwrap();
+        let card: Vec<String> = ["api", "web", "lib"].map(String::from).into();
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        // autorun doesn't matter
+        assert_eq!(run_targets(&cfg, &card, &[]).unwrap(), ["api", "web"]);
+        assert_eq!(run_targets(&cfg, &card, &s(&["web"])).unwrap(), ["web"]);
+        assert_eq!(
+            run_targets(&cfg, &card, &s(&["web", "api"])).unwrap(),
+            ["api", "web"]
+        );
+        let e = run_targets(&cfg, &card, &s(&["lib"])).unwrap_err();
+        assert!(e.to_string().contains("no `run` command"));
+        let e = run_targets(&cfg, &card, &s(&["other"])).unwrap_err();
+        assert!(e.to_string().contains("not in the card"));
+        assert!(run_targets(&cfg, &card[2..], &[]).is_err());
     }
 
     #[test]

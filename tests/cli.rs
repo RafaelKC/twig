@@ -3293,3 +3293,148 @@ fn command_aliases_show_in_help_and_completions() {
     assert!(got.iter().any(|g| g == "st"), "{got:?}");
     assert_exit(&s.run(&["ar", "--help"]), 0);
 }
+
+// ───────────────────────── run ─────────────────────────
+
+/// Card `123` with repo `r1` (`run`, no `autorun`) and `r2` (no `run`); the herdr stub logs its
+/// calls, reports workspace `123` and, with `with_tab`, a `run` tab that has a pane for `r1`.
+fn run_sandbox(with_tab: bool) -> (Sandbox, PathBuf) {
+    let s = Sandbox::new();
+    s.git_repo("repos/r1");
+    s.git_repo("repos/r2");
+    s.write_config(&format!(
+        "version = 1\n[paths]\nworktrees = \"{wt}\"\nrepos = \"{repos}\"\n\n[repos.r1]\ndefault = true\nrun = \"npm start\"\nautorun = false\n\n[repos.r2]\n",
+        wt = s.path("wt").display(),
+        repos = s.path("repos").display(),
+    ));
+    fs::create_dir_all(s.path("wt/123/r1/.git")).unwrap();
+    fs::create_dir_all(s.path("wt/123/r2/.git")).unwrap();
+    let log = s.path("herdr.log");
+    let tabs = if with_tab {
+        r#"{"label":"run","tab_id":"t2"}"#
+    } else {
+        ""
+    };
+    s.stub(
+        "herdr",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[{{"label":"123","workspace_id":"w1"}}]}}}}' ;;
+  "tab list") echo '{{"result":{{"tabs":[{tabs}]}}}}' ;;
+  "tab create") echo '{{"result":{{"root_pane":{{"pane_id":"w1:p9"}}}}}}' ;;
+  "pane list") echo '{{"result":{{"panes":[{{"pane_id":"w1:p2","tab_id":"t2","cwd":"{cwd}"}}]}}}}' ;;
+esac"#,
+            log = log.display(),
+            cwd = s.path("wt/123/r1").display()
+        ),
+    );
+    (s, log)
+}
+
+#[test]
+fn run_stop_sends_ctrl_c_to_the_repo_pane_only() {
+    let (s, log) = run_sandbox(true);
+    let o = s.run(&["run", "123", "stop"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "[r1] stopped");
+    let calls = herdr_calls(&log);
+    assert!(calls.contains("pane send-keys w1:p2 C-c"), "{calls}");
+    assert!(!calls.contains("close"), "{calls}");
+    assert!(!calls.contains("pane run"), "{calls}");
+}
+
+#[test]
+fn run_stop_warns_about_a_repo_without_pane() {
+    let (s, log) = run_sandbox(false);
+    let o = s.run(&["run", "123", "stop"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "no pane");
+    assert!(!herdr_calls(&log).contains("send-keys"));
+}
+
+#[test]
+fn run_start_creates_the_tab_even_without_autorun() {
+    let (s, log) = run_sandbox(false);
+    let o = s.run(&["run", "123", "start"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "[r1] running");
+    let calls = herdr_calls(&log);
+    assert!(calls.contains("tab create --workspace w1"), "{calls}");
+    assert!(calls.contains("pane run w1:p9 npm start"), "{calls}");
+}
+
+#[test]
+fn run_start_interrupts_an_existing_pane_before_running() {
+    let (s, log) = run_sandbox(true);
+    assert_exit(&s.run(&["run", "123", "start"]), 0);
+    let calls = herdr_calls(&log);
+    let c = calls.find("pane send-keys w1:p2 C-c").expect(&calls);
+    let r = calls
+        .find("pane run w1:p2 export TWIG_CARD_ID=")
+        .expect(&calls);
+    assert!(c < r, "{calls}");
+    assert!(!calls.contains("tab create"), "{calls}");
+}
+
+#[test]
+fn run_restart_stops_then_starts() {
+    let (s, log) = run_sandbox(true);
+    assert_exit(&s.run(&["run", "123", "restart", "--repos", "r1"]), 0);
+    let calls = herdr_calls(&log);
+    assert_eq!(calls.matches("send-keys").count(), 1, "{calls}");
+    assert!(
+        calls.contains("pane run w1:p2 export TWIG_CARD_ID=") && calls.contains("; npm start"),
+        "{calls}"
+    );
+}
+
+#[test]
+fn run_rejects_repos_outside_the_card_or_without_run() {
+    let (s, log) = run_sandbox(true);
+    let o = s.run(&["run", "123", "start", "--repos", "r2"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "has no `run` command");
+    let o = s.run(&["run", "123", "start", "-r", "zzz"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "not in the card");
+    assert!(!herdr_calls(&log).contains("pane run"));
+}
+
+#[test]
+fn run_rejects_an_unknown_action() {
+    let (s, _) = run_sandbox(true);
+    let o = s.run(&["run", "123", "pause"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "unknown action");
+}
+
+#[test]
+fn run_without_workspace_suggests_twig_herdr() {
+    let (s, _) = run_sandbox(true);
+    s.stub(
+        "herdr",
+        r#"[ "$1 $2" = "workspace list" ] && echo '{"result":{"workspaces":[]}}'; exit 0"#,
+    );
+    let o = s.run(&["run", "123", "stop"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "twig herdr 123");
+}
+
+#[test]
+fn run_with_the_herdr_server_down_errors() {
+    let (s, _) = run_sandbox(true);
+    s.stub("herdr", "exit 1");
+    let o = s.run(&["run", "123", "stop"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "server is not running");
+}
+
+#[test]
+fn run_infers_the_card_from_the_directory() {
+    let (s, log) = run_sandbox(true);
+    let mut c = s.cmd(&["run", "stop"]);
+    c.current_dir(s.path("wt/123/r1"));
+    assert_exit(&s.run_with(c, ""), 0);
+    assert!(herdr_calls(&log).contains("send-keys w1:p2 C-c"));
+}
