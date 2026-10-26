@@ -469,7 +469,8 @@ fn herdr_launcher_runs_twig_subcommands_and_shows_the_exit_code() {
 
 #[test]
 fn herdr_launcher_runs_other_commands_in_the_shell_without_the_card_env() {
-    let (_s, o) = run_launcher("echo \"card=${TWIG_CARD_ID:-none} port=${PORT:-none}\"; exit 3\n\n");
+    let (_s, o) =
+        run_launcher("echo \"card=${TWIG_CARD_ID:-none} port=${PORT:-none}\"; exit 3\n\n");
     assert_exit(&o, 0);
     let out = stdout(&o);
     assert!(out.contains("card=none port=none"), "{out}");
