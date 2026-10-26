@@ -103,6 +103,7 @@ instead of parsing the text. `ls`/`status`: `{"cards":[{"id","repos":[...]}]}` (
 | `--template NAME` | preset from `templates.toml` (repos, agent, install, prefix/base, `autorun`, `agent_prompt`, hooks) |
 | `--repos a,b` | the card's repos; without it, the template's, else those with `default = true` |
 | `--branch NAME` | forces the branch in all repos |
+| `--branch-for REPO=NAME` | forces the branch in one repo (repeatable, wins over `--branch`) |
 | `--base NAME` | base for the new branch (default `git.base_branch`) |
 | `--fix` | new branch with the `fix/` prefix |
 | `--install` / `--no-setup` | runs / skips each repo's `install` and `post_create` |
@@ -110,13 +111,14 @@ instead of parsing the text. `ls`/`status`: `{"cards":[{"id","repos":[...]}]}` (
 | `--prompt TEXT` | first message of the agents started in herdr, e.g. a skill (`"/deliver {id}"`; `{id}`, `{repo}` replaced); `""` drops the template's `agent_prompt` |
 | `--no-ado` | doesn't query the provider |
 
-`twig add-repo` accepts `--branch`, `--base`, `--fix`, `--herdr`, and `--code`.
+`twig add-repo` accepts `--branch`, `--branch-for`, `--base`, `--fix`, `--herdr`, and `--code`.
 
 ### How the branch is chosen (per repo)
 
-1. `--branch`, if given.
-2. A branch on origin with `<id>` in its name. If there is more than one, `twig` **asks**.
-3. None → creates `<prefix>/<id>-<slug>` from `origin/<base>`. The prefix comes from
+1. `--branch-for <repo>=<branch>` for that repo, if given.
+2. `--branch`, if given.
+3. A branch on origin with `<id>` in its name. If there is more than one, `twig` **asks**.
+4. None → creates `<prefix>/<id>-<slug>` from `origin/<base>`. The prefix comes from
    `git.branch_prefix` by work item type (e.g. Bug → `fix`), and the slug from the
    card title.
 

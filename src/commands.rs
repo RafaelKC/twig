@@ -8,7 +8,7 @@ use crate::config::{Config, OpenTarget};
 use crate::hooks::{self, Event};
 use crate::provider::{self, CardInfo};
 use crate::{
-    card, claude_md, herdr, memo, ports, procenv, sessions, sys, templates, ui, workspace,
+    card, claude_md, herdr, memo, parked, ports, procenv, sessions, sys, templates, ui, workspace,
 };
 
 pub struct NewArgs {
@@ -17,6 +17,7 @@ pub struct NewArgs {
     pub template: Option<String>,
     pub repos: Option<Vec<String>>,
     pub branch: Option<String>,
+    pub branch_for: Vec<(String, String)>,
     pub base: Option<String>,
     pub fix: bool,
     pub install: bool,
@@ -31,6 +32,7 @@ pub struct AddRepoArgs {
     pub id: String,
     pub repos: Vec<String>,
     pub branch: Option<String>,
+    pub branch_for: Vec<(String, String)>,
     pub base: Option<String>,
     pub fix: bool,
     pub install: bool,
@@ -137,6 +139,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     if repos.is_empty() {
         bail!("no repos: pass --repos or set `default = true` on some repo in the config");
     }
+    card::check_branch_for(&a.branch_for, &repos)?;
     // validate (and register) the repos before creating anything
     let mut paths = vec![];
     for r in &repos {
@@ -191,6 +194,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         id: &cref.number,
         slug: &slug,
         forced: a.branch.as_deref(),
+        forced_for: &a.branch_for,
         base: &base,
         prefix: &prefix,
     };
@@ -288,6 +292,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     check_code_flag(cfg, a.code)?;
     let dir = card::require_card(cfg, &a.id)?;
 
+    card::check_branch_for(&a.branch_for, &a.repos)?;
     let mut paths = vec![];
     for r in &a.repos {
         paths.push(card::ensure_repo(cfg, r)?);
@@ -320,6 +325,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
         id: &cref.number,
         slug: &slug,
         forced: a.branch.as_deref(),
+        forced_for: &a.branch_for,
         base: &base,
         prefix: &prefix,
     };
@@ -500,6 +506,8 @@ pub struct LsRepo {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct LsCard {
     pub id: String,
+    /// `since` of the card's park marker, when parked.
+    pub parked_since: Option<String>,
     pub repos: Vec<LsRepo>,
 }
 
@@ -514,7 +522,11 @@ const LS_WORKERS: usize = 8;
 pub fn ls_collect(cfg: &Config) -> LsOutput {
     let mut cards: Vec<LsCard> = card::list_cards(cfg)
         .into_iter()
-        .map(|id| LsCard { id, repos: vec![] })
+        .map(|id| LsCard {
+            parked_since: parked::since(cfg, &id),
+            id,
+            repos: vec![],
+        })
         .collect();
     // (card index, repo name, worktree path), in card then repo order
     let jobs: Vec<(usize, String, std::path::PathBuf)> = cards
@@ -567,7 +579,11 @@ pub fn ls(cfg: &Config, json: bool) -> Result<()> {
         return Ok(());
     }
     for c in out.cards {
-        println!("\x1b[1m  #{}\x1b[0m", c.id);
+        let parked = c
+            .parked_since
+            .map(|s| format!("  \x1b[2mparked since {s}\x1b[0m"))
+            .unwrap_or_default();
+        println!("\x1b[1m  #{}\x1b[0m{parked}", c.id);
         for r in c.repos {
             let branch = r.branch.as_deref().unwrap_or("?");
             let dirty = if r.dirty { " \x1b[33m*\x1b[0m" } else { "" };
@@ -662,8 +678,9 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
 }
 
 /// `twig park [id]`: close the herdr workspace and leave everything else (worktrees, branches,
-/// memo, agent sessions) alone. `twig open` recreates the workspace.
-pub fn park(cfg: &Config, id: Option<&str>, force: bool) -> Result<()> {
+/// memo, agent sessions) alone, recording the park in `<card>/.parked.json`. `twig open`
+/// recreates the workspace but keeps the marker; `--undo` removes it.
+pub fn park(cfg: &Config, id: Option<&str>, force: bool, undo: bool) -> Result<()> {
     let id = match id {
         Some(id) => id.to_string(),
         None => match card::infer(cfg) {
@@ -672,18 +689,46 @@ pub fn park(cfg: &Config, id: Option<&str>, force: bool) -> Result<()> {
         },
     };
     card::require_card(cfg, &id)?;
+    if undo {
+        if parked::clear(cfg, &id) {
+            ui::ok(format!("card {id} is no longer marked as parked"));
+        } else {
+            ui::info(format!("card {id} was not parked"));
+        }
+        return Ok(());
+    }
+    // only parking closes the workspace; `--undo` (above) just deletes the file, so it may run here
+    if herdr::inside_workspace(&id) {
+        bail!("this terminal is inside the herdr workspace #{id}: parking would close it; run `twig park {id}` from outside");
+    }
     if !force {
         let busy = herdr::running_agents(&id);
         if !busy.is_empty() {
             bail!("an agent is running in the herdr workspace #{id} ({}), stop it first (or use --force)", busy.join(", "));
         }
     }
+    let dir = cfg.card_dir(&id);
+    for repo in card::repos_ordered(cfg, &dir) {
+        let (_, dirty) = sys::git_branch_and_dirty(&dir.join(&repo));
+        if dirty {
+            ui::warn(format!(
+                "[{repo}] uncommitted changes (the worktree stays as it is)"
+            ));
+        }
+    }
+    let (marker, created) = parked::write_new(cfg, &id)?;
+    if !created {
+        ui::info(format!(
+            "card {id} was already parked since {}",
+            marker.since
+        ));
+    }
     herdr::close_workspace(&id);
     // the `code` CLI has no way to close a window, and killing the process by title is not
     // reliable across platforms (one process serves every window, WSL opens a Windows one)
     ui::warn("VS Code can't be closed by twig: close the card's window by hand");
     ui::ok(format!(
-        "card {id} parked (`twig open {id}` brings it back)"
+        "card {id} parked (`twig open {id}` brings it back; `twig park {id} --undo` clears the marker)"
     ));
     Ok(())
 }

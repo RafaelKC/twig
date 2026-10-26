@@ -184,6 +184,7 @@ echo 'source <(COMPLETE=bash twig)  # twig completions' >> ~/.bashrc
 ```bash
 twig new 52644                      # cria o card com os repos padrão
 twig new 52644 --repos api,ui-kit   # escolhe os repos
+twig new 52644 --repos api,ui-kit --branch-for api=feature/52644-api  # uma branch diferente por repo
 twig add-repo 52644 web             # adiciona um repo depois (ou restaura painéis fechados)
 twig open 52644                     # abre o card no destino padrão (herdr ou code)
 twig open-card 52644              # abre a página do card no navegador
@@ -194,7 +195,8 @@ twig ls                             # cards, branches, alterações não commita
 twig status 52644                   # ahead/behind, arquivos alterados, agente do herdr
 twig refresh 52644 --refetch        # regenera CLAUDE.md / workspace, rebusca o card
 twig memo "validação foi pra API"   # (em desenvolvimento) nota para a próxima sessão do agente
-twig park 52644                     # parado: fecha o workspace do herdr, mantém tudo
+twig park 52644                     # parado: fecha o workspace do herdr, mantém tudo, marca como parked
+twig park 52644 --undo              # saiu da espera: remove o marcador (ou `twig unpark`)
 twig run 52644 restart --repos api   # para/sobe os apps da tab run (start|stop|restart)
 twig rm 52644 --branches            # terminou: remove worktrees (e branches locais)
 ```

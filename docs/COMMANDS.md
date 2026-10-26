@@ -23,7 +23,7 @@
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
 | `twig pr [id] [--draft] [-n]` | pushes each repo's branch and opens one linked PR per repo (`gh` / `az repos`) |
 | `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
-| `twig park [id] [-f]` | closes the card's herdr workspace, keeping worktrees, branches, memo and sessions; `twig open` brings it back |
+| `twig park [id] [-f] [--undo]` / `twig unpark [id]` | closes the card's herdr workspace, keeping worktrees, branches, memo and sessions, and records `.parked.json`; `twig open` brings it back; `--undo` removes the marker |
 | `twig clean [-n] [-y] [--branches] [-f]` | removes finished cards (branches merged or work item closed), asking per card |
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor [--json]` | checks dependencies, login and config without changing anything |
@@ -62,6 +62,7 @@ is `--branch` or `--branches`), so check the table or `--help` of the command yo
 | `--template` | `-t` | `new` |
 | `--repos` | `-r` | `new` |
 | `--branch` | `-b` | `new`, `add-repo` |
+| `--branch-for` | | `new`, `add-repo` |
 | `--branches` | `-b` | `rm`, `clean` |
 | `--base` | `-B` | `new`, `add-repo` |
 | `--fix` | `-F` | `new`, `add-repo` |
@@ -126,6 +127,7 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 | `--template NAME` | applies a preset from `templates.toml` (repos, agent, install, branch prefix/base, hooks); without it, `[templates] default`. Explicit flags below override it |
 | `--repos a,b` | the card's repos; without it, the template's, else the repos with `default = true` |
 | `--branch NAME` | forces this branch in every repo |
+| `--branch-for REPO=NAME` | forces this branch in one repo (repeatable, wins over `--branch`); the repo must be one of the card's repos; a branch missing on origin is created from the base |
 | `--base NAME` | base for the new branch (default: `git.base_branch`) |
 | `--fix` | new branch with the `fix/` prefix (a story that turned into a fix) |
 | `--install` | runs each repo's `install` in the worktree |
@@ -136,9 +138,10 @@ the herdr workspace and, if VS Code is enabled, the `.code-workspace`.
 
 **Branch selection**, repo by repo:
 
-1. `--branch`, if given.
-2. A branch on origin whose name contains the `<id>`; if there are several, it asks.
-3. Nothing found → creates `<prefix>/<id>-<slug>` from `origin/<base>`.
+1. `--branch-for <repo>=<branch>` for that repo, if given.
+2. `--branch`, if given.
+3. A branch on origin whose name contains the `<id>`; if there are several, it asks.
+4. Nothing found → creates `<prefix>/<id>-<slug>` from `origin/<base>`.
    The prefix comes from `git.branch_prefix` based on the work item type.
 
 **What else happens**
@@ -161,6 +164,7 @@ Adds more repos to an existing card. Safe to run again:
 | Option | Description |
 |---|---|
 | `--branch NAME` | forces this branch in the new repos |
+| `--branch-for REPO=NAME` | forces this branch in one of the new repos (repeatable, wins over `--branch`) |
 | `--base NAME` | base for the new branch |
 | `--fix` | new branch with the `fix/` prefix |
 | `--herdr` | opens herdr at the end |
@@ -369,13 +373,20 @@ when one exists, `rm` prints where it is kept.
 
 Hooks: `pre_rm` runs after the checks and aborts the removal if it fails; `post_rm` runs at the end (warns on failure).
 
-## `twig park [id] [-f]`
+## `twig park [id] [-f] [--undo]`
 
 Closes the card's herdr workspace to free resources while the card waits, without touching
 worktrees, branches, the memo or the agent sessions (no `git worktree remove`, no archive).
 Without an id, the card of the current directory. Refuses if an agent is running (`working`
 or `blocked`) in the workspace, unless `-f`/`--force`. Without herdr installed or running,
-there is nothing to close.
+there is nothing to close. It refuses to run from inside the card's own herdr workspace
+(`HERDR_WORKSPACE_ID`), since that would close the caller's terminal. Uncommitted changes in
+the worktrees only warn.
+
+It also writes `<card>/.parked.json` (date, provider state and child items; best effort, `null`
+when unavailable), which `twig ls` / `twig status` show as "parked since ...". Parking again
+keeps the first marker. `twig park <id> --undo` (or `twig unpark <id>`) removes it without
+opening anything; `twig open` / `twig herdr` do not. Format: [PARKED.md](PARKED.md).
 
 VS Code is not closed: the `code` CLI cannot close a window, so `park` warns and you close
 it by hand. To come back, `twig open <id>` (or `twig herdr <id>` / `twig code <id>`) recreates

@@ -54,6 +54,18 @@ pub fn repos() -> Vec<CompletionCandidate> {
         .unwrap_or_default()
 }
 
+/// `--branch-for <TAB>`: the repo names with the `=` already, ready for the branch.
+pub fn repos_eq() -> Vec<CompletionCandidate> {
+    Config::load()
+        .map(|cfg| {
+            cfg.repos
+                .keys()
+                .map(|r| CompletionCandidate::new(format!("{r}=")))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn templates() -> Vec<CompletionCandidate> {
     templates::load()
         .ok()
