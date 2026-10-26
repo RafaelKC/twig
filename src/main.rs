@@ -11,6 +11,7 @@ mod herdr;
 mod hooks;
 mod memo;
 mod overrides;
+mod parked;
 mod ports;
 mod pr;
 mod procenv;
@@ -274,12 +275,24 @@ enum Cmd {
     ///
     /// Refuses while an agent is running in the workspace (unless --force). `twig open <ID>`
     /// brings the card back. VS Code can't be closed from the CLI: close its window by hand.
+    ///
+    /// Also writes <card>/.parked.json (since, provider state, child items; format in
+    /// docs/PARKED.md), which `twig ls`/`status` show. Parking again keeps the first marker;
+    /// `--undo` (or `twig unpark`) removes it. Refuses to run from inside the card's own workspace.
     Park {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: Option<String>,
         /// Park even with a running agent.
         #[arg(short, long)]
         force: bool,
+        /// Remove the park marker without opening or closing anything.
+        #[arg(long, conflicts_with = "force")]
+        undo: bool,
+    },
+    /// Remove the card's park marker (same as `twig park --undo`).
+    Unpark {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
+        id: Option<String>,
     },
     /// Remove finished cards: every branch merged into the base, or the work item closed.
     ///
@@ -436,6 +449,7 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Env { id: Some(id), .. }
         | Cmd::Status { id: Some(id), .. }
         | Cmd::Park { id: Some(id), .. }
+        | Cmd::Unpark { id: Some(id) }
         | Cmd::OpenCard { id: Some(id) }
         | Cmd::Memo { card: Some(id), .. }
         | Cmd::Open { id: Some(id), .. }
@@ -444,6 +458,7 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Code { id: None }
         | Cmd::Pr { id: None, .. }
         | Cmd::Park { id: None, .. }
+        | Cmd::Unpark { id: None }
         | Cmd::Ports { id: None, .. }
         | Cmd::Env { id: None, .. }
         | Cmd::OpenCard { id: None }
@@ -545,7 +560,8 @@ fn run(cli: Cli) -> Result<()> {
             branches,
             force,
         } => commands::rm(&cfg, &id, branches, force),
-        Cmd::Park { id, force } => commands::park(&cfg, id.as_deref(), force),
+        Cmd::Park { id, force, undo } => commands::park(&cfg, id.as_deref(), force, undo),
+        Cmd::Unpark { id } => commands::park(&cfg, id.as_deref(), false, true),
         Cmd::Sync {
             id,
             merge,
@@ -618,6 +634,7 @@ fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
         | Cmd::Status { id: Some(id), .. }
         | Cmd::Pr { id: Some(id), .. }
         | Cmd::Park { id: Some(id), .. }
+        | Cmd::Unpark { id: Some(id) }
         | Cmd::Ports { id: Some(id), .. }
         | Cmd::Env { id: Some(id), .. }
         | Cmd::Memo { card: Some(id), .. } => Some(id),

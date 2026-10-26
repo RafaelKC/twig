@@ -13,6 +13,8 @@ use crate::config::Gh;
 use crate::doctor::{succeeds, Report};
 use crate::sys;
 
+const BASE_FIELDS: &str = "number,title,url,body,state,labels,assignees";
+
 pub struct GitHub<'a> {
     cfg: &'a Gh,
 }
@@ -91,20 +93,29 @@ impl Provider for GitHub<'_> {
 
     fn fetch_card(&self, card: &CardRef, repo_dir: Option<&Path>) -> Option<String> {
         sys::which("gh")?;
-        let mut cmd = sys::tool("gh");
-        cmd.args([
-            "issue",
-            "view",
-            &card.number,
-            "--json",
-            "number,title,url,body,state,labels,assignees",
-        ]);
-        if let Some(repo) = &card.repo {
-            cmd.args(["--repo", repo]);
-        } else if let Some(dir) = repo_dir {
-            cmd.current_dir(dir);
-        }
-        sys::output(&mut cmd).ok()
+        let view = |fields: &str| {
+            let mut cmd = sys::tool("gh");
+            cmd.args(["issue", "view", &card.number, "--json", fields]);
+            if let Some(repo) = &card.repo {
+                cmd.args(["--repo", repo]);
+            } else if let Some(dir) = repo_dir {
+                cmd.current_dir(dir);
+            }
+            sys::output(&mut cmd).ok()
+        };
+        // `subIssues` needs a recent gh: without it, retry with the basic fields
+        view(&format!("{BASE_FIELDS},subIssues")).or_else(|| view(BASE_FIELDS))
+    }
+
+    fn children(&self, raw: &str) -> Option<Vec<String>> {
+        let d: Value = serde_json::from_str(raw).ok()?;
+        // absent when the data came from a gh without `subIssues`: unknown, not "no children"
+        let subs = d.get("subIssues")?.as_array()?;
+        Some(
+            subs.iter()
+                .filter_map(|s| s["number"].as_u64().map(|n| n.to_string()))
+                .collect(),
+        )
     }
 
     fn parse_card(&self, raw: &str) -> Option<CardInfo> {
@@ -229,6 +240,17 @@ impl Provider for GitHub<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn children_are_the_sub_issue_numbers() {
+        let cfg = Gh::default();
+        let gh = GitHub::new(&cfg);
+        let with = r#"{"title":"t","subIssues":[{"number":5},{"number":9}]}"#;
+        assert_eq!(gh.children(with), Some(vec!["5".into(), "9".into()]));
+        assert_eq!(gh.children(r#"{"title":"t","subIssues":[]}"#), Some(vec![]));
+        // data without `subIssues` (older gh or cache): unknown
+        assert_eq!(gh.children(r#"{"title":"t"}"#), None);
+    }
 
     fn card(repo: Option<&str>) -> CardRef {
         CardRef {

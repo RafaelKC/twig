@@ -7,7 +7,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::config::Config;
-use crate::{card, herdr, ports, sys, ui};
+use crate::{card, herdr, parked, ports, sys, ui};
 
 /// Commits ahead/behind of a reference.
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -44,6 +44,8 @@ pub struct HerdrStatus {
 #[derive(Debug, Clone, Serialize)]
 pub struct CardStatus {
     pub id: String,
+    /// `since` of the card's park marker (`.parked.json`), when parked.
+    pub parked_since: Option<String>,
     pub repos: Vec<RepoStatus>,
     pub herdr: HerdrStatus,
 }
@@ -135,6 +137,7 @@ pub fn collect(cfg: &Config, id: &str) -> CardStatus {
     let (workspace, agents_running) = herdr::card_presence(id);
     CardStatus {
         id: id.to_string(),
+        parked_since: parked::since(cfg, id),
         repos,
         herdr: HerdrStatus {
             workspace,
@@ -159,8 +162,13 @@ fn herdr_line(h: &HerdrStatus) -> String {
 }
 
 fn print_card(s: &CardStatus, detailed: bool) {
+    let parked = s
+        .parked_since
+        .as_ref()
+        .map(|since| format!("  \x1b[2mparked since {since}\x1b[0m"))
+        .unwrap_or_default();
     println!(
-        "\x1b[1m  #{}\x1b[0m  \x1b[2mherdr: {}\x1b[0m",
+        "\x1b[1m  #{}\x1b[0m  \x1b[2mherdr: {}\x1b[0m{parked}",
         s.id,
         herdr_line(&s.herdr)
     );
