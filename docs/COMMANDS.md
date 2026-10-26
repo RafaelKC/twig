@@ -209,7 +209,7 @@ Opens the card's workspace in herdr. If it doesn't exist, creates:
 - `agent` tab: one pane per repo running `agent.command` (`claude` or `codex` by default);
 - `run` tab: one pane per repo that has `run` in the config, already starting the project.
 
-Every pane it creates gets `TWIG_CARD_ID`/`TWIG_REPO`, the card's ports (`TWIG_PORT_<REPO>`, `PORT`) and the repo's `env` as
+Every pane it creates gets `TWIG_CARD_ID`/`TWIG_PANE_REPO`, the card's ports (`TWIG_PORT_<REPO>`, `PORT`) and the repo's `env` as
 environment variables (see [CONFIG.md → `[ports]`](CONFIG.md#ports)). On `twig new`, the agents
 can start with a first message (`--prompt` / the template's `agent_prompt`).
 
@@ -319,7 +319,7 @@ eval "$(twig ports --env)"     # inside the card folder
 ## `twig env [id] [--repo <repo>] [--auto]`
 
 Prints `export` lines with everything a herdr pane of the card receives: `TWIG_CARD_ID` and
-`TWIG_REPO` (markers that tell a pane set up by twig from a bare shell), every `TWIG_PORT_*`,
+`TWIG_PANE_REPO` (markers that tell a pane set up by twig from a bare shell), every `TWIG_PORT_*`,
 `PORT` and the repo's `env`, resolved through all the config layers (user config, the repo's
 `.twig.toml`, the card's `.twig.toml`, `TWIG__*`). Without `<id>` it uses the card of the current
 directory, and the repo too when inside its worktree.

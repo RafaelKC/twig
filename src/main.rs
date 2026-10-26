@@ -190,7 +190,7 @@ enum Cmd {
     },
     /// Print `export` lines with the full environment of a card's herdr pane.
     ///
-    /// Ports, `PORT`, the repo's `env` (every config layer) and the `TWIG_CARD_ID`/`TWIG_REPO`
+    /// Ports, `PORT`, the repo's `env` (every config layer) and the `TWIG_CARD_ID`/`TWIG_PANE_REPO`
     /// markers. Without <ID>, the card of the current directory, and the repo too when inside
     /// its worktree: `eval "$(twig env)"`. A herdr pane restored after a reboot has none of it.
     Env {

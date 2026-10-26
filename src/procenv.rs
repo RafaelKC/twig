@@ -80,11 +80,11 @@ pub fn of(cfg: &Config, id: &str, repo: Option<&str>) -> Vec<(String, String)> {
 }
 
 /// Environment of a herdr pane (and of `twig env`): `of` plus the markers that tell a pane
-/// twig set up from a shell herdr restored without the environment (`TWIG_CARD_ID`, `TWIG_REPO`).
+/// twig set up from a shell herdr restored without the environment (`TWIG_CARD_ID`, `TWIG_PANE_REPO`).
 pub fn pane(cfg: &Config, id: &str, repo: Option<&str>) -> Vec<(String, String)> {
     let mut vars = vec![("TWIG_CARD_ID".to_string(), id.to_string())];
     if let Some(r) = repo {
-        vars.push(("TWIG_REPO".to_string(), r.to_string()));
+        vars.push(("TWIG_PANE_REPO".to_string(), r.to_string()));
     }
     vars.extend(of(cfg, id, repo));
     vars
@@ -183,9 +183,9 @@ mod tests {
         };
         let v = pane(&cfg, "7", Some("api"));
         assert_eq!(get(&v, "TWIG_CARD_ID").as_deref(), Some("7"));
-        assert_eq!(get(&v, "TWIG_REPO").as_deref(), Some("api"));
+        assert_eq!(get(&v, "TWIG_PANE_REPO").as_deref(), Some("api"));
         let v = pane(&cfg, "7", None);
-        assert_eq!(get(&v, "TWIG_REPO"), None);
+        assert_eq!(get(&v, "TWIG_PANE_REPO"), None);
     }
 
     #[test]

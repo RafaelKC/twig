@@ -486,6 +486,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn self_update_repo_ignores_the_pane_marker() {
+        if std::env::var_os("TWIG_REPO").is_some() {
+            return;
+        }
+        std::env::set_var("TWIG_PANE_REPO", "api");
+        assert_eq!(repo(), DEFAULT_REPO);
+    }
+
+    #[test]
     fn recognizes_the_twig_rc_lines() {
         assert!(is_twig_rc_line(
             "export PATH=\"$HOME/.local/bin:$PATH\"  # twig"

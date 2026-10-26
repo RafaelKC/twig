@@ -2677,7 +2677,7 @@ fn env_prints_the_full_pane_environment() {
     assert_exit(&o, 0);
     assert_eq!(
         stdout(&o),
-        "export TWIG_CARD_ID='52644'\nexport TWIG_REPO='a'\nexport TWIG_PORT_A='4244'\n\
+        "export TWIG_CARD_ID='52644'\nexport TWIG_PANE_REPO='a'\nexport TWIG_PORT_A='4244'\n\
          export TWIG_PORT_B='5044'\nexport PORT='4244'\n\
          export API_URL='http://localhost:4244/it'\\''s'\n"
     );
@@ -2688,7 +2688,7 @@ fn env_prints_the_full_pane_environment() {
     let o = s.run_with(c, "");
     assert_exit(&o, 0);
     assert!(
-        stdout(&o).contains("export TWIG_REPO='b'\n")
+        stdout(&o).contains("export TWIG_PANE_REPO='b'\n")
             && stdout(&o).contains("export PORT='5044'\n"),
         "{}",
         stdout(&o)
@@ -2770,12 +2770,12 @@ fn ports_reach_herdr_panes_hooks_and_vscode() {
     let calls = fs::read_to_string(&log).unwrap();
     assert!(
         calls.contains("workspace create")
-            && calls.contains("--env TWIG_CARD_ID=7 --env TWIG_REPO=a --env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"),
+            && calls.contains("--env TWIG_CARD_ID=7 --env TWIG_PANE_REPO=a --env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"),
         "{calls}"
     );
     assert!(
         calls.contains(
-            "--label run --no-focus --env TWIG_CARD_ID=7 --env TWIG_REPO=a --env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"
+            "--label run --no-focus --env TWIG_CARD_ID=7 --env TWIG_PANE_REPO=a --env TWIG_PORT_A=4207 --env TWIG_PORT_B=5007 --env PORT=4207"
         ),
         "{calls}"
     );
