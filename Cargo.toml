@@ -1,6 +1,6 @@
 [package]
 name = "twig"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 description = "One isolated workspace per task card: git worktrees across repos, an AI agent per repo in herdr, and a VS Code workspace"
 license = "MIT"
