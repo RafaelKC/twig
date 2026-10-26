@@ -3370,7 +3370,9 @@ fn run_start_interrupts_an_existing_pane_before_running() {
     assert_exit(&s.run(&["run", "123", "start"]), 0);
     let calls = herdr_calls(&log);
     let c = calls.find("pane send-keys w1:p2 C-c").expect(&calls);
-    let r = calls.find("pane run w1:p2 npm start").expect(&calls);
+    let r = calls
+        .find("pane run w1:p2 export TWIG_CARD_ID=")
+        .expect(&calls);
     assert!(c < r, "{calls}");
     assert!(!calls.contains("tab create"), "{calls}");
 }
@@ -3381,7 +3383,10 @@ fn run_restart_stops_then_starts() {
     assert_exit(&s.run(&["run", "123", "restart", "--repos", "r1"]), 0);
     let calls = herdr_calls(&log);
     assert_eq!(calls.matches("send-keys").count(), 1, "{calls}");
-    assert!(calls.contains("pane run w1:p2 npm start"), "{calls}");
+    assert!(
+        calls.contains("pane run w1:p2 export TWIG_CARD_ID=") && calls.contains("; npm start"),
+        "{calls}"
+    );
 }
 
 #[test]

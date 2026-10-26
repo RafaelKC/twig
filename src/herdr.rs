@@ -420,10 +420,13 @@ pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String])
         for repo in &targets {
             match run_pane(&ws, &dir.join(repo))? {
                 Some(pane) => {
-                    herdr_quiet(&["pane", "send-keys", &pane, "C-c"]);
-                    sent = true;
-                    if action == RunAction::Stop {
-                        ui::ok(format!("[{}] stopped", cfg.short(repo)));
+                    if sys::quiet(sys::tool("herdr").args(["pane", "send-keys", &pane, "C-c"])) {
+                        sent = true;
+                        if action == RunAction::Stop {
+                            ui::ok(format!("[{}] stopped", cfg.short(repo)));
+                        }
+                    } else if action == RunAction::Stop {
+                        bail!("[{}] could not send Ctrl+C to the pane", cfg.short(repo));
                     }
                 }
                 None if action == RunAction::Stop => {
@@ -448,7 +451,14 @@ pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String])
                     herdr_quiet(&["pane", "send-keys", pane, "C-c"]);
                     thread::sleep(STOP_GRACE);
                 }
-                herdr_quiet(&["pane", "run", pane, cmd]);
+                // the pane's shell keeps the environment it was created with: re-export it
+                let line = env_command(&procenv::pane(cfg, id, Some(repo)), cmd);
+                if !sys::quiet(sys::tool("herdr").args(["pane", "run", pane, &line])) {
+                    bail!(
+                        "[{}] could not run the command in the pane",
+                        cfg.short(repo)
+                    );
+                }
             } else {
                 ensure_panel(cfg, id, &ws, "run", repo, cmd, &wt, false)?;
             }
@@ -456,6 +466,20 @@ pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String])
         }
     }
     Ok(())
+}
+
+/// `cmd` prefixed with the assignments of `vars`, for a shell that already exists and so
+/// can't get them through `--env`.
+fn env_command(vars: &[(String, String)], cmd: &str) -> String {
+    let mut line = String::new();
+    for (k, v) in vars {
+        if cfg!(windows) {
+            line.push_str(&format!("$env:{k}={}; ", shell_quote(v)));
+        } else {
+            line.push_str(&format!("export {k}={}; ", shell_quote(v)));
+        }
+    }
+    line + cmd
 }
 
 /// The pane of the `run` tab that belongs to the repo worktree `wt`, if any.
@@ -490,6 +514,21 @@ pub fn open(ws: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn env_command_prefixes_assignments() {
+        let vars = vec![
+            ("PORT".to_string(), "3001".to_string()),
+            ("MSG".to_string(), "it's".to_string()),
+        ];
+        let line = super::env_command(&vars, "npm start");
+        if cfg!(windows) {
+            assert_eq!(line, "$env:PORT='3001'; $env:MSG='it''s'; npm start");
+        } else {
+            assert_eq!(line, r"export PORT='3001'; export MSG='it'\''s'; npm start");
+        }
+        assert_eq!(super::env_command(&[], "x"), "x");
+    }
+
     use super::*;
 
     #[test]
