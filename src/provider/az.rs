@@ -47,6 +47,29 @@ fn pr_of(v: &Value) -> Option<Pr> {
     Some(Pr { number: id, url })
 }
 
+/// Web page of a work item. `_links.html.href` when present; otherwise built from the REST `url`
+/// (`<org>/_apis/wit/workItems/<id>`) and the project. Never a `/_apis/` URL (it returns JSON,
+/// and old caches hold it); empty when it can't be built, so the caller uses the fallback.
+fn web_url(d: &Value, project: &str) -> String {
+    if let Some(href) = d["_links"]["html"]["href"]
+        .as_str()
+        .filter(|h| !h.is_empty() && !h.contains("/_apis/"))
+    {
+        return href.to_string();
+    }
+    let org = d["url"]
+        .as_str()
+        .and_then(|u| u.split_once("/_apis/"))
+        .map(|(org, _)| org);
+    let id = d["id"].as_u64();
+    match (org, id) {
+        (Some(org), Some(id)) if !project.is_empty() => {
+            format!("{org}/{}/_workitems/edit/{id}", project.replace(' ', "%20"))
+        }
+        _ => String::new(),
+    }
+}
+
 impl Provider for AzureDevOps<'_> {
     fn cli(&self) -> &'static str {
         "az"
@@ -89,11 +112,7 @@ impl Provider for AzureDevOps<'_> {
                 v => v.to_string(),
             }
         };
-        let url = d["_links"]["html"]["href"]
-            .as_str()
-            .or_else(|| d["url"].as_str())
-            .unwrap_or_default()
-            .to_string();
+        let url = web_url(&d, &field("System.TeamProject"));
         let info = CardInfo {
             title: field("System.Title"),
             url,
@@ -270,6 +289,44 @@ mod tests {
             pr_of(&v).unwrap().url,
             "https://dev.azure.com/o/p/_git/api/pullrequest/5"
         );
+    }
+
+    fn parse(raw: &str) -> Option<CardInfo> {
+        let cfg = Az::default();
+        AzureDevOps::new(&cfg).parse_card(raw)
+    }
+
+    #[test]
+    fn card_url_prefers_the_html_link() {
+        let raw = r#"{"id":7,"url":"https://dev.azure.com/o/_apis/wit/workItems/7",
+            "_links":{"html":{"href":"https://dev.azure.com/o/p/_workitems/edit/7"}},
+            "fields":{"System.Title":"t","System.TeamProject":"p"}}"#;
+        assert_eq!(
+            parse(raw).unwrap().url,
+            "https://dev.azure.com/o/p/_workitems/edit/7"
+        );
+    }
+
+    #[test]
+    fn card_url_is_built_when_the_html_link_is_missing_or_rest() {
+        let missing = r#"{"id":7,"url":"https://dev.azure.com/o/_apis/wit/workItems/7",
+            "fields":{"System.Title":"t","System.TeamProject":"My Proj"}}"#;
+        let rest = r#"{"id":7,"url":"https://dev.azure.com/o/_apis/wit/workItems/7",
+            "_links":{"html":{"href":"https://dev.azure.com/o/_apis/wit/workItems/7"}},
+            "fields":{"System.Title":"t","System.TeamProject":"My Proj"}}"#;
+        for raw in [missing, rest] {
+            assert_eq!(
+                parse(raw).unwrap().url,
+                "https://dev.azure.com/o/My%20Proj/_workitems/edit/7"
+            );
+        }
+    }
+
+    #[test]
+    fn card_url_is_empty_rather_than_a_rest_url() {
+        let raw = r#"{"id":7,"url":"https://dev.azure.com/o/_apis/wit/workItems/7",
+            "fields":{"System.Title":"t"}}"#;
+        assert_eq!(parse(raw).unwrap().url, "");
     }
 
     #[test]
