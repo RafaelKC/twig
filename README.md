@@ -131,7 +131,7 @@ Two options:
 - **Native Windows (beta):** in PowerShell (5.1 or 7):
 
   ```powershell
-  irm https://github.com/RafaelKC/twig/releases/latest/download/install.ps1 | iex
+  irm https://rndm.chicovis.dev/twig/windows-install | iex
   ```
 
   > **herdr's native Windows support is in beta.** twig works on it, but panes, agent
@@ -164,7 +164,7 @@ twig doctor
 | | |
 |---|---|
 | Update | `twig update` (twig hints on stderr when a new release exists; disable with `TWIG_NO_UPDATE_CHECK=1` or `[update] check = false`) |
-| Specific version | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0`; Windows: `$env:TWIG_VERSION = "v0.4.0"` before `irm \| iex` |
+| Specific version | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0`; Windows: `$env:TWIG_VERSION = "v0.4.0"` before `irm https://rndm.chicovis.dev/twig/windows-install \| iex` |
 | Uninstall | `twig uninstall` |
 
 <details>
