@@ -71,10 +71,11 @@ jobs:
 
   # Release notes written by Claude. Best effort: whatever goes wrong here, the release still goes
   # out with the notes GitHub generates. The PR/issue text is untrusted, so this job has a read-only
-  # token and claude runs with no tools (scripts/release/notes.sh).
+  # token and claude runs with no tools (scripts/release/notes.sh). It runs on the agent's self-hosted
+  # runner to reuse its Claude login (subscription, no API key); only the maintainer can push a v* tag.
   notes:
     needs: test
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, ARM64, twig-agent]
     timeout-minutes: 15
     permissions:
       contents: read
@@ -88,11 +89,10 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          [ -n "$ANTHROPIC_API_KEY" ] || { echo "::warning::ANTHROPIC_API_KEY is not set; using GitHub's generated notes"; exit 0; }
-          npm install -g @anthropic-ai/claude-code
-          mkdir -p notes
+          unset ANTHROPIC_API_KEY # the subscription login must be used, never a metered key
+          command -v claude >/dev/null || { echo "::warning::claude is not installed on the runner; using GitHub's generated notes"; exit 0; }
+          rm -rf notes; mkdir -p notes
           prev=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^")
           scripts/release/notes.sh "$prev" "$GITHUB_REF_NAME" > notes/body.md
           [ -s notes/body.md ] || rm -f notes/body.md
