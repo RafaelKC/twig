@@ -80,6 +80,7 @@ trap 'git -C "$REPO_DIR" worktree remove --force "$WT" >/dev/null 2>&1 || true' 
 # issue. Text from anyone else is marked as such in the prompt, and claude runs without GH_TOKEN
 # (see claude_run).
 [ -z "${LABELED_BY:-}" ] || [ "$LABELED_BY" = "$OWNER" ] || die "the label was added by @$LABELED_BY, not by $OWNER."
+command -v shellcheck >/dev/null || die "shellcheck is not installed on the runner (sudo apt install shellcheck); it must run before pushing changes to install.sh."
 author=$(gh api "repos/$REPO/issues/$N" --jq .user.login)
 
 for l in "agent:doing|fbca04" "agent:done|0e8a16" "agent:fail|b60205"; do
@@ -235,11 +236,15 @@ wait_gates() { # 0 = all green, 1 = failed or timed out; sets GATE_REASON
       json=$(gh pr checks "$PR" --repo "$REPO" --json name,bucket 2>/dev/null) || true
       [ -n "$json" ] || json='[]'
       if [ "$(jq 'length' <<<"$json")" -gt 0 ]; then
-        if jq -e 'any(.[]; .bucket == "fail" or .bucket == "cancel")' <<<"$json" >/dev/null; then
-          GATE_REASON=$(jq -r '[.[] | select(.bucket == "fail" or .bucket == "cancel") | .name] | join(", ")' <<<"$json")
-          return 1
+        # a failed check is only final once nothing is pending: the run's conclusion (and so its
+        # logs) only exists after every job has finished
+        if ! jq -e 'any(.[]; .bucket == "pending")' <<<"$json" >/dev/null; then
+          if jq -e 'any(.[]; .bucket == "fail" or .bucket == "cancel")' <<<"$json" >/dev/null; then
+            GATE_REASON=$(jq -r '[.[] | select(.bucket == "fail" or .bucket == "cancel") | .name] | join(", ")' <<<"$json")
+            return 1
+          fi
+          return 0
         fi
-        jq -e 'any(.[]; .bucket == "pending")' <<<"$json" >/dev/null || return 0
       elif [ "$SECONDS" -gt $((deadline - CI_TIMEOUT + 300)) ]; then
         GATE_REASON="no checks started within 5 minutes (is AGENT_PAT a PAT, not github.token?)"
         return 1
@@ -251,10 +256,15 @@ wait_gates() { # 0 = all green, 1 = failed or timed out; sets GATE_REASON
   return 1
 }
 
-failed_logs() {
-  local sha id; sha=$(git -C "$WT" rev-parse HEAD)
+failed_logs() { # waits (up to 2 min) for the runs of this commit to complete, then prints the failed logs
+  local sha id i; sha=$(git -C "$WT" rev-parse HEAD)
+  for i in $(seq 1 12); do
+    gh run list --repo "$REPO" --branch "$BRANCH" --commit "$sha" --json status --jq '.[].status' |
+      grep -Eqv '^completed$' || break
+    sleep 10
+  done
   for id in $(gh run list --repo "$REPO" --branch "$BRANCH" --commit "$sha" --json databaseId,conclusion \
-    --jq '.[] | select(.conclusion == "failure") | .databaseId'); do
+    --jq '.[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .databaseId'); do
     echo "### failing run $id"
     gh run view "$id" --repo "$REPO" --log-failed 2>&1 | tail -n 200
   done
@@ -263,7 +273,7 @@ failed_logs() {
 for round in $(seq 1 "$MAX_CI_ROUNDS"); do
   wait_gates && break
   logs=$(failed_logs)
-  [ -n "$logs" ] || die "gates failed ($GATE_REASON)."
+  [ -n "$logs" ] || die "gates failed ($GATE_REASON) but no failed run logs were found for $(git -C "$WT" rev-parse --short HEAD); see the checks on PR #$PR."
   [ "$round" -lt "$MAX_CI_ROUNDS" ] || die "gates still failing after $MAX_CI_ROUNDS fix rounds: $GATE_REASON (PR #$PR)."
   say "🔧 Gates failed ($GATE_REASON); fixing (round $round)."
   { cat "$LOG_DIR/context.md"; printf '\n## Failing CI logs to fix\n\n%s\n' "$logs"; } >"$LOG_DIR/ci-$round.md"
