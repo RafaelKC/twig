@@ -66,7 +66,8 @@ The tag triggers [`.github/workflows/release.yml`](../.github/workflows/release.
 |---|---|
 | `test` | checks the tag matches `Cargo.toml` and runs `cargo test --locked` |
 | `build` | builds and packages each target (below) |
-| `release` | `SHA256SUMS`, Sigstore signature, build provenance, GitHub Release with generated notes |
+| `notes` | writes the release description with Claude (best effort, see below) |
+| `release` | `SHA256SUMS`, Sigstore signature, build provenance, GitHub Release with the notes |
 
 | Target | Runner | Notes |
 |---|---|---|
@@ -75,6 +76,30 @@ The tag triggers [`.github/workflows/release.yml`](../.github/workflows/release.
 | `x86_64-apple-darwin` | `macos-14` | Intel Macs |
 | `aarch64-apple-darwin` | `macos-14` | Apple Silicon |
 | `x86_64-pc-windows-msvc` | `windows-2025` | native Windows (beta, like herdr's); also runs on Windows on ARM under emulation |
+
+## Release notes
+
+The description is written by Claude from the PRs merged into `main` and the issues closed since
+the previous tag (the `release vX.Y.Z` PR is left out). It has a short summary and the sections
+Highlights, Improvements, Fixes and Breaking changes (only those with content), each item with its
+`#N`. GitHub then appends the full PR list and the `Full Changelog` link
+(`generate_release_notes`).
+
+- **Secret**: `ANTHROPIC_API_KEY` (Settings > Secrets and variables > Actions). Without it, or if
+  Claude fails or takes more than 5 minutes, the release goes out with GitHub's generated notes
+  only: the `notes` job never blocks the publication.
+- **Safety**: PR and issue text is untrusted input. The `notes` job has a read-only token and
+  `claude` runs with no tools, so it only turns text into markdown.
+- **Prompt**: [`scripts/release/notes-prompt.md`](../scripts/release/notes-prompt.md).
+- **Preview locally** (needs `gh`, `jq` and `claude`):
+
+  ```bash
+  scripts/release/notes.sh v0.7.0 v0.8.0 > notes.md   # previous tag, new tag (default: HEAD)
+  NOTES_DRY=1 scripts/release/notes.sh v0.7.0 v0.8.0  # only the prompt and the collected data
+  ```
+
+- **Edit after publishing**: `gh release edit vX.Y.Z --notes-file notes.md` (the generated PR list
+  and changelog link at the end are part of the text, keep them).
 
 ## Release assets
 

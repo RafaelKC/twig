@@ -69,8 +69,42 @@ jobs:
           path: twig-${{ matrix.target }}.*
           if-no-files-found: error
 
+  # Release notes written by Claude. Best effort: whatever goes wrong here, the release still goes
+  # out with the notes GitHub generates. The PR/issue text is untrusted, so this job has a read-only
+  # token and claude runs with no tools (scripts/release/notes.sh).
+  notes:
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the previous tag and the history between them
+      - name: write release notes with Claude
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          [ -n "$ANTHROPIC_API_KEY" ] || { echo "::warning::ANTHROPIC_API_KEY is not set; using GitHub's generated notes"; exit 0; }
+          npm install -g @anthropic-ai/claude-code
+          mkdir -p notes
+          prev=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^")
+          scripts/release/notes.sh "$prev" "$GITHUB_REF_NAME" > notes/body.md
+          [ -s notes/body.md ] || rm -f notes/body.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: notes/body.md
+          if-no-files-found: ignore
+
   release:
-    needs: build
+    needs: [build, notes]
+    if: ${{ !cancelled() && needs.build.result == 'success' }} # a failed notes job must not block the release
     runs-on: ubuntu-24.04
     permissions:
       contents: write # create the release
@@ -81,7 +115,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: twig-*
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: release-notes
+          path: notes
       - name: checksums
         working-directory: dist
         run: |
@@ -103,5 +143,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          # Claude's notes (if any) come first; GitHub appends its generated PR list and Full Changelog
+          body_path: ${{ hashFiles('notes/body.md') != '' && 'notes/body.md' || '' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
