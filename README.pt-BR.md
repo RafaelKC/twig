@@ -131,7 +131,7 @@ Duas opções:
 - **Windows nativo (beta):** no PowerShell (5.1 ou 7):
 
   ```powershell
-  irm https://github.com/RafaelKC/twig/releases/latest/download/install.ps1 | iex
+  irm https://rndm.chicovis.dev/twig/windows-install | iex
   ```
 
   > **O suporte nativo do herdr a Windows está em beta.** O twig funciona nele, mas painéis,
@@ -163,7 +163,7 @@ twig doctor
 | | |
 |---|---|
 | Atualizar | `twig update` (o twig avisa no stderr quando há release nova; desative com `TWIG_NO_UPDATE_CHECK=1` ou `[update] check = false`) |
-| Versão específica | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0`; Windows: `$env:TWIG_VERSION = "v0.4.0"` antes do `irm \| iex` |
+| Versão específica | `curl -fsSL https://rndm.chicovis.dev/twig/unix-install \| sh -s -- --version v0.2.0`; Windows: `$env:TWIG_VERSION = "v0.4.0"` antes do `irm https://rndm.chicovis.dev/twig/windows-install \| iex` |
 | Desinstalar | `twig uninstall` |
 
 <details>

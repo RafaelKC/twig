@@ -109,7 +109,7 @@ Highlights, Improvements, Fixes and Breaking changes (only those with content), 
 | `twig-<target>.tar.gz` | `twig-<target>/` with the `twig` binary, `skills/twig`, `herdr-plugins/twig`, `LICENSE`, `README.md` |
 | `twig-x86_64-pc-windows-msvc.zip` | the same layout with `twig.exe` |
 | `install.sh` | the installer at that version |
-| `install.ps1` | the Windows installer at that version (`releases/latest/download/install.ps1` is the latest one) |
+| `install.ps1` | the Windows installer at that version (`releases/latest/download/install.ps1` is the latest one; `https://rndm.chicovis.dev/twig/windows-install` redirects to it) |
 | `SHA256SUMS` | checksums of the archives, `install.sh` and `install.ps1` |
 | `SHA256SUMS.sigstore.json` | Sigstore bundle signing `SHA256SUMS` |
 
