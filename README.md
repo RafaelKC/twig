@@ -302,7 +302,7 @@ skills/           AI agent skill
 scripts/          release helper
 .github/          release workflow
 install.sh        installer
-docs/             commands, config, dependencies, releasing, roadmap, autonomous agent
+docs/             commands, config, dependencies, releasing, release pipeline, roadmap, autonomous agent
 refs/             evaluated but unused references
 ```
 

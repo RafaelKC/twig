@@ -1,5 +1,7 @@
 # Releasing
 
+How the workflows, jobs, scripts and agents fit together, from issue to release: [PIPELINE.md](PIPELINE.md).
+
 ## Cut a release
 
 `main` only accepts changes through a pull request, so a release takes two steps.
