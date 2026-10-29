@@ -68,6 +68,7 @@ The tag triggers [`.github/workflows/release.yml`](../.github/workflows/release.
 | `build` | builds and packages each target (below) |
 | `notes` | writes the release description with Claude (best effort, see below) |
 | `release` | `SHA256SUMS`, Sigstore signature, build provenance, GitHub Release with the notes |
+| `changelog` | adds the release notes to `CHANGELOG.md` through an auto-merged PR (best effort, see below) |
 
 | Target | Runner | Notes |
 |---|---|---|
@@ -101,6 +102,24 @@ Highlights, Improvements, Fixes and Breaking changes (only those with content), 
 
 - **Edit after publishing**: `gh release edit vX.Y.Z --notes-file notes.md` (the generated PR list
   and changelog link at the end are part of the text, keep them).
+
+## CHANGELOG.md
+
+Once the release is published, the `changelog` job runs
+[`scripts/release/changelog.sh`](../scripts/release/changelog.sh) on the release description: the
+notes written by Claude become the `## [X.Y.Z] - date` entry (their headings one level down), and
+GitHub's generated PR list and `Full Changelog` link are dropped. When there are no Claude notes,
+the PR list becomes the entry. The compare link is added at the end of the file.
+
+`main` only accepts PRs, so the job opens `docs: changelog for vX.Y.Z` on `docs/changelog-vX.Y.Z`
+with the `AGENT_PAT` secret and turns on auto-merge. A version already in the file is skipped. If the
+job fails the release is still out; add the entry by hand:
+
+```bash
+gh release view v0.9.1 --json body --jq .body | scripts/release/changelog.sh v0.9.1 2026-10-29
+```
+
+Notes edited after publishing aren't picked up again: edit `CHANGELOG.md` too.
 
 ## Release assets
 

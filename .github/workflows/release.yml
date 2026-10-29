@@ -147,3 +147,40 @@ jobs:
           body_path: ${{ hashFiles('notes/body.md') != '' && 'notes/body.md' || '' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
+
+  # Adds the published release's notes to CHANGELOG.md. main only accepts PRs, so this opens the PR
+  # "docs: changelog for vX.Y.Z" with auto-merge on. A PAT (not github.token), so the PR runs ci.yml.
+  # Best effort: the release is already out, a failure here only means editing CHANGELOG.md by hand.
+  changelog:
+    needs: release
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    env:
+      GH_TOKEN: ${{ secrets.AGENT_PAT }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.AGENT_PAT }}
+      - name: update CHANGELOG.md and open the PR
+        run: |
+          branch="docs/changelog-$TAG"
+          if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null; then
+            echo "::warning::branch $branch already exists"; exit 0
+          fi
+          date=$(gh release view "$TAG" --json publishedAt --jq '.publishedAt[:10]')
+          gh release view "$TAG" --json body --jq .body | scripts/release/changelog.sh "$TAG" "$date"
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "CHANGELOG.md already has $TAG" >>"$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -m "docs: changelog for $TAG" -- CHANGELOG.md
+          git push -u origin "$branch"
+          pr=$(gh pr create --base main --head "$branch" --title "docs: changelog for $TAG" \
+            --body "Adds the $TAG release notes to CHANGELOG.md, opened by release.yml.")
+          echo "PR: $pr" >>"$GITHUB_STEP_SUMMARY"
+          gh pr merge "$pr" --auto --squash ||
+            echo "::warning::could not enable auto-merge; merge $pr by hand"
