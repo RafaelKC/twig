@@ -302,7 +302,7 @@ skills/           skill de agente de IA
 scripts/          helper de release
 .github/          workflow de release
 install.sh        instalador
-docs/             comandos, config, dependências, release, roadmap, agente autônomo
+docs/             comandos, config, dependências, release, pipeline de release, roadmap, agente autônomo
 refs/             referências avaliadas mas não usadas
 ```
 
