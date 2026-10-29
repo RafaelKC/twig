@@ -34,6 +34,13 @@ param(
     [switch]$Yes
 )
 
+# Windows PowerShell 5.1 started from pwsh 7 through another process (e.g. npm run) inherits
+# pwsh 7's module folders, and autoloading then fails for Get-FileHash and Get-ExecutionPolicy.
+if ($PSVersionTable.PSEdition -eq 'Desktop') {
+    $machinePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+    if ($machinePath) { $env:PSModulePath = $machinePath }
+}
+
 function Install-Twig {
     param([string]$Version, [bool]$Update, [string]$BinDir, [bool]$Yes)
 
