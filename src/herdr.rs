@@ -9,8 +9,9 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
-use crate::config::Config;
+use crate::config::{AgentKind, Config};
 use crate::layout::{self, Preset};
+use crate::snapshot::{self, Kind, Pane};
 use crate::{card, ports, procenv, sessions, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
@@ -186,8 +187,11 @@ fn tab_panes(ws: &str, tab: &str) -> Result<Vec<(String, String, String)>> {
 
 /// `--env K=V` arguments for a new pane of `repo` (twig's markers, the card's ports and the repo's `env`).
 fn env_args(cfg: &Config, id: &str, repo: &str) -> Vec<String> {
-    procenv::pane(cfg, id, Some(repo))
-        .into_iter()
+    env_flags(procenv::pane(cfg, id, Some(repo)))
+}
+
+fn env_flags(vars: Vec<(String, String)>) -> Vec<String> {
+    vars.into_iter()
         .flat_map(|(k, v)| ["--env".to_string(), format!("{k}={v}")])
         .collect()
 }
@@ -363,8 +367,31 @@ fn pane_command(cfg: &Config, id: &str, repo: &str, wt: &Path, prompt: Option<&s
 /// and panes closed by the user come back. `prompt` is the first message of the agents started
 /// now (only `twig new` passes one).
 pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
+    sync_with(cfg, id, prompt, false)
+}
+
+/// [`sync`]; with `use_snapshot`, a card whose workspace is gone and that has a park snapshot
+/// gets its workspace rebuilt from it instead of the default layout.
+pub fn sync_with(
+    cfg: &Config,
+    id: &str,
+    prompt: Option<&str>,
+    use_snapshot: bool,
+) -> Result<String> {
     ensure_server()?;
     let dir = card::require_card(cfg, id)?;
+    if use_snapshot && find_workspace(id)?.is_none() {
+        match restore_snapshot(cfg, id, &dir) {
+            Ok(Some(ws)) => return Ok(ws),
+            Ok(None) => {}
+            Err(e) => {
+                ui::warn(format!(
+                    "herdr: could not restore the park snapshot ({e:#}): creating the default layout"
+                ));
+                close_workspace(id);
+            }
+        }
+    }
     let repos = cfg.herdr.layout.sorted(&card::repos_ordered(cfg, &dir));
     let first = repos
         .first()
@@ -448,6 +475,261 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
         }
     }
     Ok(ws)
+}
+
+/// The pane to record for a pane of `herdr pane list`: its folder, and whether it ran an agent
+/// (with its session id), the repo's `run` command (in the `run` tab) or just a shell.
+fn pane_snapshot(cfg: &Config, dir: &Path, repos: &[String], tab_label: &str, p: &Value) -> Pane {
+    let text = |v: &Value| v.as_str().filter(|s| !s.is_empty()).map(String::from);
+    let cwd = text(&p["cwd"])
+        .or_else(|| text(&p["foreground_cwd"]))
+        .unwrap_or_default();
+    let repo = snapshot::repo_of(dir, repos, &cwd);
+    let sess = &p["agent_session"];
+    let agent = text(&sess["agent"]).or_else(|| text(&p["agent"]));
+    let session = (sess["kind"] == "id")
+        .then(|| text(&sess["value"]))
+        .flatten()
+        .filter(|v| snapshot::safe_id(v));
+    let run = repo
+        .and_then(|r| cfg.repo(r))
+        .map(|c| c.run.clone())
+        .filter(|c| !c.is_empty());
+    let (kind, command) = match (&agent, run) {
+        (Some(_), _) => (Kind::Agent, None),
+        (None, Some(c)) if tab_label == "run" => (Kind::Run, Some(c)),
+        _ => (Kind::Shell, None),
+    };
+    Pane {
+        label: text(&p["label"]).or_else(|| repo.map(|r| cfg.short(r))),
+        cwd,
+        kind,
+        agent,
+        session,
+        command,
+    }
+}
+
+/// `twig park`: record the card's workspace (tabs, splits, panes, agent sessions) in the card's
+/// snapshot file. Returns whether there was a workspace to record.
+pub fn save_snapshot(cfg: &Config, id: &str) -> Result<bool> {
+    if sys::which("herdr").is_none() || !server_up() {
+        return Ok(false);
+    }
+    let Some(ws) = find_workspace(id)? else {
+        return Ok(false);
+    };
+    let dir = cfg.card_dir(id);
+    let repos = card::repos_ordered(cfg, &dir);
+    let tabs = herdr(&["tab", "list", "--workspace", &ws])?;
+    let panes = herdr(&["pane", "list", "--workspace", &ws])?;
+    let all: Vec<&Value> = panes
+        .pointer("/result/panes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .collect();
+    let mut out = Vec::new();
+    for t in tabs
+        .pointer("/result/tabs")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let (Some(tab_id), Some(label)) = (t["tab_id"].as_str(), t["label"].as_str()) else {
+            continue;
+        };
+        let mine: Vec<&Value> = all
+            .iter()
+            .copied()
+            .filter(|p| p["tab_id"] == tab_id)
+            .collect();
+        let Some(first) = mine.first().and_then(|p| p["pane_id"].as_str()) else {
+            continue;
+        };
+        let snap = |p: &Value| pane_snapshot(cfg, &dir, &repos, label, p);
+        let tree = herdr(&["pane", "layout", "--pane", first])
+            .ok()
+            .and_then(|v| {
+                snapshot::from_herdr(&v, &mut |pid| {
+                    mine.iter().find(|p| p["pane_id"] == pid).map(|p| snap(p))
+                })
+            });
+        let layout = tree.or_else(|| {
+            ui::warn(format!(
+                "herdr: could not read the split layout of the {label} tab: saving its panes side by side"
+            ));
+            snapshot::row(mine.iter().map(|p| snap(p)).collect())
+        });
+        if let Some(layout) = layout {
+            out.push(snapshot::Tab {
+                label: label.to_string(),
+                layout,
+            });
+        }
+    }
+    if out.is_empty() {
+        return Ok(false);
+    }
+    let n = out.len();
+    snapshot::write(cfg, id, out)?;
+    ui::ok(format!(
+        "workspace layout saved ({n} tab{}) in {}",
+        if n == 1 { "" } else { "s" },
+        snapshot::path(cfg, id).display()
+    ));
+    Ok(true)
+}
+
+/// Command of a restored agent pane: its own conversation (`--resume <id>`); without a known
+/// id, the last one of its folder (`--continue`) when there is one; else the agent as is.
+fn restore_command(cfg: &Config, pane: &Pane) -> String {
+    let kind = pane
+        .agent
+        .as_deref()
+        .and_then(AgentKind::from_name)
+        .unwrap_or(cfg.ai.provider);
+    let cmd = if kind == cfg.ai.provider {
+        cfg.ai.command()
+    } else {
+        kind.default_command()
+    };
+    if !cfg.park.resume_sessions {
+        return cmd.to_string();
+    }
+    match pane.session.as_deref().filter(|s| snapshot::safe_id(s)) {
+        Some(sid) => format!("{cmd} {}", kind.resume_session_args(sid)),
+        None if kind == cfg.ai.provider && sessions::has_session(cfg, Path::new(&pane.cwd)) => {
+            format!("{cmd} {}", kind.resume_args())
+        }
+        None => cmd.to_string(),
+    }
+}
+
+/// Start what a restored pane was running: the agent, or the repo's `run` command (with its
+/// `autorun`); shells stay at their prompt.
+fn relaunch(cfg: &Config, dir: &Path, repos: &[String], pane: &str, leaf: &Pane) {
+    let repo = snapshot::repo_of(dir, repos, &leaf.cwd);
+    if let Some(name) = leaf.label.clone().or_else(|| repo.map(|r| cfg.short(r))) {
+        herdr_quiet(&["pane", "rename", pane, &name]);
+    }
+    let cmd = match leaf.kind {
+        Kind::Agent => Some(restore_command(cfg, leaf)),
+        Kind::Run => repo
+            .and_then(|r| cfg.repo(r).map(|c| (r, c)))
+            .filter(|(r, c)| autorun(cfg, r, c.autorun))
+            .map(|(_, c)| c.run.clone())
+            .filter(|c| !c.is_empty()),
+        Kind::Shell => None,
+    };
+    if let Some(cmd) = cmd {
+        herdr_quiet(&["pane", "run", pane, &cmd]);
+    }
+}
+
+/// `twig open` after `twig park`: rebuild the workspace from the card's snapshot, which is
+/// deleted afterwards. Panes whose folder is gone are skipped with a warning. `None` when
+/// there is no snapshot (or nothing of it can be restored): the caller creates the default layout.
+fn restore_snapshot(cfg: &Config, id: &str, dir: &Path) -> Result<Option<String>> {
+    let Some(snap) = snapshot::read(cfg, id) else {
+        return Ok(None);
+    };
+    let repos = card::repos_ordered(cfg, dir);
+    let mut tabs = Vec::new();
+    for tab in snap.tabs {
+        let kept = snapshot::prune(tab.layout, &|p| {
+            let ok = Path::new(&p.cwd).is_dir();
+            if !ok {
+                ui::warn(format!(
+                    "{} no longer exists: its pane is not restored",
+                    p.cwd
+                ));
+            }
+            ok
+        });
+        if let Some(layout) = kept {
+            tabs.push((tab.label, layout));
+        }
+    }
+    if tabs.is_empty() {
+        ui::warn("nothing left to restore from the park snapshot");
+        return Ok(None);
+    }
+    let pane_env =
+        |cwd: &str| env_flags(procenv::pane(cfg, id, snapshot::repo_of(dir, &repos, cwd)));
+    let mut ws = String::new();
+    for (i, (label, node)) in tabs.iter().enumerate() {
+        let (leaves, cuts) = snapshot::plan(node);
+        let root_cwd = leaves[0].cwd.clone();
+        let env = pane_env(&root_cwd);
+        let root = if i == 0 {
+            let v = herdr(&with_env(
+                &[
+                    "workspace",
+                    "create",
+                    "--cwd",
+                    &root_cwd,
+                    "--label",
+                    id,
+                    "--no-focus",
+                ],
+                &env,
+            ))?;
+            ws = str_at(&v, "/result/workspace/workspace_id")?;
+            herdr_quiet(&["tab", "rename", &str_at(&v, "/result/tab/tab_id")?, label]);
+            ui::ok(format!("herdr workspace #{id} created"));
+            str_at(&v, "/result/root_pane/pane_id")?
+        } else {
+            let v = herdr(&with_env(
+                &[
+                    "tab",
+                    "create",
+                    "--workspace",
+                    &ws,
+                    "--cwd",
+                    &root_cwd,
+                    "--label",
+                    label,
+                    "--no-focus",
+                ],
+                &env,
+            ))?;
+            str_at(&v, "/result/root_pane/pane_id")?
+        };
+        let mut panes: Vec<Option<String>> = vec![None; leaves.len()];
+        panes[0] = Some(root);
+        for c in &cuts {
+            let target = panes[c.target]
+                .clone()
+                .context("snapshot split without its pane")?;
+            let cwd = &leaves[c.new].cwd;
+            let ratio = layout::ratio_arg(c.ratio);
+            let v = herdr(&with_env(
+                &[
+                    "pane",
+                    "split",
+                    &target,
+                    "--direction",
+                    c.dir.as_str(),
+                    "--ratio",
+                    &ratio,
+                    "--cwd",
+                    cwd,
+                    "--no-focus",
+                ],
+                &pane_env(cwd),
+            ))?;
+            panes[c.new] = Some(str_at(&v, "/result/pane/pane_id")?);
+        }
+        for (pane, leaf) in panes.iter().zip(&leaves) {
+            if let Some(pane) = pane {
+                relaunch(cfg, dir, &repos, pane, leaf);
+            }
+        }
+        ui::ok(format!("herdr: {label} restored ({} panes)", leaves.len()));
+    }
+    snapshot::clear(cfg, id);
+    Ok(Some(ws))
 }
 
 /// What `twig run` does to the apps of the `run` tab.
@@ -886,6 +1168,71 @@ mod tests {
             pane_command(&cfg, "1", "api", &wt, Some("hi")),
             "codex 'hi'"
         );
+    }
+
+    #[test]
+    fn restored_agents_resume_their_own_session() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        std::fs::write(&file, "version = 1\n").unwrap();
+        let mut cfg = Config::load_from(&file).unwrap();
+        let pane = |session: Option<&str>| Pane {
+            label: None,
+            cwd: tmp.path().join("none").to_string_lossy().into_owned(),
+            kind: Kind::Agent,
+            agent: Some("claude".into()),
+            session: session.map(String::from),
+            command: None,
+        };
+        assert_eq!(
+            restore_command(&cfg, &pane(Some("abc-123"))),
+            "claude --resume abc-123"
+        );
+        // no id and no conversation on disk: the agent as is
+        assert_eq!(restore_command(&cfg, &pane(None)), "claude");
+        assert_eq!(restore_command(&cfg, &pane(Some("a;b"))), "claude");
+        let mut codex = pane(Some("s1"));
+        codex.agent = Some("codex".into());
+        assert_eq!(restore_command(&cfg, &codex), "codex resume s1");
+        cfg.park.resume_sessions = false;
+        assert_eq!(restore_command(&cfg, &pane(Some("abc-123"))), "claude");
+    }
+
+    #[test]
+    fn pane_snapshot_tells_agents_runs_and_shells_apart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        std::fs::write(
+            &file,
+            "version = 1\n[repos.api]\nshort = \"back\"\nrun = \"dotnet run\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load_from(&file).unwrap();
+        let dir = Path::new("/wt/1");
+        let repos = vec!["api".to_string()];
+        let agent = serde_json::json!({
+            "pane_id": "p1", "cwd": "/wt/1/api",
+            "agent_session": {"agent": "claude", "kind": "id", "value": "98a4aa39-1111"}
+        });
+        let p = pane_snapshot(&cfg, dir, &repos, "agent", &agent);
+        assert_eq!(p.kind, Kind::Agent);
+        assert_eq!(p.session.as_deref(), Some("98a4aa39-1111"));
+        assert_eq!(p.label.as_deref(), Some("back"));
+
+        let plain = serde_json::json!({"pane_id": "p2", "cwd": "/wt/1/api"});
+        let p = pane_snapshot(&cfg, dir, &repos, "run", &plain);
+        assert_eq!(
+            (p.kind, p.command.as_deref()),
+            (Kind::Run, Some("dotnet run"))
+        );
+        assert_eq!(
+            pane_snapshot(&cfg, dir, &repos, "tools", &plain).kind,
+            Kind::Shell
+        );
+
+        let by_name = serde_json::json!({"agent_session": {"kind": "name", "value": "x"}, "agent": "codex", "cwd": "/tmp"});
+        let p = pane_snapshot(&cfg, dir, &repos, "agent", &by_name);
+        assert_eq!((p.kind, p.session), (Kind::Agent, None));
     }
 
     #[test]

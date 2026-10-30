@@ -4,6 +4,16 @@ All notable changes to twig are listed here, newest first. Each version links to
 [GitHub release](https://github.com/RafaelKC/twig/releases), and entries name the pull request
 (and issue) they came from.
 
+## [Unreleased]
+
+### Improvements
+
+- `twig park` now saves the card's herdr workspace (every tab, the splits and their proportions, and each pane, including the ones made by hand) in `<card>/.twig-park-layout.json`, with the session id of each agent. `twig open` / `twig herdr` rebuild it: same tabs and layout, every agent back in its own conversation (`claude --resume <id>`), `run` panes relaunched (respecting `autorun`), shells in their folder, all with the card's env. Panes closed before the park stay closed. Opt out with `twig park --no-snapshot`, `twig open --default-layout` or `[park] snapshot = false` / `resume_sessions = false`. (#100)
+
+### Changes
+
+- **Default change:** `[agent] keep_sessions` is now `false`, so `twig rm` no longer archives the agent's conversations to `memos/` unless asked. Use `twig rm --keep-sessions` for one removal (`--no-keep-sessions` overrides a `true` in the config) or set `keep_sessions = true` to get the old behavior. `twig new` / `twig add-repo` still restore whatever was archived. `twig doctor` warns while the config doesn't set the key. (#100)
+
 ## [0.9.1] - 2026-10-29
 
 twig v0.9.1 is a small patch release that fixes the Windows installer failing in some PowerShell setups.

@@ -19,6 +19,7 @@ mod procenv;
 mod provider;
 mod selfmgmt;
 mod sessions;
+mod snapshot;
 mod status;
 mod sync;
 mod sys;
@@ -144,6 +145,9 @@ enum Cmd {
         /// Where to open it: `default` uses `[open] default` from the config.
         #[arg(value_enum)]
         target: Option<Target>,
+        /// Ignore the layout saved by `twig park` and create the default one.
+        #[arg(long)]
+        default_layout: bool,
     },
     /// Open the card's page (work item or issue) in the default browser.
     ///
@@ -158,6 +162,9 @@ enum Cmd {
     Herdr {
         #[arg(add = ArgValueCandidates::new(complete::cards))]
         id: String,
+        /// Ignore the layout saved by `twig park` and create the default one.
+        #[arg(long)]
+        default_layout: bool,
     },
     /// Open the card in VS Code (generates the .code-workspace if missing).
     ///
@@ -306,11 +313,21 @@ enum Cmd {
         /// Remove even with uncommitted changes or a running agent.
         #[arg(short, long)]
         force: bool,
+        /// Archive the agent's sessions (Claude Code) for `twig new` to restore; the default
+        /// is `[agent] keep_sessions`, off unless set.
+        #[arg(long)]
+        keep_sessions: bool,
+        /// Don't archive the sessions, even with `[agent] keep_sessions = true`.
+        #[arg(long, conflicts_with = "keep_sessions")]
+        no_keep_sessions: bool,
     },
     /// Close the card's herdr workspace, keeping worktrees, branches, memo and agent sessions.
     ///
     /// Refuses while an agent is running in the workspace (unless --force). `twig open <ID>`
     /// brings the card back. VS Code can't be closed from the CLI: close its window by hand.
+    ///
+    /// Before closing, saves the workspace (tabs, splits, panes and each agent's conversation)
+    /// to <card>/.twig-park-layout.json, and `twig open` rebuilds it; `--no-snapshot` skips it.
     ///
     /// Also writes <card>/.parked.json (since, provider state, child items; format in
     /// docs/PARKED.md), which `twig ls`/`status` show. Parking again keeps the first marker;
@@ -324,6 +341,9 @@ enum Cmd {
         /// Remove the park marker without opening or closing anything.
         #[arg(long, conflicts_with = "force")]
         undo: bool,
+        /// Close without saving the workspace layout and conversations (the default is `[park] snapshot`).
+        #[arg(long, conflicts_with = "undo")]
+        no_snapshot: bool,
     },
     /// Remove the card's park marker (same as `twig park --undo`).
     Unpark {
@@ -476,7 +496,7 @@ fn run(cli: Cli) -> Result<()> {
     // an existing card brings its template (agent, hooks) and its config overrides
     let card_id = match &cli.cmd {
         Cmd::AddRepo { id, .. }
-        | Cmd::Herdr { id }
+        | Cmd::Herdr { id, .. }
         | Cmd::Refresh { id, .. }
         | Cmd::Sync { id, .. }
         | Cmd::Rm { id, .. }
@@ -587,7 +607,11 @@ fn run(cli: Cli) -> Result<()> {
                 code,
             },
         ),
-        Cmd::Open { id, target } => {
+        Cmd::Open {
+            id,
+            target,
+            default_layout,
+        } => {
             // `twig open code`: a lone target name is the target, not a card id
             let (id, target) = match (id.as_deref(), target) {
                 (Some(t), None) if <Target as clap::ValueEnum>::from_str(t, true).is_ok() => {
@@ -600,10 +624,10 @@ fn run(cli: Cli) -> Result<()> {
                 Some(Target::Herdr) => Some(OpenTarget::Herdr),
                 Some(Target::Code) => Some(OpenTarget::Code),
             };
-            commands::open(&cfg, id.as_deref(), target)
+            commands::open(&cfg, id.as_deref(), target, default_layout)
         }
         Cmd::OpenCard { id } => commands::open_card(&cfg, id.as_deref()),
-        Cmd::Herdr { id } => commands::herdr_cmd(&cfg, &id),
+        Cmd::Herdr { id, default_layout } => commands::herdr_cmd(&cfg, &id, default_layout),
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
         Cmd::Ls { json } => commands::ls(&cfg, json),
         Cmd::Status { id, json } => status::run(&cfg, id.as_deref(), json),
@@ -613,7 +637,16 @@ fn run(cli: Cli) -> Result<()> {
             id,
             branches,
             force,
-        } => commands::rm(&cfg, &id, branches, force),
+            keep_sessions,
+            no_keep_sessions,
+        } => {
+            let keep = match (keep_sessions, no_keep_sessions) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
+            commands::rm(&cfg, &id, branches, force, keep)
+        }
         Cmd::Run { args, repos } => {
             let (id, action) = parse_run_args(&args)?;
             let id = match id {
@@ -647,8 +680,13 @@ fn run(cli: Cli) -> Result<()> {
             };
             herdr::set_layout(&cfg, &id, tab.name(), preset)
         }
-        Cmd::Park { id, force, undo } => commands::park(&cfg, id.as_deref(), force, undo),
-        Cmd::Unpark { id } => commands::park(&cfg, id.as_deref(), false, true),
+        Cmd::Park {
+            id,
+            force,
+            undo,
+            no_snapshot,
+        } => commands::park(&cfg, id.as_deref(), force, undo, no_snapshot),
+        Cmd::Unpark { id } => commands::park(&cfg, id.as_deref(), false, true, false),
         Cmd::Sync {
             id,
             merge,
@@ -752,7 +790,7 @@ fn parse_layout_args(args: &[String]) -> Result<(Option<String>, layout::Preset)
 fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
     let id = match cmd {
         Cmd::AddRepo { id, .. }
-        | Cmd::Herdr { id }
+        | Cmd::Herdr { id, .. }
         | Cmd::Refresh { id, .. }
         | Cmd::Sync { id, .. }
         | Cmd::Rm { id, .. } => Some(id),

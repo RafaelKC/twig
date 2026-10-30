@@ -23,8 +23,8 @@
 | `twig memo [text] [-c id]` (in development) | appends a dated line to the card memory (`MEMORY.md`, survives `rm`); without text, shows it. See [MEMORY.md](MEMORY.md) |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
 | `twig pr [id] [--draft] [-n]` | pushes each repo's branch and opens one linked PR per repo (`gh` / `az repos`) |
-| `twig rm <id>` | removes the card's worktrees, folder and herdr workspace |
-| `twig park [id] [-f] [--undo]` / `twig unpark [id]` | closes the card's herdr workspace, keeping worktrees, branches, memo and sessions, and records `.parked.json`; `twig open` brings it back; `--undo` removes the marker |
+| `twig rm <id> [--keep-sessions]` | removes the card's worktrees, folder and herdr workspace; the agent's conversations are archived only with `--keep-sessions` |
+| `twig park [id] [-f] [--no-snapshot] [--undo]` / `twig unpark [id]` | saves the card's herdr layout and conversations, closes the workspace (worktrees, branches, memo and sessions stay) and records `.parked.json`; `twig open` rebuilds it; `--undo` removes the marker and the saved layout |
 | `twig clean [-n] [-y] [--branches] [-f]` | removes finished cards (branches merged or work item closed), asking per card |
 | `twig prune` | cleans up orphaned worktree records |
 | `twig doctor [--json]` | checks dependencies, login and config without changing anything |
@@ -180,6 +180,9 @@ Opens a card in one target:
 | `herdr` | `twig herdr <id>` |
 | `code` | `twig code [id]` |
 | `default` (or omitted) | the target set in `[open] default` (`herdr` if unset) |
+
+`--default-layout` (herdr target) ignores the layout saved by `twig park` and creates the default
+one; see [`twig park`](#twig-park-id--f---no-snapshot---undo).
 
 `twig herdr` and `twig code` are aliases that go through the same code path, with the same
 options and errors. Without `<id>`, the card is inferred as in `twig code` (see below); with
@@ -359,7 +362,7 @@ Use it after renaming a branch or changing the config.
 |---|---|
 | `--refetch` | drops the cache and fetches the card data from the provider again |
 
-## `twig rm <id> [--branches] [-f]`
+## `twig rm <id> [--branches] [-f] [--keep-sessions]`
 
 Removes the card's worktrees and folder, and closes its herdr workspace. Refuses if any
 repo has uncommitted changes or if an agent is running (`working` or `blocked`) in the
@@ -371,13 +374,15 @@ when one exists, `rm` prints where it is kept.
 |---|---|
 | `--branches` | also deletes the local branches |
 | `-f`, `--force` | skips both checks (uncommitted changes and running agent) and the `pre_rm` hooks |
+| `--keep-sessions` | archives the agent's conversations (Claude Code) in `memos/<id>-<provider>/sessions/` for `twig new` to restore; the default is `[agent] keep_sessions`, which is `false` |
+| `--no-keep-sessions` | doesn't archive them, even with `keep_sessions = true` |
 
 Hooks: `pre_rm` runs after the checks and aborts the removal if it fails; `post_rm` runs at the end (warns on failure).
 
-## `twig park [id] [-f] [--undo]`
+## `twig park [id] [-f] [--no-snapshot] [--undo]`
 
-Closes the card's herdr workspace to free resources while the card waits, without touching
-worktrees, branches, the memo or the agent sessions (no `git worktree remove`, no archive).
+Saves the card's herdr workspace and closes it to free resources while the card waits, without
+touching worktrees, branches, the memo or the agent sessions (no `git worktree remove`, no archive).
 Without an id, the card of the current directory. Refuses if an agent is running (`working`
 or `blocked`) in the workspace, unless `-f`/`--force`. Without herdr installed or running,
 there is nothing to close. It refuses to run from inside the card's own herdr workspace
@@ -389,9 +394,40 @@ when unavailable), which `twig ls` / `twig status` show as "parked since ...". P
 keeps the first marker. `twig park <id> --undo` (or `twig unpark <id>`) removes it without
 opening anything; `twig open` / `twig herdr` do not. Format: [PARKED.md](PARKED.md).
 
+**Snapshot.** Before closing, `park` writes `<card>/.twig-park-layout.json` (kept apart from
+`.parked.json`, see [PARKED.md](PARKED.md#layout-snapshot-twig-park-layoutjson)) with every tab
+(label and order), the split tree of each one (direction and ratio, as `herdr pane layout`
+reports it) and each pane: label, folder and what it was running. Agents are recorded with their
+provider and session id; panes and tabs made by hand are included, panes closed by the user are
+simply absent. If the split layout can't be read, the tab's panes are saved side by side.
+
+`twig open <id>` / `twig herdr <id>` on a card with a snapshot (and no workspace) rebuild it
+instead of the default layout:
+
+- tabs, splits and proportions come back as they were; panes closed before the park stay closed
+  and new ones come back (the snapshot is the source of truth);
+- agents resume their exact conversation: `claude --resume <id>` (Codex: `codex resume <id>`);
+  with no known id, `--continue` (`resume --last`) when the folder has a conversation, else the
+  agent starts blank. With `[park] resume_sessions = false` they start blank;
+- `run` panes run the repo's `run` command again if it has `autorun`; shell panes return to their
+  folder (the command a shell was running is not saved);
+- every pane gets the card's env (ports, `PORT`, the repo's `env`);
+- a pane whose folder no longer exists (a repo removed from the card) is skipped with a warning;
+- the snapshot is deleted after a restore. If it can't be restored, twig warns and creates
+  the default layout.
+
+| Option | Description |
+|---|---|
+| `-f`, `--force` | parks even with a running agent |
+| `--no-snapshot` | doesn't save the layout, and drops an older snapshot (what `park` did before); `[park] snapshot = false` does the same always |
+| `--undo` | removes the marker and the snapshot, without opening or closing anything |
+
+`twig open <id> --default-layout` (and `twig herdr <id> --default-layout`) ignores the snapshot and
+creates the default layout; the snapshot is kept.
+
 VS Code is not closed: the `code` CLI cannot close a window, so `park` warns and you close
 it by hand. To come back, `twig open <id>` (or `twig herdr <id>` / `twig code <id>`) recreates
-the workspace; the agent resumes its session.
+the workspace.
 
 ## `twig run [id] start|stop|restart [--repos a,b]`
 

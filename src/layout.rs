@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// How the panes of a tab are arranged.
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq, clap::ValueEnum)]
@@ -78,7 +78,8 @@ impl Layout {
 }
 
 /// Where a split puts the new pane.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Dir {
     Right,
     Down,

@@ -23,7 +23,11 @@ provider = "claude"               # "claude" | "codex"
 # command      = "claude"         # what `twig herdr` runs in the agent tab (default: the provider's)
 # context_file = "CLAUDE.md"      # card context file (default: CLAUDE.md / AGENTS.md)
 # resume_sessions = false        # resume the last conversation when reopening a card
-# keep_sessions = true            # archive/restore Claude Code sessions on rm/new (experimental)
+# keep_sessions = false           # archive Claude Code sessions on rm (restored by new); or `twig rm --keep-sessions`
+
+# [park]
+# snapshot        = true          # `twig park` saves the layout; `twig open` rebuilds it
+# resume_sessions = true          # restored agents resume their own conversation
 
 [provider]
 default = "az"                    # "az" | "gh"
@@ -156,9 +160,18 @@ clone.
 | `command` | the provider's (`claude` / `codex`) | command that starts the agent in herdr's `agent` tab |
 | `context_file` | the provider's (`CLAUDE.md` / `AGENTS.md`) | name of the card's context file; a file name, not a path |
 | `resume_sessions` | `false` | when twig creates an agent pane (`twig open` / `herdr` after `park`, a closed pane, a restored card) without a first prompt, it runs `claude --continue` (Codex: `codex resume --last`) so the last conversation of that repo continues. For Claude, only if the repo has a saved session. Needs the harness to still hold the session (see `keep_sessions`) |
-| `keep_sessions` | `true` | (experimental) `twig rm` moves the Claude Code sessions of the card's repos to `memos/<id>-<provider>/sessions/<repo>/` and `twig new` / `twig add-repo` restore them. Claude Code only; see [MEMORY.md](MEMORY.md#agent-sessions) |
+| `keep_sessions` | `false` | (experimental) `twig rm` moves the Claude Code sessions of the card's repos to `memos/<id>-<provider>/sessions/<repo>/`; `twig new` / `twig add-repo` restore whatever is archived, whatever this is set to. `twig rm --keep-sessions` / `--no-keep-sessions` decide per removal. Until v0.9.1 the default was `true`: `twig doctor` warns while the key isn't set. Claude Code only; see [MEMORY.md](MEMORY.md#agent-sessions) |
 
 The section used to be called `[ai]`; the old name is still accepted.
+
+### `[park]`
+
+What `twig park` saves and `twig open` brings back (see [COMMANDS.md](COMMANDS.md#twig-park-id--f---no-snapshot---undo)).
+
+| Field | Default | Description |
+|---|---|---|
+| `snapshot` | `true` | `twig park` records the herdr workspace (tabs, splits, panes, agent sessions) in `<card>/.twig-park-layout.json` and `twig open` rebuilds it. `false` = park only closes the workspace; `twig park --no-snapshot` does that once |
+| `resume_sessions` | `true` | restored agent panes resume their exact conversation (`claude --resume <id>`); `false` starts them blank. Independent of `[agent] resume_sessions`, which is about panes created without a snapshot |
 
 ### `[provider]`
 

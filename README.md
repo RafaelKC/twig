@@ -244,10 +244,13 @@ on `new`, `add-repo` and `refresh`. This is the first, simple version of
 [#16](https://github.com/RafaelKC/twig/issues/16) and the format may still change; design and
 what is missing (consolidation, size cap, export on `rm`) in [docs/MEMORY.md](docs/MEMORY.md).
 
-Similarly (experimental), `twig rm` archives the Claude Code sessions of the card's repos in
-`memos/<id>-<provider>/sessions/<repo>/` and `twig new` / `twig add-repo` restore them; turn it
-off with `[agent] keep_sessions = false`. With `[agent] resume_sessions = true`, reopening a
-card's workspace resumes the last conversation (`claude --continue`, `codex resume --last`). Transcripts may contain secrets; see
+Similarly (experimental), `twig rm --keep-sessions` (or `[agent] keep_sessions = true`) archives
+the Claude Code sessions of the card's repos in `memos/<id>-<provider>/sessions/<repo>/` and
+`twig new` / `twig add-repo` restore them; by default `rm` doesn't keep them. `twig park` saves the
+workspace layout and each agent's session, and `twig open` rebuilds it with every agent in its own
+conversation (`--no-snapshot` / `--default-layout` to skip; `[park]` in the config). With
+`[agent] resume_sessions = true`, other new agent panes resume the last conversation
+(`claude --continue`, `codex resume --last`). Transcripts may contain secrets; see
 [docs/MEMORY.md](docs/MEMORY.md#agent-sessions).
 
 ## Configuration

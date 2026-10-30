@@ -124,7 +124,7 @@ pub fn run(cfg: &Config, dry_run: bool, yes: bool, branches: bool, force: bool) 
             ui::info(format!("card {id} kept"));
             continue;
         }
-        if let Err(e) = commands::rm(&card_config(id)?, id, branches, force) {
+        if let Err(e) = commands::rm(&card_config(id)?, id, branches, force, None) {
             ui::warn(format!("card {id}: {e:#}"));
             failed.push(id.clone());
         }

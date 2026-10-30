@@ -1,5 +1,6 @@
-//! Agent sessions archive (experimental): `twig rm` moves the Claude Code transcripts of a
-//! card's repos next to the memo, and `twig new` / `twig add-repo` move them back.
+//! Agent sessions archive (experimental): `twig rm --keep-sessions` (or `[agent] keep_sessions`)
+//! moves the Claude Code transcripts of a card's repos next to the memo, and `twig new` /
+//! `twig add-repo` move them back.
 //!
 //! Claude Code keeps them in `~/.claude/projects/<cwd with every non-alphanumeric as '-'>/`.
 //! The archive is `<worktrees>/memos/<id>-<provider>/sessions/<repo>/`. The format is internal
@@ -30,9 +31,9 @@ fn projects_dir() -> Option<PathBuf> {
     Some(base.join("projects"))
 }
 
-/// Whether the feature applies: enabled in `[agent] keep_sessions` and the agent is Claude Code.
+/// Whether the feature applies: the agent is Claude Code.
 fn active(cfg: &Config) -> bool {
-    cfg.ai.keep_sessions && cfg.ai.provider == AgentKind::Claude
+    cfg.ai.provider == AgentKind::Claude
 }
 
 /// Whether there is a conversation to resume in `wt`. Only Claude Code is checked (`--continue`
@@ -116,8 +117,9 @@ fn summary(done: &[(String, usize)]) -> String {
 }
 
 /// `twig rm`: archive the sessions of the card's repos; call before the folder is removed.
-pub fn archive(cfg: &Config, id: &str, repos: &[String]) {
-    if !active(cfg) {
+/// `keep` is the `--keep-sessions` / `--no-keep-sessions` flag, which wins over the config.
+pub fn archive(cfg: &Config, id: &str, repos: &[String], keep: Option<bool>) {
+    if !active(cfg) || !keep.unwrap_or(cfg.ai.keep_sessions) {
         return;
     }
     let Some(projects) = projects_dir() else {

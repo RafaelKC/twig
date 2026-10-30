@@ -39,4 +39,14 @@ cache (`.ado.json` / `.gh.json`) and, with neither, writes `null` and warns.
 - `twig open` / `twig herdr` do **not** remove it: working on the card again doesn't mean it
   left the wait. Only `--undo` does.
 - `twig rm` removes it with the card folder.
+- `--undo` also deletes the layout snapshot (below).
 - `twig ls --json` and `twig status --json` expose `since` as `parked_since` (`null` when not parked).
+
+## Layout snapshot (`.twig-park-layout.json`)
+
+Besides the marker, `twig park` writes `<card>/.twig-park-layout.json` with the herdr workspace
+(tabs, split tree, panes and the agents' session ids) so `twig open` can rebuild it. It is
+**not** part of the contract above: it is private to twig, versioned by its own `v`, and may
+change. It is deleted after a restore, by `twig park --undo` and by `twig rm`; `twig park
+--no-snapshot` (or `[park] snapshot = false`) skips it. See
+[COMMANDS.md](COMMANDS.md#twig-park-id--f---no-snapshot---undo).
