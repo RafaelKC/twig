@@ -174,9 +174,13 @@ pub fn merge_card_file(doc: &mut DocumentMut, file: &Path) -> Result<()> {
         return Ok(());
     };
     for (k, v) in over.as_table().iter() {
+        // `[herdr.layout]` is read by `layout::read_card_file`
+        if k == "herdr" {
+            continue;
+        }
         let Some(repos) = (k == "repos").then(|| v.as_table()).flatten() else {
             bail!(
-                "{}: only [repos.<name>] tables are allowed in a card's {FILE} (found `{k}`)",
+                "{}: only [repos.<name>] tables and [herdr.layout] are allowed in a card's {FILE} (found `{k}`)",
                 file.display()
             );
         };
@@ -285,5 +289,8 @@ mod tests {
         fs::write(&f, "[git]\nbase_branch = \"x\"\n").unwrap();
         let err = merge_card_file(&mut doc, &f).unwrap_err().to_string();
         assert!(err.contains("only [repos.<name>]"), "{err}");
+
+        fs::write(&f, "[herdr.layout]\nagent = \"columns\"\n").unwrap();
+        merge_card_file(&mut doc, &f).unwrap();
     }
 }

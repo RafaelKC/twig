@@ -183,6 +183,30 @@ The section used to be called `[ai]`; the old name is still accepted.
 |---|---|---|
 | `open_on_new` | `false` | focuses the card's herdr workspace at the end of `twig new` / `twig add-repo` |
 
+`[herdr.layout]` sets how the panes of each tab are arranged:
+
+```toml
+[herdr.layout]
+agent = "columns"                 # the agent tab
+run   = "rows"                    # the run tab
+order = ["api", "web", "sdk"]     # order of the panes; the other repos follow in the card's order
+```
+
+| Preset | Result |
+|---|---|
+| `main-left` (default) | first repo in a full-height column, the others stacked on the right (herdr's plain splits, as before) |
+| `columns` | all side by side, equal widths |
+| `rows` | all stacked, equal heights |
+| `main-top` | first repo on top, the others in equal columns below |
+| `grid` | two columns, as many rows as needed, filled row by row |
+
+`agent` and `run` default to `main-left`. The layout can also be set in a template
+(`[<template>.layout]`) and in the card's `.twig.toml` (`[herdr.layout]`, which `twig layout` writes).
+Precedence, lowest to highest: config, template, card `.twig.toml` (key by key). A new pane goes where the preset
+puts it (`twig new`, `twig add-repo`, `twig herdr`); in any preset other than `main-left`, adding a pane to an existing
+tab then rebuilds that tab so the shares are equal again (panes and their processes are kept; see
+[`twig layout`](COMMANDS.md#twig-layout-id---tab-agentrun-preset)). `twig doctor` validates the preset names and the repos in `order`.
+
 The herdr workspace is **always created** by `twig new`; `open_on_new` only decides
 whether it gets opened. The `.code-workspace` is only generated with `vscode.enabled = true`.
 
@@ -399,6 +423,7 @@ post_create = ["echo created $TWIG_CARD_ID"]
 
 - **Precedence.** Explicit flags (`--repos`, `--branch`, `--base`, `--install`/`--no-setup`, `--fix`,
   `--prompt`) beat the template, which beats the config.
+- **Layout.** `[<name>.layout]` (`agent`, `run`, `order`) sets the herdr pane layout of the card (see [`[herdr]`](#herdr)); the card's own `.twig.toml` still wins.
 - **Autorun.** `autorun` in a template overrides the repos' `autorun` (config, repo `.twig.toml`, card
   `.twig.toml`) for the whole card: `false` starts nothing in herdr's `run` tab, `true` starts every
   repo that has `run`. The table form sets it per repo (`{ api = true, ui = false }`); repos not listed

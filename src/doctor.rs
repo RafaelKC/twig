@@ -288,6 +288,7 @@ pub fn run(json: bool) -> Result<()> {
         }
     }
 
+    layout_section(&mut r, &cfg);
     templates_section(&mut r, &cfg);
 
     r.section("orphaned worktrees");
@@ -308,6 +309,24 @@ pub fn run(json: bool) -> Result<()> {
     }
 
     finish(r)
+}
+
+fn layout_section(r: &mut Report, cfg: &Config) {
+    let l = &cfg.herdr.layout;
+    if l.agent.is_none() && l.run.is_none() && l.order.is_empty() {
+        return;
+    }
+    r.section("herdr layout");
+    for (tab, p) in [("agent", l.agent), ("run", l.run)] {
+        if let Some(p) = p {
+            r.ok(format!("{tab} tab: {}", p.name()));
+        }
+    }
+    for repo in l.order.iter().filter(|r| !cfg.repos.contains_key(*r)) {
+        r.error(format!(
+            "herdr.layout.order: repo `{repo}` is not in the config (add it under [repos.{repo}])"
+        ));
+    }
 }
 
 fn templates_section(r: &mut Report, cfg: &Config) {

@@ -3438,3 +3438,171 @@ fn run_infers_the_card_from_the_directory() {
     assert_exit(&s.run_with(c, ""), 0);
     assert!(herdr_calls(&log).contains("send-keys w1:p2 C-c"));
 }
+
+// ───────────────────────── herdr layout ─────────────────────────
+
+/// Card `123` with repos r1..r3 and a `herdr` stub that logs its calls: the `agent` tab has the
+/// panes of the repos in `panes`, and a `twig-layout` tab exists (as after a pane left the tab).
+fn layout_sandbox(extra: &str, panes: &[&str]) -> (Sandbox, PathBuf) {
+    let s = Sandbox::new();
+    for r in ["r1", "r2", "r3"] {
+        s.git_repo(&format!("repos/{r}"));
+        fs::create_dir_all(s.path(&format!("wt/123/{r}/.git"))).unwrap();
+    }
+    s.write_config(&format!(
+        "version = 1\n[paths]\nworktrees = \"{wt}\"\nrepos = \"{repos}\"\n{extra}\n[repos.r1]\n[repos.r2]\n[repos.r3]\n",
+        wt = s.path("wt").display(),
+        repos = s.path("repos").display(),
+    ));
+    let list: Vec<String> = panes
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            format!(
+                r#"{{"pane_id":"w1:p{n}","tab_id":"t1","cwd":"{cwd}"}}"#,
+                n = i + 1,
+                cwd = s.path(&format!("wt/123/{r}")).display()
+            )
+        })
+        .collect();
+    let log = s.path("herdr.log");
+    s.stub(
+        "herdr",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[{{"label":"123","workspace_id":"w1"}}]}}}}' ;;
+  "tab list") echo '{{"result":{{"tabs":[{{"label":"agent","tab_id":"t1"}},{{"label":"twig-layout","tab_id":"t2"}}]}}}}' ;;
+  "pane list")
+    # a pane created by a split shows up in the next listing
+    if [ -e {log}.split ]; then extra=',{{"pane_id":"w1:p9","tab_id":"t1","cwd":"{r3}"}}'; else extra=; fi
+    echo '{{"result":{{"panes":[{panes}'"$extra"']}}}}' ;;
+  "pane split") : > {log}.split; echo '{{"result":{{"pane":{{"pane_id":"w1:p9"}}}}}}' ;;
+  *) echo '{{"result":{{}}}}' ;;
+esac"#,
+            log = log.display(),
+            r3 = s.path("wt/123/r3").display(),
+            panes = list.join(",")
+        ),
+    );
+    (s, log)
+}
+
+#[test]
+fn herdr_places_a_new_pane_by_the_layout_preset() {
+    let (s, log) = layout_sandbox("[herdr.layout]\nagent = \"columns\"\n", &["r1", "r2"]);
+    let o = s.run(&["herdr", "123"]);
+    assert_exit(&o, 0);
+    let calls = herdr_calls(&log);
+    // r3 goes right of r2, which keeps half of the room that is left
+    assert!(
+        calls.contains("pane split w1:p2 --direction right") && calls.contains("--ratio 0.5000"),
+        "{calls}"
+    );
+    // three panes in a preset other than main-left are rebalanced
+    assert!(
+        calls.contains("pane move w1:p2 --new-tab --label twig-layout"),
+        "{calls}"
+    );
+    assert!(calls.contains("tab close t2"), "{calls}");
+}
+
+#[test]
+fn herdr_on_a_fresh_workspace_does_not_rebalance_the_new_tab() {
+    let (s, log) = layout_sandbox("[herdr.layout]\nagent = \"columns\"\n", &[]);
+    let state = s.path("panes.txt");
+    fs::write(
+        &state,
+        format!(
+            r#"{{"pane_id":"w1:p1","tab_id":"t1","cwd":"{}"}}"#,
+            s.path("wt/123/r1").display()
+        ),
+    )
+    .unwrap();
+    s.stub(
+        "herdr",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[]}}}}' ;;
+  "workspace create") echo '{{"result":{{"workspace":{{"workspace_id":"w1"}},"tab":{{"tab_id":"t1"}}}}}}' ;;
+  "tab list") echo '{{"result":{{"tabs":[{{"label":"agent","tab_id":"t1"}}]}}}}' ;;
+  "pane list") read -r panes < {state}; echo '{{"result":{{"panes":['"$panes"']}}}}' ;;
+  "pane split")
+    read -r panes < {state}
+    n=2; case "$panes" in *p2*) n=3 ;; esac
+    prev=; for a in "$@"; do [ "$prev" = "--cwd" ] && cwd=$a; prev=$a; done
+    printf '%s' "$panes,{{\"pane_id\":\"w1:p$n\",\"tab_id\":\"t1\",\"cwd\":\"$cwd\"}}" > {state}
+    echo '{{"result":{{"pane":{{"pane_id":"w1:p'$n'"}}}}}}' ;;
+  *) echo '{{"result":{{}}}}' ;;
+esac"#,
+            log = log.display(),
+            state = state.display(),
+        ),
+    );
+    assert_exit(&s.run(&["herdr", "123"]), 0);
+    let calls = herdr_calls(&log);
+    assert_eq!(calls.matches("pane split").count(), 2, "{calls}");
+    assert!(
+        !calls.contains("pane move") && !calls.contains("tab close"),
+        "{calls}"
+    );
+}
+
+#[test]
+fn herdr_without_layout_stacks_on_the_last_pane_as_before() {
+    let (s, log) = layout_sandbox("", &["r1", "r2"]);
+    assert_exit(&s.run(&["herdr", "123"]), 0);
+    let calls = herdr_calls(&log);
+    assert!(
+        calls.contains("pane split w1:p2 --direction down"),
+        "{calls}"
+    );
+    assert!(
+        !calls.contains("--ratio") && !calls.contains("pane move"),
+        "{calls}"
+    );
+}
+
+#[test]
+fn layout_command_rebuilds_the_tab_and_saves_the_choice() {
+    let (s, log) = layout_sandbox("", &["r1", "r2", "r3"]);
+    assert_exit(&s.run(&["layout", "123", "--tab", "agent", "columns"]), 0);
+    let calls = herdr_calls(&log);
+    assert!(
+        calls.contains("pane move w1:p2 --new-tab --label twig-layout"),
+        "{calls}"
+    );
+    assert!(
+        calls.contains("pane move w1:p3 --tab t1 --target-pane w1:p2 --split right")
+            && calls.contains("--ratio 0.5000"),
+        "{calls}"
+    );
+    assert!(
+        calls.contains("pane move w1:p2 --tab t1 --target-pane w1:p1 --split right"),
+        "{calls}"
+    );
+    assert!(!calls.contains("pane close"), "{calls}");
+    let saved = fs::read_to_string(s.path("wt/123/.twig.toml")).unwrap();
+    assert!(saved.contains("agent = \"columns\""), "{saved}");
+    // the saved layout is the card's from now on
+    let (s2, log2) = layout_sandbox("", &["r1", "r2"]);
+    fs::write(s2.path("wt/123/.twig.toml"), saved).unwrap();
+    assert_exit(&s2.run(&["herdr", "123"]), 0);
+    assert!(herdr_calls(&log2).contains("--ratio 0.5000"));
+}
+
+#[test]
+fn layout_command_rejects_an_unknown_preset() {
+    let (s, log) = layout_sandbox("", &["r1", "r2", "r3"]);
+    let o = s.run(&["layout", "123", "diagonal"]);
+    assert_exit(&o, 1);
+    assert_eq!(herdr_calls(&log), "");
+}
+
+#[test]
+fn doctor_flags_a_layout_order_with_an_unknown_repo() {
+    let (s, _) = layout_sandbox("[herdr.layout]\norder = [\"r2\", \"zzz\"]\n", &["r1"]);
+    let o = s.run(&["doctor"]);
+    assert_has(&o, "herdr.layout.order: repo `zzz`");
+}
