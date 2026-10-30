@@ -4,6 +4,38 @@ All notable changes to twig are listed here, newest first. Each version links to
 [GitHub release](https://github.com/RafaelKC/twig/releases), and entries name the pull request
 (and issue) they came from.
 
+## [0.10.0] - 2026-10-30
+
+twig v0.10.0 adds configurable herdr tab layouts with a new `twig layout` command, and `twig park` now saves and restores your workspace layout and agent conversations. `twig rm` no longer keeps conversations by default, so check the migration note below.
+
+### Highlights
+
+- `twig park` saves the workspace layout (tabs, splits with direction and ratio, and panes, including ones you made by hand) and each agent's conversation. `twig open` rebuilds it. Panes you closed on purpose stay closed. (#104, #100)
+- `twig park --no-snapshot`, or `[park] snapshot = false`, skips the save and deletes any older snapshot. `park --undo` also removes the snapshot. (#104, #100)
+- Tab layouts are now configurable through `[herdr.layout]`, with the presets `columns`, `rows`, `main-left` (the default), `main-top` and `grid`. `agent` and `run` tabs can use different presets, and `order` sets the pane order. (#101, #99)
+- Layout settings are read from the config, then the template (`[<template>.layout]`), then the card's `.twig.toml`, key by key. (#101, #99)
+- New `twig layout [id] [--tab agent|run] <preset>` rearranges an existing tab without closing panes. It saves your choice in the card's `.twig.toml`, so `add-repo` and `herdr` follow the same layout. (#101, #99)
+- `twig rm --keep-sessions` archives conversations for that one removal, and `--no-keep-sessions` overrides `keep_sessions = true` in your config. (#104, #100)
+
+### Improvements
+
+- `twig new`, `twig herdr` and `twig add-repo` build panes with the preset's splits. With `columns` and `rows`, widths or heights come out equal. Without layout config, `main-left` makes the same splits as before. (#101, #99)
+- When a new pane is added to an existing tab and the preset isn't `main-left`, tabs with 3 or more panes are rebuilt so the proportions stay even. (#101, #99)
+- `twig doctor` warns about unknown repos in a layout `order`, and `twig template edit` does the same for templates. An invalid preset in the config or a template is rejected on load. An invalid preset in a card's `.twig.toml` only produces a warning when you use the card. (#101, #99)
+- If herdr's layout output can't be parsed during `twig park`, the tab's panes are saved side by side with a warning instead of failing. (#104, #100)
+
+### Fixes
+
+- `install.ps1` no longer aborts at the checksum step with "Get-FileHash not recognized" when Windows PowerShell 5.1 inherits `PSModulePath` from pwsh 7. (#94)
+
+### Breaking changes and migration
+
+- **`[agent] keep_sessions` now defaults to `false`.** `twig rm` no longer archives agent conversations unless you ask. (#104, #100)
+  - To keep the old behavior, set `keep_sessions = true` under `[agent]` in your config.
+  - To archive a single removal, run `twig rm --keep-sessions`.
+  - `twig doctor` warns while your config doesn't set the key.
+  - `twig new` and `twig add-repo` still restore any existing archive, whatever `keep_sessions` says.
+
 ## [Unreleased]
 
 ### Improvements
@@ -185,6 +217,7 @@ First release: twig, a Rust CLI that replaces `card.sh`.
 - herdr plugin and AI skill.
 - `install.sh` and a release workflow with checksums and Sigstore signatures.
 
+[0.10.0]: https://github.com/RafaelKC/twig/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/RafaelKC/twig/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/RafaelKC/twig/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/RafaelKC/twig/compare/v0.7.0...v0.8.0
