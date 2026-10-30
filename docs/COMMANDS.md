@@ -18,6 +18,7 @@
 | `twig ports [id] [--env]` | shows the card's dev server ports; `--env` prints `export` lines |
 | `twig env [id] [--repo X]` | prints `export` lines with the full environment of a herdr pane (ports, `PORT`, repo `env`, markers) |
 | `twig run [id] start\|stop\|restart [--repos a,b]` | starts, stops (Ctrl+C) or restarts the apps of the card's `run` tab in herdr |
+| `twig layout [id] [--tab agent\|run] <preset>` | rearranges the panes of a herdr tab (`columns`, `rows`, `main-left`, `main-top`, `grid`) |
 | `twig refresh <id>` | regenerates `.code-workspace` and the context file (`CLAUDE.md` / `AGENTS.md`) |
 | `twig memo [text] [-c id]` (in development) | appends a dated line to the card memory (`MEMORY.md`, survives `rm`); without text, shows it. See [MEMORY.md](MEMORY.md) |
 | `twig sync <id> [--merge\|--rebase] [-n]` | fetches the base branch and rebases/merges it into every repo of the card |
@@ -409,6 +410,24 @@ ports). Without an id, the card of the current directory.
 
 Prints one short line per repo (`[api] stopped`, `[web] running`). Errors if the card has no
 herdr workspace (`twig herdr <id>` creates it) or the herdr server is not running.
+
+## `twig layout [id] [--tab agent|run] <preset>`
+
+Rearranges the panes of a tab of the card's herdr workspace (`--tab` defaults to `agent`) in one
+of the presets of [`[herdr.layout]`](CONFIG.md#herdr): `columns`, `rows`, `main-left`, `main-top`
+or `grid`. Without an id, the card of the current directory.
+
+```bash
+twig layout 52644 columns
+twig layout 52644 --tab run rows
+```
+
+Panes are not closed and their processes keep running (same terminals): herdr can't move a pane
+within its own tab, so every pane but the first leaves through a temporary tab (`twig-layout`) and
+comes back one by one with the preset's splits and sizes; the temporary tab is closed at the end.
+The pane order is the config's `order` (else the card's). The preset is saved in the card's
+`.twig.toml` (`[herdr.layout]`), so `twig add-repo` and `twig herdr` keep following it. Errors if the
+card has no herdr workspace or no such tab.
 
 ## `twig memo [TEXT] [--card <id>]`
 

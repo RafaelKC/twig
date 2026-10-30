@@ -48,6 +48,13 @@ pub fn cards_or_run_actions() -> Vec<CompletionCandidate> {
     c
 }
 
+/// `twig layout <TAB>`: a card id or the preset.
+pub fn cards_or_presets() -> Vec<CompletionCandidate> {
+    let mut c = cards();
+    c.extend(["columns", "rows", "main-left", "main-top", "grid"].map(CompletionCandidate::new));
+    c
+}
+
 pub fn repos() -> Vec<CompletionCandidate> {
     Config::load()
         .map(|cfg| cfg.repos.keys().map(CompletionCandidate::new).collect())
