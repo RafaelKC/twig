@@ -125,8 +125,12 @@ build_context() {
 # claude_run <name> <allowed-tools> [extra claude args]; the prompt is on stdin.
 claude_run() {
   local name=$1 tools=$2; shift 2
+  local rc=0
   (cd "$WT" && timeout "$CLAUDE_TIMEOUT" env -u GH_TOKEN claude -p --output-format text --permission-mode acceptEdits \
-    --allowedTools "$tools" "$@" ${AGENT_MODEL:+--model "$AGENT_MODEL"}) | tee "$LOG_DIR/$name.log"
+    --allowedTools "$tools" "$@" ${AGENT_MODEL:+--model "$AGENT_MODEL"}) 2>"$LOG_DIR/$name.err" | tee "$LOG_DIR/$name.log" || rc=$?
+  if [ "$rc" -ne 0 ]; then # say why in the issue instead of a bare line number
+    die "claude ($name) exited with $rc: $(tail -c 400 "$LOG_DIR/$name.err" "$LOG_DIR/$name.log" 2>/dev/null | tr '\n' ' ')"
+  fi
 }
 
 BUILD_TOOLS='Bash,Edit,Write,Read,Grep,Glob'
