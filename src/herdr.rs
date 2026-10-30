@@ -525,10 +525,16 @@ pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String])
     if matches!(action, RunAction::Start | RunAction::Restart) {
         ports::write(cfg, id)?;
         let run_repos = tab_repos(cfg, &card::repos_ordered(cfg, &dir), true, false);
-        let slots = Slots {
-            preset: cfg.herdr.layout.preset("run"),
-            repos: &run_repos,
-            card_dir: &dir,
+        let preset = cfg.herdr.layout.preset("run");
+        // the slots are the repos that have a pane, plus the one being added
+        let present = |adding: Option<&str>| -> Result<Vec<String>> {
+            let mut v = Vec::new();
+            for r in &run_repos {
+                if Some(r.as_str()) == adding || run_pane(&ws, &dir.join(r))?.is_some() {
+                    v.push(r.clone());
+                }
+            }
+            Ok(v)
         };
         let mut grew = false;
         for repo in &targets {
@@ -550,11 +556,23 @@ pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String])
                     );
                 }
             } else {
+                let repos = present(Some(repo))?;
+                let slots = Slots {
+                    preset,
+                    repos: &repos,
+                    card_dir: &dir,
+                };
                 grew |= ensure_panel(cfg, id, &ws, "run", repo, cmd, &wt, false, &slots)?;
             }
             ui::ok(format!("[{}] running", cfg.short(repo)));
         }
         if grew {
+            let repos = present(None)?;
+            let slots = Slots {
+                preset,
+                repos: &repos,
+                card_dir: &dir,
+            };
             if let Err(e) = rebalance(&ws, "run", &slots) {
                 ui::warn(format!("herdr: could not rebalance the run tab: {e:#}"));
             }
@@ -592,79 +610,119 @@ fn arrange(ws: &str, tab_label: &str, slots: &Slots) -> Result<()> {
     if panes.len() < 2 {
         return Ok(());
     }
-    let mut moved = 0;
-    let result = (|| -> Result<()> {
-        herdr(&[
-            "pane",
-            "move",
-            &panes[1],
-            "--new-tab",
-            "--label",
-            TMP_TAB,
-            "--no-focus",
-        ])?;
-        moved = 1;
-        let tmp = find_tab(ws, TMP_TAB)?.context("herdr did not create the temporary tab")?;
-        for p in &panes[2..] {
-            herdr(&[
-                "pane",
-                "move",
-                p,
-                "--tab",
-                &tmp,
-                "--target-pane",
-                &panes[1],
-                "--split",
-                "right",
-                "--no-focus",
-            ])?;
-            moved += 1;
-        }
-        for i in 1..panes.len() {
-            let st = layout::step(slots.preset, panes.len(), i).context("no layout step")?;
-            let ratio = st.ratio.map(layout::ratio_arg);
-            let mut args = vec![
-                "pane",
-                "move",
-                &panes[i],
-                "--tab",
-                &tab,
-                "--target-pane",
-                &panes[st.target],
-                "--split",
-                st.dir.as_str(),
-                "--no-focus",
-            ];
-            if let Some(r) = &ratio {
-                args.extend(["--ratio", r]);
-            }
-            herdr(&args)?;
-            moved -= 1;
-        }
-        Ok(())
-    })();
-    if result.is_err() && moved > 0 {
+    let mut in_tmp: Vec<String> = Vec::new();
+    let result = move_sequence(
+        slots.preset,
+        &panes,
+        &tab,
+        &mut |args| herdr(args).map(drop),
+        &mut || find_tab(ws, TMP_TAB)?.context("herdr did not create the temporary tab"),
+        &mut in_tmp,
+    );
+    if !in_tmp.is_empty() {
         // put the panes still waiting back, so none is left behind in the temporary tab
-        for p in &panes[panes.len() - moved..] {
-            herdr_quiet(&[
-                "pane",
-                "move",
-                p,
-                "--tab",
-                &tab,
-                "--target-pane",
-                &panes[0],
-                "--split",
-                "right",
-                "--no-focus",
-            ]);
-        }
+        restore(&panes[0], &tab, &mut in_tmp, &mut |args| {
+            herdr(args).map(drop)
+        });
     }
-    // an emptied tab may already be gone
+    // close the temporary tab only when it is empty: closing it would kill what is left in it
     if let Ok(Some(tmp)) = find_tab(ws, TMP_TAB) {
-        herdr_quiet(&["tab", "close", &tmp]);
+        match tab_panes(ws, &tmp) {
+            Ok(left) if left.is_empty() => herdr_quiet(&["tab", "close", &tmp]),
+            Ok(_) => ui::warn(format!(
+                "herdr: panes were left in the {TMP_TAB} tab; move them back by hand"
+            )),
+            Err(e) => ui::warn(format!("herdr: {e:#}")),
+        }
     }
     result
+}
+
+/// Runs one `herdr` command given its arguments.
+type Runner<'a> = dyn FnMut(&[&str]) -> Result<()> + 'a;
+
+/// The moves of `arrange`: every pane but the first goes to the temporary tab, then comes back
+/// with the preset's splits. `in_tmp` always lists the panes sitting in the temporary tab, so a
+/// failure at any point leaves an exact list to restore.
+fn move_sequence(
+    preset: Preset,
+    panes: &[String],
+    tab: &str,
+    run: &mut Runner,
+    find_tmp: &mut dyn FnMut() -> Result<String>,
+    in_tmp: &mut Vec<String>,
+) -> Result<()> {
+    run(&[
+        "pane",
+        "move",
+        &panes[1],
+        "--new-tab",
+        "--label",
+        TMP_TAB,
+        "--no-focus",
+    ])?;
+    in_tmp.push(panes[1].clone());
+    let tmp = find_tmp()?;
+    for p in &panes[2..] {
+        run(&[
+            "pane",
+            "move",
+            p,
+            "--tab",
+            &tmp,
+            "--target-pane",
+            &panes[1],
+            "--split",
+            "right",
+            "--no-focus",
+        ])?;
+        in_tmp.push(p.clone());
+    }
+    for i in 1..panes.len() {
+        let st = layout::step(preset, panes.len(), i).context("no layout step")?;
+        let ratio = st.ratio.map(layout::ratio_arg);
+        let mut args = vec![
+            "pane",
+            "move",
+            &panes[i],
+            "--tab",
+            tab,
+            "--target-pane",
+            &panes[st.target],
+            "--split",
+            st.dir.as_str(),
+            "--no-focus",
+        ];
+        if let Some(r) = &ratio {
+            args.extend(["--ratio", r]);
+        }
+        run(&args)?;
+        in_tmp.retain(|p| *p != panes[i]);
+    }
+    Ok(())
+}
+
+/// Move the panes listed in `in_tmp` back into `tab`, next to `anchor`. Those that can't be
+/// moved stay in the list (and a warning says so).
+fn restore(anchor: &str, tab: &str, in_tmp: &mut Vec<String>, run: &mut Runner) {
+    for p in std::mem::take(in_tmp) {
+        let ok = run(&[
+            "pane",
+            "move",
+            &p,
+            "--tab",
+            tab,
+            "--target-pane",
+            anchor,
+            "--split",
+            "right",
+            "--no-focus",
+        ]);
+        if let Err(e) = ok {
+            ui::warn(format!("herdr: could not move pane {p} back: {e:#}"));
+            in_tmp.push(p);
+        }
+    }
 }
 
 /// `twig layout`: rearrange a tab of the card's workspace in `preset`, keeping its panes and the
@@ -877,5 +935,79 @@ mod tests {
     fn busy_panes_tolerates_unexpected_shapes() {
         assert!(busy_panes(&json!({})).is_empty());
         assert!(busy_panes(&json!({"result": {"panes": []}})).is_empty());
+    }
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Runs `move_sequence` with a fake herdr that fails on its `fail_at`-th call (1-based) and
+    /// returns (result, panes left in the temporary tab after restoring, calls made).
+    fn simulate(preset: Preset, n: usize, fail_at: usize) -> (bool, Vec<String>, Vec<String>) {
+        let panes: Vec<String> = (0..n).map(|i| format!("p{i}")).collect();
+        let calls = std::cell::RefCell::new(Vec::<String>::new());
+        let tmp = std::cell::RefCell::new(Vec::<String>::new());
+        let mut run = |args: &[&str]| -> Result<()> {
+            let mut c = calls.borrow_mut();
+            if c.len() + 1 == fail_at {
+                c.push("FAIL".into());
+                bail!("boom");
+            }
+            c.push(args.join(" "));
+            let pane = args[2].to_string();
+            let into_tmp = args.contains(&"--new-tab") || args.contains(&"tmp");
+            let mut t = tmp.borrow_mut();
+            t.retain(|p| *p != pane);
+            if into_tmp {
+                t.push(pane);
+            }
+            Ok(())
+        };
+        let mut in_tmp = Vec::new();
+        let r = move_sequence(
+            preset,
+            &panes,
+            "main",
+            &mut run,
+            &mut || Ok("tmp".to_string()),
+            &mut in_tmp,
+        );
+        // the tracked list matches what the fake herdr holds
+        assert_eq!(in_tmp, *tmp.borrow());
+        restore(&panes[0], "main", &mut in_tmp, &mut run);
+        let left = tmp.borrow().clone();
+        let log = calls.borrow().clone();
+        (r.is_ok(), left, log)
+    }
+
+    #[test]
+    fn move_sequence_completes_with_the_tmp_tab_empty() {
+        let (ok, left, calls) = simulate(Preset::Columns, 4, usize::MAX);
+        assert!(ok);
+        assert!(left.is_empty());
+        assert_eq!(calls.len(), 1 + 2 + 3);
+    }
+
+    #[test]
+    fn move_sequence_failure_restores_exactly_what_is_in_the_tmp_tab() {
+        for n in 2..=5 {
+            for fail_at in 1..=(1 + (n - 2) + (n - 1)) {
+                let (ok, left, _) = simulate(Preset::Columns, n, fail_at);
+                assert!(!ok);
+                assert!(left.is_empty(), "n={n} fail_at={fail_at}: {left:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn restore_keeps_panes_it_could_not_move() {
+        let mut in_tmp = ids(&["a", "b"]);
+        restore("x", "t", &mut in_tmp, &mut |args| {
+            if args[2] == "a" {
+                bail!("no")
+            }
+            Ok(())
+        });
+        assert_eq!(in_tmp, ["a"]);
     }
 }
