@@ -76,8 +76,8 @@ The tag triggers [`.github/workflows/release.yml`](../.github/workflows/release.
 |---|---|---|
 | `x86_64-unknown-linux-musl` | `ubuntu-24.04` | static binary, any distro / WSL |
 | `aarch64-unknown-linux-musl` | `ubuntu-24.04-arm` | static binary |
-| `x86_64-apple-darwin` | `macos-14` | Intel Macs |
-| `aarch64-apple-darwin` | `macos-14` | Apple Silicon |
+| `x86_64-apple-darwin` | `macos-15` | Intel Macs |
+| `aarch64-apple-darwin` | `macos-15` | Apple Silicon |
 | `x86_64-pc-windows-msvc` | `windows-2025` | native Windows (beta, like herdr's); also runs on Windows on ARM under emulation |
 
 ## Release notes

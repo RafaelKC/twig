@@ -270,9 +270,29 @@ failed_logs() { # waits (up to 2 min) for the runs of this commit to complete, t
   done
 }
 
+# A job cancelled without a failure (runner lost, superseded run) has no logs to fix: rerun it.
+rerun_cancelled() { # 0 = reran something
+  local sha id n=0; sha=$(git -C "$WT" rev-parse HEAD)
+  for id in $(gh run list --repo "$REPO" --branch "$BRANCH" --commit "$sha" --json databaseId,conclusion \
+    --jq '.[] | select(.conclusion == "cancelled") | .databaseId'); do
+    gh run rerun "$id" --repo "$REPO" --failed >/dev/null 2>&1 && n=$((n + 1))
+  done
+  [ "$n" -gt 0 ]
+}
+
+reruns=0
 for round in $(seq 1 "$MAX_CI_ROUNDS"); do
-  wait_gates && break
-  logs=$(failed_logs)
+  green=0
+  while :; do
+    if wait_gates; then green=1; break; fi
+    logs=$(failed_logs)
+    if [ -z "$logs" ] && [ "$reruns" -lt 3 ] && rerun_cancelled; then
+      reruns=$((reruns + 1)); say "🔁 Gates cancelled ($GATE_REASON) with no failure logs; rerunning (retry $reruns)."
+      continue
+    fi
+    break
+  done
+  [ "$green" -eq 1 ] && break
   [ -n "$logs" ] || die "gates failed ($GATE_REASON) but no failed run logs were found for $(git -C "$WT" rev-parse --short HEAD); see the checks on PR #$PR."
   [ "$round" -lt "$MAX_CI_ROUNDS" ] || die "gates still failing after $MAX_CI_ROUNDS fix rounds: $GATE_REASON (PR #$PR)."
   say "🔧 Gates failed ($GATE_REASON); fixing (round $round)."
