@@ -9,6 +9,7 @@ mod config_kv;
 mod doctor;
 mod herdr;
 mod hooks;
+mod layout;
 mod memo;
 mod overrides;
 mod parked;
@@ -224,6 +225,20 @@ enum Cmd {
         /// Only these repos (comma-separated); each must be in the card and have `run`.
         #[arg(short, long, value_delimiter = ',', add = ArgValueCandidates::new(complete::repos))]
         repos: Vec<String>,
+    },
+    /// Rearrange the panes of a herdr tab: columns, rows, main-left, main-top or grid.
+    ///
+    /// Keeps the panes and the processes in them (they go through a temporary tab and come
+    /// back with the preset's splits). The choice is saved in the card's `.twig.toml`
+    /// (`[herdr.layout]`), so `twig add-repo` and `twig herdr` follow it. Without <ID>, the card
+    /// of the current directory: `twig layout columns`.
+    Layout {
+        /// Card id (optional) followed by the preset: `twig layout [ID] PRESET`.
+        #[arg(num_args = 1..=2, value_name = "ID] [PRESET", add = ArgValueCandidates::new(complete::cards_or_presets))]
+        args: Vec<String>,
+        /// Tab to rearrange.
+        #[arg(short, long, value_enum, default_value = "agent")]
+        tab: LayoutTab,
     },
     /// Regenerate .code-workspace and CLAUDE.md, keeping the "Card context" section.
     Refresh {
@@ -475,6 +490,13 @@ fn run(cli: Cli) -> Result<()> {
         | Cmd::Memo { card: Some(id), .. }
         | Cmd::Open { id: Some(id), .. }
         | Cmd::Code { id: Some(id) } => Some(id.clone()),
+        Cmd::Layout { args, .. } => match parse_layout_args(args)? {
+            (Some(id), _) => Some(id),
+            (None, _) => match card::infer(&cfg) {
+                card::Current::Card(id) => Some(id),
+                card::Current::Dir(_) => None,
+            },
+        },
         Cmd::Run { args, .. } => match parse_run_args(args)? {
             (Some(id), _) => Some(id),
             (None, _) => match card::infer(&cfg) {
@@ -609,6 +631,22 @@ fn run(cli: Cli) -> Result<()> {
             };
             herdr::run_apps(&cfg, &id, action, &repos)
         }
+        Cmd::Layout { args, tab } => {
+            let (id, preset) = parse_layout_args(&args)?;
+            let id = match id {
+                Some(id) => id,
+                None => match card::infer(&cfg) {
+                    card::Current::Card(id) => id,
+                    card::Current::Dir(dir) => {
+                        return Err(anyhow::anyhow!(
+                            "{} is not inside a card; usage: twig layout <id> <preset>",
+                            dir.display()
+                        ))
+                    }
+                },
+            };
+            herdr::set_layout(&cfg, &id, tab.name(), preset)
+        }
         Cmd::Park { id, force, undo } => commands::park(&cfg, id.as_deref(), force, undo),
         Cmd::Unpark { id } => commands::park(&cfg, id.as_deref(), false, true),
         Cmd::Sync {
@@ -681,6 +719,35 @@ fn parse_run_args(args: &[String]) -> Result<(Option<String>, herdr::RunAction)>
     Ok((id, action))
 }
 
+/// Tabs of the card's herdr workspace that `twig layout` can rearrange.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+enum LayoutTab {
+    Agent,
+    Run,
+}
+
+impl LayoutTab {
+    fn name(self) -> &'static str {
+        match self {
+            LayoutTab::Agent => "agent",
+            LayoutTab::Run => "run",
+        }
+    }
+}
+
+/// `twig layout [ID] PRESET`: the id is optional, the preset is always the last argument.
+fn parse_layout_args(args: &[String]) -> Result<(Option<String>, layout::Preset)> {
+    let (id, preset) = match args {
+        [preset] => (None, preset),
+        [id, preset] => (Some(id.clone()), preset),
+        _ => anyhow::bail!("usage: twig layout [id] <preset>"),
+    };
+    let preset = <layout::Preset as clap::ValueEnum>::from_str(preset, true).map_err(|_| {
+        anyhow::anyhow!("unknown layout {preset:?}: use columns, rows, main-left, main-top or grid")
+    })?;
+    Ok((id, preset))
+}
+
 /// Ids of existing cards may be typed as `owner/repo#123`: turn them into the card folder name.
 fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
     let id = match cmd {
@@ -689,7 +756,7 @@ fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
         | Cmd::Refresh { id, .. }
         | Cmd::Sync { id, .. }
         | Cmd::Rm { id, .. } => Some(id),
-        Cmd::Run { args, .. } if args.len() == 2 => args.first_mut(),
+        Cmd::Run { args, .. } | Cmd::Layout { args, .. } if args.len() == 2 => args.first_mut(),
         Cmd::Open { id: Some(id), .. }
         | Cmd::OpenCard { id: Some(id) }
         | Cmd::Code { id: Some(id) }

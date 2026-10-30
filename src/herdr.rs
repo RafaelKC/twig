@@ -10,6 +10,7 @@ use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
 use crate::config::Config;
+use crate::layout::{self, Preset};
 use crate::{card, ports, procenv, sessions, sys, ui};
 
 fn herdr(args: &[&str]) -> Result<Value> {
@@ -197,9 +198,45 @@ fn with_env<'a>(args: &[&'a str], env: &'a [String]) -> Vec<&'a str> {
     all
 }
 
+/// The panes a tab is meant to have: the repos in layout order, the preset and the card folder.
+struct Slots<'a> {
+    preset: Preset,
+    repos: &'a [String],
+    card_dir: &'a Path,
+}
+
+impl Slots<'_> {
+    /// The pane of repo `r` among `panes` (found by cwd, like everywhere else).
+    fn pane_of(&self, panes: &[(String, String, String)], r: &str) -> Option<String> {
+        let wt = self.card_dir.join(r).to_string_lossy().into_owned();
+        panes
+            .iter()
+            .find(|(_, c, f)| *c == wt || *f == wt)
+            .map(|p| p.0.clone())
+    }
+}
+
+/// Slots of the `agent` tab (every repo) or of the `run` tab (repos with a `run` command, and
+/// with `autorun` when `autorun_only`), sorted by `[herdr.layout] order`.
+fn tab_repos(cfg: &Config, repos: &[String], run_tab: bool, autorun_only: bool) -> Vec<String> {
+    let mine: Vec<String> = repos
+        .iter()
+        .filter(|r| {
+            !run_tab
+                || cfg.repo(r).is_some_and(|c| {
+                    !c.run.is_empty() && (!autorun_only || autorun(cfg, r, c.autorun))
+                })
+        })
+        .cloned()
+        .collect();
+    cfg.herdr.layout.sorted(&mine)
+}
+
 /// Make sure a repo has a pane in a tab. Creates the tab if missing; an existing pane
 /// is left alone unless `force` (root pane just created along with the workspace).
-/// New panes get the card's ports and the repo's `env` as environment variables.
+/// New panes get the card's ports and the repo's `env` as environment variables. A new pane
+/// is placed by the tab's layout preset. Returns whether it was added to a tab that already
+/// existed (the caller then rebalances it).
 #[allow(clippy::too_many_arguments)]
 fn ensure_panel(
     cfg: &Config,
@@ -210,7 +247,9 @@ fn ensure_panel(
     cmd: &str,
     cwd: &Path,
     mut force: bool,
-) -> Result<()> {
+    slots: &Slots,
+) -> Result<bool> {
+    let mut added = false;
     let cwd_s = cwd.to_string_lossy().into_owned();
     let env = env_args(cfg, id, repo);
     let pane = match find_tab(ws, tab_label)? {
@@ -238,25 +277,41 @@ fn ensure_panel(
             match panes.iter().find(|(_, c, f)| *c == cwd_s || *f == cwd_s) {
                 Some((id, _, _)) => id.clone(),
                 None => {
-                    // first split is side by side; later ones stack on the last pane
-                    let last = panes
-                        .last()
-                        .map(|p| p.0.clone())
-                        .context("herdr tab without panes")?;
-                    let dir = if panes.len() <= 1 { "right" } else { "down" };
-                    let v = herdr(&with_env(
-                        &[
-                            "pane",
-                            "split",
-                            &last,
-                            "--direction",
-                            dir,
-                            "--cwd",
-                            &cwd_s,
-                            "--no-focus",
-                        ],
-                        &env,
-                    ))?;
+                    let planned = slots
+                        .repos
+                        .iter()
+                        .position(|r| r == repo)
+                        .and_then(|i| layout::step(slots.preset, slots.repos.len(), i))
+                        .and_then(|st| {
+                            let t = slots.repos.get(st.target)?;
+                            Some((slots.pane_of(&panes, t)?, st))
+                        });
+                    let (target, dir, ratio) = match planned {
+                        Some((p, st)) => (p, st.dir.as_str(), st.ratio.map(layout::ratio_arg)),
+                        None => {
+                            // not in the layout: side by side first, then stacked on the last pane
+                            let last = panes
+                                .last()
+                                .map(|p| p.0.clone())
+                                .context("herdr tab without panes")?;
+                            (last, if panes.len() <= 1 { "right" } else { "down" }, None)
+                        }
+                    };
+                    let mut args = vec![
+                        "pane",
+                        "split",
+                        &target,
+                        "--direction",
+                        dir,
+                        "--cwd",
+                        &cwd_s,
+                        "--no-focus",
+                    ];
+                    if let Some(r) = &ratio {
+                        args.extend(["--ratio", r]);
+                    }
+                    let v = herdr(&with_env(&args, &env))?;
+                    added = true;
                     force = true;
                     str_at(&v, "/result/pane/pane_id")?
                 }
@@ -269,7 +324,7 @@ fn ensure_panel(
         herdr_quiet(&["pane", "run", &pane, cmd]);
         ui::ok(format!("herdr: {tab_label}/{}", cfg.short(repo)));
     }
-    Ok(())
+    Ok(added)
 }
 
 /// Quote for the pane's shell: POSIX sh, or PowerShell on Windows (`'` doubled inside).
@@ -310,7 +365,7 @@ fn pane_command(cfg: &Config, id: &str, repo: &str, wt: &Path, prompt: Option<&s
 pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
     ensure_server()?;
     let dir = card::require_card(cfg, id)?;
-    let repos = card::repos_ordered(cfg, &dir);
+    let repos = cfg.herdr.layout.sorted(&card::repos_ordered(cfg, &dir));
     let first = repos
         .first()
         .with_context(|| format!("card {id} has no worktrees"))?;
@@ -339,8 +394,15 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
         }
     };
 
+    let agents = Slots {
+        preset: cfg.herdr.layout.preset("agent"),
+        repos: &repos,
+        card_dir: &dir,
+    };
+    let agent_existed = !fresh && find_tab(&ws, "agent")?.is_some();
+    let mut grew_agent = false;
     for (i, repo) in repos.iter().enumerate() {
-        ensure_panel(
+        grew_agent |= ensure_panel(
             cfg,
             id,
             &ws,
@@ -349,14 +411,41 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
             &pane_command(cfg, id, repo, &dir.join(repo), prompt),
             &dir.join(repo),
             fresh && i == 0,
+            &agents,
         )?;
     }
-    for repo in &repos {
+    let run_repos = tab_repos(cfg, &repos, true, true);
+    let runs = Slots {
+        preset: cfg.herdr.layout.preset("run"),
+        repos: &run_repos,
+        card_dir: &dir,
+    };
+    let run_existed = find_tab(&ws, "run")?.is_some();
+    let mut grew_run = false;
+    for repo in &run_repos {
         let Some(r) = cfg.repo(repo) else { continue };
-        if r.run.is_empty() || !autorun(cfg, repo, r.autorun) {
-            continue;
+        grew_run |= ensure_panel(
+            cfg,
+            id,
+            &ws,
+            "run",
+            repo,
+            &r.run,
+            &dir.join(repo),
+            false,
+            &runs,
+        )?;
+    }
+    // panes of a tab created by this very call already got their ratios from the splits
+    for (grew, tab, slots) in [
+        (grew_agent && agent_existed, "agent", &agents),
+        (grew_run && run_existed, "run", &runs),
+    ] {
+        if grew {
+            if let Err(e) = rebalance(&ws, tab, slots) {
+                ui::warn(format!("herdr: could not rebalance the {tab} tab: {e:#}"));
+            }
         }
-        ensure_panel(cfg, id, &ws, "run", repo, &r.run, &dir.join(repo), false)?;
     }
     Ok(ws)
 }
@@ -441,6 +530,19 @@ pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String])
     }
     if matches!(action, RunAction::Start | RunAction::Restart) {
         ports::write(cfg, id)?;
+        let run_repos = tab_repos(cfg, &card::repos_ordered(cfg, &dir), true, false);
+        let preset = cfg.herdr.layout.preset("run");
+        // the slots are the repos that have a pane, plus the one being added
+        let present = |adding: Option<&str>| -> Result<Vec<String>> {
+            let mut v = Vec::new();
+            for r in &run_repos {
+                if Some(r.as_str()) == adding || run_pane(&ws, &dir.join(r))?.is_some() {
+                    v.push(r.clone());
+                }
+            }
+            Ok(v)
+        };
+        let mut grew = false;
         for repo in &targets {
             let wt = dir.join(repo);
             let cmd = &cfg.repo(repo).context("repo without config")?.run;
@@ -460,11 +562,209 @@ pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String])
                     );
                 }
             } else {
-                ensure_panel(cfg, id, &ws, "run", repo, cmd, &wt, false)?;
+                let repos = present(Some(repo))?;
+                let slots = Slots {
+                    preset,
+                    repos: &repos,
+                    card_dir: &dir,
+                };
+                grew |= ensure_panel(cfg, id, &ws, "run", repo, cmd, &wt, false, &slots)?;
             }
             ui::ok(format!("[{}] running", cfg.short(repo)));
         }
+        if grew {
+            let repos = present(None)?;
+            let slots = Slots {
+                preset,
+                repos: &repos,
+                card_dir: &dir,
+            };
+            if let Err(e) = rebalance(&ws, "run", &slots) {
+                ui::warn(format!("herdr: could not rebalance the run tab: {e:#}"));
+            }
+        }
     }
+    Ok(())
+}
+
+/// Label of the tab panes wait in while a tab is rebuilt.
+const TMP_TAB: &str = "twig-layout";
+
+/// After panes were added to an existing tab: put the whole tab in its preset's shape (equal
+/// shares). `main-left` keeps herdr's plain splits, as before presets existed.
+fn rebalance(ws: &str, tab_label: &str, slots: &Slots) -> Result<()> {
+    if slots.preset == Preset::MainLeft || slots.repos.len() < 3 {
+        return Ok(());
+    }
+    arrange(ws, tab_label, slots)
+}
+
+/// Rebuild the tab's repo panes in the preset's shape without closing them: all but the first
+/// leave through a temporary tab (herdr can't move a pane within its tab) and come back one by
+/// one with the preset's splits, so processes and terminals are kept.
+fn arrange(ws: &str, tab_label: &str, slots: &Slots) -> Result<()> {
+    let tab = find_tab(ws, tab_label)?.with_context(|| format!("no {tab_label} tab"))?;
+    let all = tab_panes(ws, &tab)?;
+    let panes: Vec<String> = slots
+        .repos
+        .iter()
+        .filter_map(|r| slots.pane_of(&all, r))
+        .collect();
+    if panes.len() != slots.repos.len() {
+        bail!("some repos have no pane in the {tab_label} tab");
+    }
+    if panes.len() < 2 {
+        return Ok(());
+    }
+    let mut in_tmp: Vec<String> = Vec::new();
+    let result = move_sequence(
+        slots.preset,
+        &panes,
+        &tab,
+        &mut |args| herdr(args).map(drop),
+        &mut || find_tab(ws, TMP_TAB)?.context("herdr did not create the temporary tab"),
+        &mut in_tmp,
+    );
+    if !in_tmp.is_empty() {
+        // put the panes still waiting back, so none is left behind in the temporary tab
+        restore(&panes[0], &tab, &mut in_tmp, &mut |args| {
+            herdr(args).map(drop)
+        });
+    }
+    // close the temporary tab only when it is empty: closing it would kill what is left in it
+    if let Ok(Some(tmp)) = find_tab(ws, TMP_TAB) {
+        match tab_panes(ws, &tmp) {
+            Ok(left) if left.is_empty() => herdr_quiet(&["tab", "close", &tmp]),
+            Ok(_) => ui::warn(format!(
+                "herdr: panes were left in the {TMP_TAB} tab; move them back by hand"
+            )),
+            Err(e) => ui::warn(format!("herdr: {e:#}")),
+        }
+    }
+    result
+}
+
+/// Runs one `herdr` command given its arguments.
+type Runner<'a> = dyn FnMut(&[&str]) -> Result<()> + 'a;
+
+/// The moves of `arrange`: every pane but the first goes to the temporary tab, then comes back
+/// with the preset's splits. `in_tmp` always lists the panes sitting in the temporary tab, so a
+/// failure at any point leaves an exact list to restore.
+fn move_sequence(
+    preset: Preset,
+    panes: &[String],
+    tab: &str,
+    run: &mut Runner,
+    find_tmp: &mut dyn FnMut() -> Result<String>,
+    in_tmp: &mut Vec<String>,
+) -> Result<()> {
+    run(&[
+        "pane",
+        "move",
+        &panes[1],
+        "--new-tab",
+        "--label",
+        TMP_TAB,
+        "--no-focus",
+    ])?;
+    in_tmp.push(panes[1].clone());
+    let tmp = find_tmp()?;
+    for p in &panes[2..] {
+        run(&[
+            "pane",
+            "move",
+            p,
+            "--tab",
+            &tmp,
+            "--target-pane",
+            &panes[1],
+            "--split",
+            "right",
+            "--no-focus",
+        ])?;
+        in_tmp.push(p.clone());
+    }
+    for i in 1..panes.len() {
+        let st = layout::step(preset, panes.len(), i).context("no layout step")?;
+        let ratio = st.ratio.map(layout::ratio_arg);
+        let mut args = vec![
+            "pane",
+            "move",
+            &panes[i],
+            "--tab",
+            tab,
+            "--target-pane",
+            &panes[st.target],
+            "--split",
+            st.dir.as_str(),
+            "--no-focus",
+        ];
+        if let Some(r) = &ratio {
+            args.extend(["--ratio", r]);
+        }
+        run(&args)?;
+        in_tmp.retain(|p| *p != panes[i]);
+    }
+    Ok(())
+}
+
+/// Move the panes listed in `in_tmp` back into `tab`, next to `anchor`. Those that can't be
+/// moved stay in the list (and a warning says so).
+fn restore(anchor: &str, tab: &str, in_tmp: &mut Vec<String>, run: &mut Runner) {
+    for p in std::mem::take(in_tmp) {
+        let ok = run(&[
+            "pane",
+            "move",
+            &p,
+            "--tab",
+            tab,
+            "--target-pane",
+            anchor,
+            "--split",
+            "right",
+            "--no-focus",
+        ]);
+        if let Err(e) = ok {
+            ui::warn(format!("herdr: could not move pane {p} back: {e:#}"));
+            in_tmp.push(p);
+        }
+    }
+}
+
+/// `twig layout`: rearrange a tab of the card's workspace in `preset`, keeping its panes and the
+/// processes in them, and remember the choice in the card's `.twig.toml` so `twig add-repo` and
+/// `twig herdr` follow it.
+pub fn set_layout(cfg: &Config, id: &str, tab_label: &str, preset: Preset) -> Result<()> {
+    let dir = card::require_card(cfg, id)?;
+    if sys::which("herdr").is_none() {
+        bail!("herdr not found on PATH");
+    }
+    if !server_up() {
+        bail!("the herdr server is not running (`twig herdr {id}` starts it)");
+    }
+    let Some(ws) = find_workspace(id)? else {
+        bail!("card {id} has no herdr workspace (`twig herdr {id}` creates it)");
+    };
+    let tab =
+        find_tab(&ws, tab_label)?.with_context(|| format!("card {id} has no {tab_label} tab"))?;
+    let panes = tab_panes(&ws, &tab)?;
+    let all = card::repos_ordered(cfg, &dir);
+    let sorted = tab_repos(cfg, &all, tab_label == "run", false);
+    let mine: Vec<String> = sorted
+        .into_iter()
+        .filter(|r| {
+            let wt = dir.join(r).to_string_lossy().into_owned();
+            panes.iter().any(|(_, c, f)| *c == wt || *f == wt)
+        })
+        .collect();
+    let slots = Slots {
+        preset,
+        repos: &mine,
+        card_dir: &dir,
+    };
+    arrange(&ws, tab_label, &slots)?;
+    layout::save_card_file(&dir.join(crate::overrides::FILE), tab_label, preset)?;
+    ui::ok(format!("herdr: {tab_label} tab is now {}", preset.name()));
     Ok(())
 }
 
@@ -641,5 +941,79 @@ mod tests {
     fn busy_panes_tolerates_unexpected_shapes() {
         assert!(busy_panes(&json!({})).is_empty());
         assert!(busy_panes(&json!({"result": {"panes": []}})).is_empty());
+    }
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Runs `move_sequence` with a fake herdr that fails on its `fail_at`-th call (1-based) and
+    /// returns (result, panes left in the temporary tab after restoring, calls made).
+    fn simulate(preset: Preset, n: usize, fail_at: usize) -> (bool, Vec<String>, Vec<String>) {
+        let panes: Vec<String> = (0..n).map(|i| format!("p{i}")).collect();
+        let calls = std::cell::RefCell::new(Vec::<String>::new());
+        let tmp = std::cell::RefCell::new(Vec::<String>::new());
+        let mut run = |args: &[&str]| -> Result<()> {
+            let mut c = calls.borrow_mut();
+            if c.len() + 1 == fail_at {
+                c.push("FAIL".into());
+                bail!("boom");
+            }
+            c.push(args.join(" "));
+            let pane = args[2].to_string();
+            let into_tmp = args.contains(&"--new-tab") || args.contains(&"tmp");
+            let mut t = tmp.borrow_mut();
+            t.retain(|p| *p != pane);
+            if into_tmp {
+                t.push(pane);
+            }
+            Ok(())
+        };
+        let mut in_tmp = Vec::new();
+        let r = move_sequence(
+            preset,
+            &panes,
+            "main",
+            &mut run,
+            &mut || Ok("tmp".to_string()),
+            &mut in_tmp,
+        );
+        // the tracked list matches what the fake herdr holds
+        assert_eq!(in_tmp, *tmp.borrow());
+        restore(&panes[0], "main", &mut in_tmp, &mut run);
+        let left = tmp.borrow().clone();
+        let log = calls.borrow().clone();
+        (r.is_ok(), left, log)
+    }
+
+    #[test]
+    fn move_sequence_completes_with_the_tmp_tab_empty() {
+        let (ok, left, calls) = simulate(Preset::Columns, 4, usize::MAX);
+        assert!(ok);
+        assert!(left.is_empty());
+        assert_eq!(calls.len(), 1 + 2 + 3);
+    }
+
+    #[test]
+    fn move_sequence_failure_restores_exactly_what_is_in_the_tmp_tab() {
+        for n in 2..=5 {
+            for fail_at in 1..=(1 + (n - 2) + (n - 1)) {
+                let (ok, left, _) = simulate(Preset::Columns, n, fail_at);
+                assert!(!ok);
+                assert!(left.is_empty(), "n={n} fail_at={fail_at}: {left:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn restore_keeps_panes_it_could_not_move() {
+        let mut in_tmp = ids(&["a", "b"]);
+        restore("x", "t", &mut in_tmp, &mut |args| {
+            if args[2] == "a" {
+                bail!("no")
+            }
+            Ok(())
+        });
+        assert_eq!(in_tmp, ["a"]);
     }
 }

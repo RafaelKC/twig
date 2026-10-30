@@ -43,6 +43,8 @@ pub struct Template {
     pub base: Option<String>,
     /// Overrides the repos' `autorun` (config and `.twig.toml`) for cards of this template.
     pub autorun: Option<Autorun>,
+    /// `[<name>.layout]`: pane layout of the card's herdr tabs (over the config's `[herdr.layout]`).
+    pub layout: Option<crate::layout::Layout>,
     /// First message of the card's agents when `twig new` starts them (`{id}`, `{repo}`).
     pub agent_prompt: Option<String>,
     /// Card-level hooks that only apply to cards created from this template.
@@ -105,6 +107,13 @@ pub fn validate(cfg: Option<&Config>, t: &Templates) -> Vec<String> {
                 ));
             }
         }
+        if let (Some(l), Some(cfg)) = (&tpl.layout, cfg) {
+            for r in l.order.iter().filter(|r| !cfg.repos.contains_key(*r)) {
+                errors.push(format!(
+                    "[{name}] layout.order repo `{r}` is not in the config (add it under [repos.{r}])"
+                ));
+            }
+        }
         for e in hooks::validate_hooks(&format!("{name}.hooks"), &tpl.hooks).1 {
             errors.push(format!("[{name}] {e}"));
         }
@@ -154,6 +163,9 @@ pub fn resolve(cfg: &Config, explicit: Option<&str>) -> Result<Option<(String, T
 pub fn apply(cfg: &mut Config, t: Template) {
     if let Some(kind) = t.agent {
         cfg.ai.use_agent(kind);
+    }
+    if let Some(l) = &t.layout {
+        cfg.herdr.layout.apply(l);
     }
     cfg.template = Some(t);
 }
@@ -235,6 +247,16 @@ pub fn show(name: &str) -> Result<()> {
     if let Some(p) = &t.agent_prompt {
         println!("  agent_prompt   {p}");
     }
+    if let Some(l) = &t.layout {
+        for (tab, p) in [("agent", l.agent), ("run", l.run)] {
+            if let Some(p) = p {
+                println!("  layout.{tab:<6} {}", p.name());
+            }
+        }
+        if !l.order.is_empty() {
+            println!("  layout.order   {}", l.order.join(", "));
+        }
+    }
     for (ev, cmds) in hooks::entries(&t.hooks) {
         for c in cmds {
             println!("  hooks.{ev:<12} {c}");
@@ -254,6 +276,11 @@ pub const EDIT_TEMPLATE: &str = r#"# twig templates. Format documented in docs/C
 # base          = "main"           # optional
 # autorun       = false          # or { api = true, ui = false }; overrides the repos' autorun
 # agent_prompt  = "/deliver {id}"  # first message of the agents on `twig new` ({id}, {repo})
+#
+# [fullstack.layout]               # herdr pane layout; presets: columns rows main-left main-top grid
+# agent = "columns"
+# run   = "rows"
+# order = ["api", "ui"]            # order of the panes
 #
 # [fullstack.hooks]                # only for cards created from this template
 # post_create = ["echo created $TWIG_CARD"]

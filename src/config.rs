@@ -246,6 +246,7 @@ impl Default for Vscode {
 #[serde(deny_unknown_fields, default)]
 pub struct Herdr {
     pub open_on_new: bool,
+    pub layout: crate::layout::Layout,
 }
 
 /// Where `twig open` goes when no target is given.
@@ -490,6 +491,8 @@ impl Config {
         validate_repos(&layered.repos, self.ports.span)
             .with_context(|| format!("in card {id}, with the {} overrides", overrides::FILE))?;
         self.repos = layered.repos;
+        let card = crate::layout::read_card_file(&dir.join(overrides::FILE))?;
+        self.herdr.layout.apply(&card);
         Ok(())
     }
 
