@@ -3508,6 +3508,48 @@ fn herdr_places_a_new_pane_by_the_layout_preset() {
 }
 
 #[test]
+fn herdr_on_a_fresh_workspace_does_not_rebalance_the_new_tab() {
+    let (s, log) = layout_sandbox("[herdr.layout]\nagent = \"columns\"\n", &[]);
+    let state = s.path("panes.txt");
+    fs::write(
+        &state,
+        format!(
+            r#"{{"pane_id":"w1:p1","tab_id":"t1","cwd":"{}"}}"#,
+            s.path("wt/123/r1").display()
+        ),
+    )
+    .unwrap();
+    s.stub(
+        "herdr",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[]}}}}' ;;
+  "workspace create") echo '{{"result":{{"workspace":{{"workspace_id":"w1"}},"tab":{{"tab_id":"t1"}}}}}}' ;;
+  "tab list") echo '{{"result":{{"tabs":[{{"label":"agent","tab_id":"t1"}}]}}}}' ;;
+  "pane list") read -r panes < {state}; echo '{{"result":{{"panes":['"$panes"']}}}}' ;;
+  "pane split")
+    read -r panes < {state}
+    n=2; case "$panes" in *p2*) n=3 ;; esac
+    prev=; for a in "$@"; do [ "$prev" = "--cwd" ] && cwd=$a; prev=$a; done
+    printf '%s' "$panes,{{\"pane_id\":\"w1:p$n\",\"tab_id\":\"t1\",\"cwd\":\"$cwd\"}}" > {state}
+    echo '{{"result":{{"pane":{{"pane_id":"w1:p'$n'"}}}}}}' ;;
+  *) echo '{{"result":{{}}}}' ;;
+esac"#,
+            log = log.display(),
+            state = state.display(),
+        ),
+    );
+    assert_exit(&s.run(&["herdr", "123"]), 0);
+    let calls = herdr_calls(&log);
+    assert_eq!(calls.matches("pane split").count(), 2, "{calls}");
+    assert!(
+        !calls.contains("pane move") && !calls.contains("tab close"),
+        "{calls}"
+    );
+}
+
+#[test]
 fn herdr_without_layout_stacks_on_the_last_pane_as_before() {
     let (s, log) = layout_sandbox("", &["r1", "r2"]);
     assert_exit(&s.run(&["herdr", "123"]), 0);

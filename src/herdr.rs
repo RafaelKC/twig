@@ -399,6 +399,7 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
         repos: &repos,
         card_dir: &dir,
     };
+    let agent_existed = !fresh && find_tab(&ws, "agent")?.is_some();
     let mut grew_agent = false;
     for (i, repo) in repos.iter().enumerate() {
         grew_agent |= ensure_panel(
@@ -419,6 +420,7 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
         repos: &run_repos,
         card_dir: &dir,
     };
+    let run_existed = find_tab(&ws, "run")?.is_some();
     let mut grew_run = false;
     for repo in &run_repos {
         let Some(r) = cfg.repo(repo) else { continue };
@@ -434,7 +436,11 @@ pub fn sync(cfg: &Config, id: &str, prompt: Option<&str>) -> Result<String> {
             &runs,
         )?;
     }
-    for (grew, tab, slots) in [(grew_agent, "agent", &agents), (grew_run, "run", &runs)] {
+    // panes of a tab created by this very call already got their ratios from the splits
+    for (grew, tab, slots) in [
+        (grew_agent && agent_existed, "agent", &agents),
+        (grew_run && run_existed, "run", &runs),
+    ] {
         if grew {
             if let Err(e) = rebalance(&ws, tab, slots) {
                 ui::warn(format!("herdr: could not rebalance the {tab} tab: {e:#}"));
