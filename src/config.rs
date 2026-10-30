@@ -20,6 +20,8 @@ pub struct Config {
     #[serde(default)]
     pub herdr: Herdr,
     #[serde(default)]
+    pub park: Park,
+    #[serde(default)]
     pub open: Open,
     #[serde(default)]
     pub paths: Paths,
@@ -49,6 +51,25 @@ pub struct Config {
     /// `TWIG__*` variables in effect (see `overrides.rs`).
     #[serde(skip)]
     pub env: Vec<crate::overrides::EnvOverride>,
+}
+
+/// `[park]`: what `twig park` saves and `twig open` brings back (see `snapshot.rs`).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct Park {
+    /// `twig park` saves the workspace's tabs, splits and panes, and `twig open` rebuilds them
+    pub snapshot: bool,
+    /// the restored agents resume their own conversation
+    pub resume_sessions: bool,
+}
+
+impl Default for Park {
+    fn default() -> Self {
+        Self {
+            snapshot: true,
+            resume_sessions: true,
+        }
+    }
 }
 
 /// `[ports]`: how far apart the cards' ports are (see `ports.rs`).
@@ -108,7 +129,8 @@ pub struct Ai {
     command: String,
     /// empty = the provider's default context file
     context_file: String,
-    /// `twig rm` archives the agent's sessions and `twig new` restores them (Claude Code only)
+    /// `twig rm` archives the agent's sessions (Claude Code only); `twig new` restores them
+    /// whenever there is an archive
     pub keep_sessions: bool,
     /// when twig reopens a card's workspace, the agent resumes its last conversation
     pub resume_sessions: bool,
@@ -120,7 +142,7 @@ impl Default for Ai {
             provider: AgentKind::Claude,
             command: String::new(),
             context_file: String::new(),
-            keep_sessions: true,
+            keep_sessions: false,
             resume_sessions: false,
         }
     }
@@ -168,6 +190,22 @@ impl AgentKind {
         match self {
             Self::Claude => "claude",
             Self::Codex => "codex",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "claude" => Some(Self::Claude),
+            "codex" => Some(Self::Codex),
+            _ => None,
+        }
+    }
+
+    /// Arguments that make the agent resume the conversation `id` (already checked as safe).
+    pub fn resume_session_args(self, id: &str) -> String {
+        match self {
+            Self::Claude => format!("--resume {id}"),
+            Self::Codex => format!("resume {id}"),
         }
     }
 
@@ -500,6 +538,16 @@ impl Config {
         expand(&self.paths.worktrees)
     }
 
+    /// Whether the config (after the env overrides) sets `[agent] keep_sessions` explicitly.
+    pub fn sets_keep_sessions(&self) -> bool {
+        ["agent", "ai"].iter().any(|t| {
+            self.doc
+                .get(t)
+                .and_then(|i| i.get("keep_sessions"))
+                .is_some()
+        })
+    }
+
     pub fn card_dir(&self, id: &str) -> PathBuf {
         self.worktrees().join(id)
     }
@@ -645,6 +693,18 @@ mod tests {
         let f = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/config.toml");
         let cfg = Config::load_from(&f).unwrap();
         assert!(!cfg.repos["api"].env.is_empty());
+    }
+
+    #[test]
+    fn keep_sessions_is_off_unless_set_and_park_is_on() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("config.toml");
+        std::fs::write(&file, "version = 1\n").unwrap();
+        let cfg = Config::load_from(&file).unwrap();
+        assert!(!cfg.ai.keep_sessions && !cfg.sets_keep_sessions());
+        assert!(cfg.park.snapshot && cfg.park.resume_sessions);
+        std::fs::write(&file, "version = 1\n[agent]\nkeep_sessions = false\n").unwrap();
+        assert!(Config::load_from(&file).unwrap().sets_keep_sessions());
     }
 
     #[test]

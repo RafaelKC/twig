@@ -8,7 +8,8 @@ use crate::config::{Config, OpenTarget};
 use crate::hooks::{self, Event};
 use crate::provider::{self, CardInfo};
 use crate::{
-    card, claude_md, herdr, memo, parked, ports, procenv, sessions, sys, templates, ui, workspace,
+    card, claude_md, herdr, memo, parked, ports, procenv, sessions, snapshot, sys, templates, ui,
+    workspace,
 };
 
 pub struct NewArgs {
@@ -381,13 +382,18 @@ fn regenerate(cfg: &Config, id: &str, info: Option<&CardInfo>) -> Result<()> {
 
 /// `twig open [id] [target]`; `herdr` and `code` go through the same functions.
 /// Without a target, `[open] default` from the config decides.
-pub fn open(cfg: &Config, id: Option<&str>, target: Option<OpenTarget>) -> Result<()> {
+pub fn open(
+    cfg: &Config,
+    id: Option<&str>,
+    target: Option<OpenTarget>,
+    default_layout: bool,
+) -> Result<()> {
     match target.unwrap_or(cfg.open.default) {
         OpenTarget::Code => code(cfg, id),
         OpenTarget::Herdr => match id {
-            Some(id) => herdr_cmd(cfg, id),
+            Some(id) => herdr_cmd(cfg, id, default_layout),
             None => match card::infer(cfg) {
-                card::Current::Card(id) => herdr_cmd(cfg, &id),
+                card::Current::Card(id) => herdr_cmd(cfg, &id, default_layout),
                 card::Current::Dir(dir) => {
                     bail!("{} is not inside a card; pass the card id", dir.display())
                 }
@@ -431,8 +437,8 @@ pub fn open_card(cfg: &Config, id: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-pub fn herdr_cmd(cfg: &Config, id: &str) -> Result<()> {
-    let ws = herdr::sync(cfg, id, None)?;
+pub fn herdr_cmd(cfg: &Config, id: &str, default_layout: bool) -> Result<()> {
+    let ws = herdr::sync_with(cfg, id, None, !default_layout)?;
     herdr::open(&ws)?;
     fire(cfg, Event::PostOpen, id, &hooks::card_repos(cfg, id));
     Ok(())
@@ -612,7 +618,7 @@ pub fn refresh(cfg: &Config, id: &str, refetch: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
+pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool, keep: Option<bool>) -> Result<()> {
     let dir = card::require_card(cfg, id)?;
     let repos = card::repos_in(&dir);
 
@@ -634,7 +640,7 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
     }
 
     herdr::close_workspace(id);
-    sessions::archive(cfg, id, &repos);
+    sessions::archive(cfg, id, &repos, keep);
 
     for repo in &repos {
         let wt = dir.join(repo);
@@ -677,10 +683,17 @@ pub fn rm(cfg: &Config, id: &str, branches: bool, force: bool) -> Result<()> {
     Ok(())
 }
 
-/// `twig park [id]`: close the herdr workspace and leave everything else (worktrees, branches,
-/// memo, agent sessions) alone, recording the park in `<card>/.parked.json`. `twig open`
-/// recreates the workspace but keeps the marker; `--undo` removes it.
-pub fn park(cfg: &Config, id: Option<&str>, force: bool, undo: bool) -> Result<()> {
+/// `twig park [id]`: save the herdr workspace (`<card>/.twig-park-layout.json`) and close it,
+/// leaving everything else (worktrees, branches, memo, agent sessions) alone, and record the
+/// park in `<card>/.parked.json`. `twig open` rebuilds the workspace but keeps the marker;
+/// `--undo` removes both files.
+pub fn park(
+    cfg: &Config,
+    id: Option<&str>,
+    force: bool,
+    undo: bool,
+    no_snapshot: bool,
+) -> Result<()> {
     let id = match id {
         Some(id) => id.to_string(),
         None => match card::infer(cfg) {
@@ -690,8 +703,11 @@ pub fn park(cfg: &Config, id: Option<&str>, force: bool, undo: bool) -> Result<(
     };
     card::require_card(cfg, &id)?;
     if undo {
+        let layout = snapshot::clear(cfg, &id);
         if parked::clear(cfg, &id) {
             ui::ok(format!("card {id} is no longer marked as parked"));
+        } else if layout {
+            ui::ok(format!("saved layout of card {id} dropped"));
         } else {
             ui::info(format!("card {id} was not parked"));
         }
@@ -722,6 +738,12 @@ pub fn park(cfg: &Config, id: Option<&str>, force: bool, undo: bool) -> Result<(
             "card {id} was already parked since {}",
             marker.since
         ));
+    }
+    if no_snapshot || !cfg.park.snapshot {
+        // an older snapshot would bring back a layout the user chose not to keep
+        snapshot::clear(cfg, &id);
+    } else if let Err(e) = herdr::save_snapshot(cfg, &id) {
+        ui::warn(format!("could not save the workspace layout: {e:#}"));
     }
     herdr::close_workspace(&id);
     // the `code` CLI has no way to close a window, and killing the process by title is not

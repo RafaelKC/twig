@@ -288,6 +288,7 @@ pub fn run(json: bool) -> Result<()> {
         }
     }
 
+    sessions_section(&mut r, &cfg);
     layout_section(&mut r, &cfg);
     templates_section(&mut r, &cfg);
 
@@ -309,6 +310,15 @@ pub fn run(json: bool) -> Result<()> {
     }
 
     finish(r)
+}
+
+/// `[agent] keep_sessions` became opt-in: say so while the config doesn't state it.
+fn sessions_section(r: &mut Report, cfg: &Config) {
+    if cfg.sets_keep_sessions() {
+        return;
+    }
+    r.section("agent sessions");
+    r.warn("`[agent] keep_sessions` is not set: `twig rm` no longer archives the agent's conversations by default (use `twig rm --keep-sessions`, or set `keep_sessions = true`; `false` silences this)");
 }
 
 fn layout_section(r: &mut Report, cfg: &Config) {

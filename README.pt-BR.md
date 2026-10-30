@@ -244,10 +244,13 @@ quando `twig new <id>` reabre o card. As últimas 10 entradas são copiadas para
 que falta (consolidação, limite de tamanho, exportar no `rm`) estão em
 [docs/MEMORY.md](docs/MEMORY.md) (em inglês).
 
-Do mesmo modo (experimental), o `twig rm` arquiva as sessões do Claude Code dos repos do card em
-`memos/<id>-<provider>/sessions/<repo>/` e o `twig new` / `twig add-repo` as restauram; desative
-com `[agent] keep_sessions = false`. Com `[agent] resume_sessions = true`, reabrir o workspace do
-card retoma a última conversa (`claude --continue`, `codex resume --last`). Transcrições podem conter segredos; veja
+Do mesmo modo (experimental), `twig rm --keep-sessions` (ou `[agent] keep_sessions = true`) arquiva
+as sessões do Claude Code dos repos do card em `memos/<id>-<provider>/sessions/<repo>/` e o
+`twig new` / `twig add-repo` as restauram; por padrão o `rm` não as guarda. O `twig park` salva o
+layout do workspace e a sessão de cada agente, e o `twig open` o recria com cada agente na sua
+própria conversa (`--no-snapshot` / `--default-layout` para pular; `[park]` no config). Com
+`[agent] resume_sessions = true`, os demais painéis de agente novos retomam a última conversa
+(`claude --continue`, `codex resume --last`). Transcrições podem conter segredos; veja
 [docs/MEMORY.md](docs/MEMORY.md#agent-sessions).
 
 ## Configuração

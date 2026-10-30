@@ -173,4 +173,7 @@ this if the user asks for another agent; don't create layouts on your own.
   rebuild a card's layout by hand with `herdr pane move`: it can't move within the same tab.
 - Extra panes and tabs you create don't get in twig's way: `twig add-repo` and
   `twig herdr` only create what's missing from the default layout and leave the rest alone.
+- `twig park` saves the workspace (tabs, splits, panes, agent session ids) in
+  `<card>/.twig-park-layout.json` and `twig open` rebuilds exactly that, without recreating the
+  default panes the user closed; `twig open --default-layout` ignores it.
 - Don't reuse the `agent`/`run` tabs for something else; create a new tab.

@@ -105,17 +105,19 @@ Claude Code deletes old transcripts (`cleanupPeriodDays`, 30 days by default), s
 reopened a month later would have its `MEMORY.md` but no conversation. twig keeps them next to
 the memo:
 
-- `twig rm <id>` moves `~/.claude/projects/<cwd>/` (the `*.jsonl` files and the `<uuid>/`
+- `twig rm <id> --keep-sessions` (or `[agent] keep_sessions = true`) moves `~/.claude/projects/<cwd>/` (the `*.jsonl` files and the `<uuid>/`
   folders) of each repo to `<worktrees>/memos/<id>-<provider>/sessions/<repo>/` and prints where.
   `<cwd>` is the worktree path with every non-alphanumeric character replaced by `-`
   (`CLAUDE_CONFIG_DIR` is honoured).
 - `twig new <id>` / `twig add-repo` move them back for the repos they create and print
   `sessions restored: api (2), web (1)`. The card path is the same, so `claude --resume` finds them.
+- `twig park` doesn't move sessions: it records each agent's session id in the park snapshot and
+  `twig open` resumes it with `claude --resume <id>` (see [COMMANDS.md](COMMANDS.md#twig-park-id--f---no-snapshot---undo)).
 - With `[agent] resume_sessions = true` the agent pane of a repo that has a session starts with
   `claude --continue` (Codex: `codex resume --last`) instead of a blank conversation, e.g. after
   `twig park` + `twig open`, or `twig rm` + `twig new`. A first prompt from `twig new` wins.
 - `twig prune` never touches `memos/`.
-- Opt out with `[agent] keep_sessions = false`. Only the `claude` agent is supported; with
+- Archiving is off by default (`keep_sessions = false`); restoring happens whenever an archive exists. Only the `claude` agent is supported; with
   another one nothing happens. `/rewind` checkpoints (`~/.claude/file-history`) are not archived.
 
 Transcripts contain tool output (file contents, `.env` values, tokens). The archive stays on

@@ -174,10 +174,20 @@ fn assert_has(o: &Output, needle: &str) {
 fn doctor_all_good() {
     let s = Sandbox::new();
     s.all_tools().git_identity();
-    s.valid_config("");
+    s.valid_config("[agent]\nkeep_sessions = false\n");
     let o = s.run(&["doctor"]);
     assert_exit(&o, 0);
     assert_has(&o, "all good");
+}
+
+#[test]
+fn doctor_warns_while_keep_sessions_is_unset() {
+    let s = Sandbox::new();
+    s.all_tools().git_identity();
+    s.valid_config("");
+    let o = s.run(&["doctor"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "keep_sessions");
 }
 
 #[test]
@@ -1093,6 +1103,57 @@ fn rm_works_without_herdr() {
     assert!(!s.path("wt/123").exists());
 }
 
+/// A Claude Code session of card 123's `r1` under the sandbox's HOME; returns the transcript.
+fn claude_session(s: &Sandbox) -> PathBuf {
+    let wt = s.path("wt/123/r1").to_string_lossy().into_owned();
+    let enc: String = wt
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let dir = s.home.join(".claude/projects").join(enc);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("abc.jsonl"), "{}").unwrap();
+    dir.join("abc.jsonl")
+}
+
+fn archived(s: &Sandbox) -> PathBuf {
+    s.path("wt/memos/123-az/sessions/r1/abc.jsonl")
+}
+
+#[test]
+fn rm_does_not_keep_the_sessions_by_default() {
+    let (s, _log) = rm_sandbox("idle");
+    let session = claude_session(&s);
+    assert_exit(&s.run(&["rm", "123"]), 0);
+    assert!(session.exists() && !archived(&s).exists());
+}
+
+#[test]
+fn rm_keep_sessions_archives() {
+    let (s, _log) = rm_sandbox("idle");
+    let session = claude_session(&s);
+    assert_exit(&s.run(&["rm", "123", "--keep-sessions"]), 0);
+    assert!(archived(&s).is_file() && !session.exists());
+}
+
+#[test]
+fn rm_no_keep_sessions_wins_over_the_config() {
+    let (s, _log) = rm_sandbox("idle");
+    s.valid_config("[agent]\nkeep_sessions = true\n");
+    let session = claude_session(&s);
+    assert_exit(&s.run(&["rm", "123", "--no-keep-sessions"]), 0);
+    assert!(session.exists() && !archived(&s).exists());
+}
+
+#[test]
+fn rm_follows_keep_sessions_from_the_config() {
+    let (s, _log) = rm_sandbox("idle");
+    s.valid_config("[agent]\nkeep_sessions = true\n");
+    claude_session(&s);
+    assert_exit(&s.run(&["rm", "123"]), 0);
+    assert!(archived(&s).is_file());
+}
+
 #[test]
 fn park_closes_the_workspace_and_keeps_the_card() {
     let (s, log) = rm_sandbox("idle");
@@ -1114,6 +1175,74 @@ fn park_blocks_on_a_running_agent_unless_forced() {
     assert_exit(&s.run(&["park", "-f", "123"]), 0);
     assert!(herdr_calls(&log).contains("workspace close w1"));
     assert!(s.path("wt/123/r1").exists());
+}
+
+/// `rm_sandbox` whose herdr also lists tabs and answers `pane layout`: two panes side by side in
+/// the `agent` tab (the first runs a Claude session), a tab made by hand with one shell.
+fn park_sandbox() -> (Sandbox, PathBuf) {
+    let (s, log) = rm_sandbox("idle");
+    let wt = s.path("wt/123/r1").to_string_lossy().into_owned();
+    let body = format!(
+        r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[{{"label":"123","workspace_id":"w1"}}]}}}}' ;;
+  "tab list") echo '{{"result":{{"tabs":[{{"tab_id":"w1:t1","label":"agent"}},{{"tab_id":"w1:t2","label":"notes"}}]}}}}' ;;
+  "pane list") echo '{{"result":{{"panes":[
+    {{"pane_id":"w1:p1","tab_id":"w1:t1","cwd":"{wt}","agent_status":"idle","agent_session":{{"agent":"claude","kind":"id","value":"98a4aa39-1111"}}}},
+    {{"pane_id":"w1:p2","tab_id":"w1:t1","cwd":"{wt}","agent_status":"idle","agent_session":{{"agent":"claude","kind":"id","value":"bbbb2222-2222"}}}},
+    {{"pane_id":"w1:p3","tab_id":"w1:t2","cwd":"{wt}","agent_status":"unknown"}}]}}}}' ;;
+  "pane layout") case "$4" in
+    w1:p1) echo '{{"result":{{"layout":{{"direction":"right","ratio":0.25,"first":{{"pane_id":"w1:p1"}},"second":{{"pane_id":"w1:p2"}}}}}}}}' ;;
+    *) echo '{{"result":{{"layout":{{"pane_id":"w1:p3"}}}}}}' ;;
+  esac ;;
+esac"#,
+        log = log.display()
+    );
+    s.stub("herdr", &body);
+    (s, log)
+}
+
+#[test]
+fn park_saves_the_layout_and_the_sessions() {
+    let (s, log) = park_sandbox();
+    let o = s.run(&["park", "123"]);
+    assert_exit(&o, 0);
+    let snap = fs::read_to_string(s.path("wt/123/.twig-park-layout.json")).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&snap).unwrap();
+    assert_eq!(v["tabs"][0]["label"], "agent");
+    assert_eq!(v["tabs"][0]["layout"]["direction"], "right");
+    assert_eq!(v["tabs"][0]["layout"]["ratio"], 0.25);
+    assert_eq!(v["tabs"][0]["layout"]["first"]["session"], "98a4aa39-1111");
+    assert_eq!(v["tabs"][0]["layout"]["second"]["session"], "bbbb2222-2222");
+    assert_eq!(v["tabs"][1]["label"], "notes");
+    assert_eq!(v["tabs"][1]["layout"]["kind"], "shell");
+    assert!(herdr_calls(&log).contains("workspace close w1"));
+}
+
+#[test]
+fn park_no_snapshot_saves_nothing_and_drops_an_old_one() {
+    let (s, _log) = park_sandbox();
+    fs::write(s.path("wt/123/.twig-park-layout.json"), "{}").unwrap();
+    assert_exit(&s.run(&["park", "123", "--no-snapshot"]), 0);
+    assert!(!s.path("wt/123/.twig-park-layout.json").exists());
+    assert!(s.path("wt/123/.parked.json").exists());
+}
+
+#[test]
+fn park_snapshot_can_be_turned_off_in_the_config() {
+    let (s, _log) = park_sandbox();
+    s.valid_config("[park]\nsnapshot = false\n");
+    assert_exit(&s.run(&["park", "123"]), 0);
+    assert!(!s.path("wt/123/.twig-park-layout.json").exists());
+}
+
+#[test]
+fn park_undo_drops_the_snapshot() {
+    let (s, _log) = park_sandbox();
+    assert_exit(&s.run(&["park", "123"]), 0);
+    assert!(s.path("wt/123/.twig-park-layout.json").exists());
+    assert_exit(&s.run(&["park", "123", "--undo"]), 0);
+    assert!(!s.path("wt/123/.twig-park-layout.json").exists());
 }
 
 #[test]
@@ -3605,4 +3734,97 @@ fn doctor_flags_a_layout_order_with_an_unknown_repo() {
     let (s, _) = layout_sandbox("[herdr.layout]\norder = [\"r2\", \"zzz\"]\n", &["r1"]);
     let o = s.run(&["doctor"]);
     assert_has(&o, "herdr.layout.order: repo `zzz`");
+}
+
+// ───────────────────────── park snapshot restore ─────────────────────────
+
+/// Card `7` (repos `a` and `b`) with a fake herdr that has no workspace and answers the calls of a
+/// restore, and a snapshot as `twig park` writes it: the `agent` tab has `a` (session `s-a`) and
+/// `b` (session `s-b`) side by side at 30/70, plus a `notes` tab with one shell in `a`.
+fn restore_sandbox() -> (Sandbox, PathBuf) {
+    let s = new_sandbox();
+    let log = s.path("herdr.log");
+    s.stub(
+        "herdr",
+        &format!(
+            r#"echo "$@" >> {log}
+case "$1 $2" in
+  "workspace list") echo '{{"result":{{"workspaces":[]}}}}' ;;
+  "workspace create") echo '{{"result":{{"workspace":{{"workspace_id":"w1"}},"tab":{{"tab_id":"w1:t1"}},"root_pane":{{"pane_id":"w1:p1"}}}}}}' ;;
+  "tab create") echo '{{"result":{{"tab":{{"tab_id":"w1:t2"}},"root_pane":{{"pane_id":"w1:p3"}}}}}}' ;;
+  "pane split") echo '{{"result":{{"pane":{{"pane_id":"w1:p2"}}}}}}' ;;
+  "tab list") echo '{{"result":{{"tabs":[{{"label":"agent","tab_id":"w1:t1"}}]}}}}' ;;
+  "pane list") echo '{{"result":{{"panes":[{{"pane_id":"w1:p1","tab_id":"w1:t1","cwd":"","foreground_cwd":""}}]}}}}' ;;
+esac"#,
+            log = log.display()
+        ),
+    );
+    // created while herdr has no workspace: the stub answers the creation `twig new` makes
+    assert_exit(&s.run(&["new", "7", "x", "--repos", "a,b", "--no-ado"]), 0);
+    fs::write(&log, "").unwrap();
+    let (a, b) = (s.path("wt/7/a"), s.path("wt/7/b"));
+    let snap = serde_json::json!({"v": 1, "tabs": [
+        {"label": "agent", "layout": {"type": "split", "direction": "right", "ratio": 0.3,
+            "first": {"type": "pane", "label": "a", "cwd": a, "kind": "agent", "agent": "claude", "session": "s-a", "command": null},
+            "second": {"type": "pane", "label": "b", "cwd": b, "kind": "agent", "agent": "claude", "session": "s-b", "command": null}}},
+        {"label": "notes", "layout": {"type": "pane", "label": null, "cwd": a, "kind": "shell", "agent": null, "session": null, "command": null}},
+    ]});
+    fs::write(s.path("wt/7/.twig-park-layout.json"), snap.to_string()).unwrap();
+    (s, log)
+}
+
+#[test]
+fn open_after_park_rebuilds_tabs_splits_and_conversations() {
+    let (s, log) = restore_sandbox();
+    let o = s.run(&["herdr", "7"]);
+    assert_exit(&o, 0);
+    let calls = herdr_calls(&log);
+    assert!(calls.contains("workspace create"), "{calls}");
+    assert!(calls.contains("tab rename w1:t1 agent"), "{calls}");
+    assert!(
+        calls.contains("--direction right --ratio 0.3000"),
+        "{calls}"
+    );
+    assert!(calls.contains("tab create --workspace w1"), "{calls}");
+    assert!(calls.contains("--label notes"), "{calls}");
+    // each agent in its own conversation, with the card's env
+    assert!(
+        calls.contains("pane run w1:p1 claude --resume s-a"),
+        "{calls}"
+    );
+    assert!(
+        calls.contains("pane run w1:p2 claude --resume s-b"),
+        "{calls}"
+    );
+    assert!(
+        calls.contains("--env TWIG_CARD_ID=7 --env TWIG_PANE_REPO=b"),
+        "{calls}"
+    );
+    // the default `run` tab is not recreated, and the snapshot is spent
+    assert!(!calls.contains("--label run"), "{calls}");
+    assert!(!s.path("wt/7/.twig-park-layout.json").exists());
+}
+
+#[test]
+fn open_default_layout_ignores_the_snapshot() {
+    let (s, log) = restore_sandbox();
+    assert_exit(&s.run(&["herdr", "7", "--default-layout"]), 0);
+    assert!(!herdr_calls(&log).contains("--resume"));
+    assert!(s.path("wt/7/.twig-park-layout.json").exists());
+}
+
+#[test]
+fn restore_skips_panes_whose_folder_is_gone() {
+    let (s, log) = restore_sandbox();
+    let file = s.path("wt/7/.twig-park-layout.json");
+    let text = fs::read_to_string(&file)
+        .unwrap()
+        .replace(&s.path("wt/7/b").to_string_lossy().into_owned(), "/gone/b");
+    fs::write(&file, text).unwrap();
+    let o = s.run(&["herdr", "7"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "/gone/b no longer exists");
+    let calls = herdr_calls(&log);
+    assert!(calls.contains("claude --resume s-a"), "{calls}");
+    assert!(!calls.contains("s-b"), "{calls}");
 }
