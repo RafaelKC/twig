@@ -24,6 +24,8 @@ mod status;
 mod sync;
 mod sys;
 mod templates;
+#[cfg(test)]
+mod testutil;
 mod ui;
 mod updatecheck;
 mod workspace;

@@ -273,6 +273,16 @@ mod tests {
     }
 
     #[test]
+    fn repo_file_accepts_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let f = tmp.path().join(FILE);
+        fs::write(&f, "base = \"main\"\n").unwrap();
+        let mut doc = DocumentMut::new();
+        merge_repo_file(&mut doc, "sdk", &f).unwrap();
+        assert_eq!(doc["repos"]["sdk"]["base"].as_str(), Some("main"));
+    }
+
+    #[test]
     fn the_example_repo_file_is_valid() {
         let f = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/repo.twig.toml");
         assert!(check_repo_file(&f).unwrap());

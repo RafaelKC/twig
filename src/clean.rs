@@ -135,3 +135,24 @@ pub fn run(cfg: &Config, dry_run: bool, yes: bool, branches: bool, force: bool) 
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::git;
+
+    #[test]
+    fn merged_is_judged_against_the_repos_own_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cfg, id) = crate::testutil::mixed_bases_card(tmp.path());
+        let dir = cfg.card_dir(&id);
+        // land each branch in its own base on the remote
+        for (repo, base) in [("api", "dev"), ("sdk", "main")] {
+            let wt = dir.join(repo);
+            git(&wt, &["push", "-q", "origin", &format!("card:{base}")]);
+            assert!(repo_merged(&cfg, &wt, &cfg.repo_base(repo)), "{repo}");
+        }
+        // sdk has no `dev`, so judging it against the card-wide base never says "merged"
+        assert!(!repo_merged(&cfg, &dir.join("sdk"), "dev"));
+    }
+}

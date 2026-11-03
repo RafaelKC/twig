@@ -50,8 +50,9 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
             .map(|p| p.display().to_string())
             .unwrap_or_else(|| "?".into());
         rows += &format!(
-            "| {} | `{repo}` | `{branch}` | `{main}` |\n",
-            cfg.label(repo)
+            "| {} | `{repo}` | `{branch}` | `{base}` | `{main}` |\n",
+            cfg.label(repo),
+            base = cfg.repo_base(repo)
         );
         if let Some(r) = cfg.repo(repo).filter(|r| !r.run.is_empty()) {
             runs += &format!("- `{repo}`: `{}`\n", r.run);
@@ -147,7 +148,6 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
         )
     });
 
-    let base = &cfg.git.base_branch;
     let dir_s = dir.display();
     let body = format!(
         "{heading}\n\n\
@@ -157,10 +157,9 @@ pub fn write(cfg: &Config, id: &str, slug: &str, info: Option<&CardInfo>) -> Res
 This folder **is not a regular clone**. Each subdirectory below is a `git worktree`\n\
 dedicated to this card. The main clones live elsewhere and stay on the\n\
 base branch; touching them breaks the card's isolation.\n\n\
-| name | repo (worktree here) | branch | main clone |\n\
-|---|---|---|---|\n\
+| name | repo (worktree here) | branch | base | main clone |\n\
+|---|---|---|---|---|\n\
 {rows}\n\
-Base branch: `{base}`\n\n\
 ## How to run\n\n\
 {runs}\n\
 {vscode_note}{debug_note}\

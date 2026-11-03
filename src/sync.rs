@@ -103,3 +103,25 @@ pub fn run(cfg: &Config, id: &str, mode: Option<SyncMode>, dry_run: bool) -> Res
         bail!("{tail} ({})", failed.join(", "))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::{commit, git};
+
+    #[test]
+    fn each_repo_syncs_from_its_own_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cfg, id) = crate::testutil::mixed_bases_card(tmp.path());
+        // sdk has no `dev`: syncing from the card-wide base would fail to fetch
+        let origin = tmp.path().join("origin/sdk");
+        commit(&origin, "news");
+        run(&cfg, &id, Some(SyncMode::Merge), false).unwrap();
+        let sdk = cfg.card_dir(&id).join("sdk");
+        assert!(sdk.join("news").exists());
+        git(
+            &sdk,
+            &["merge-base", "--is-ancestor", "origin/main", "HEAD"],
+        );
+    }
+}

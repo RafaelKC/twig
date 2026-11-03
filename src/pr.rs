@@ -42,6 +42,14 @@ fn count(wt: &Path, range: &str) -> Option<u32> {
         .and_then(|s| s.trim().parse().ok())
 }
 
+/// The repo's base branch and how many commits the worktree is ahead of `origin/<base>`.
+fn ahead_of_base(cfg: &Config, repo: &str, wt: &Path) -> (String, u32) {
+    let base = cfg.repo_base(repo);
+    let _ = sys::output(sys::git(wt).args(["fetch", "origin", &base, "--quiet"]));
+    let ahead = count(wt, &format!("origin/{base}..HEAD")).unwrap_or(0);
+    (base, ahead)
+}
+
 pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
     let dir = card::require_card(cfg, id)?;
     let p = provider::current(cfg);
@@ -72,9 +80,7 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
             prs.push((repo.clone(), pr));
             continue;
         }
-        let base = cfg.repo_base(repo);
-        let _ = sys::output(sys::git(&wt).args(["fetch", "origin", &base, "--quiet"]));
-        let ahead = count(&wt, &format!("origin/{base}..HEAD")).unwrap_or(0);
+        let (base, ahead) = ahead_of_base(cfg, repo, &wt);
         if ahead == 0 {
             ui::info(format!(
                 "[{repo}] {branch} has no commits ahead of origin/{base}, skipped"
@@ -154,6 +160,21 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_repo_is_compared_against_its_own_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cfg, id) = crate::testutil::mixed_bases_card(tmp.path());
+        let dir = cfg.card_dir(&id);
+        assert_eq!(
+            ahead_of_base(&cfg, "api", &dir.join("api")),
+            ("dev".into(), 1)
+        );
+        assert_eq!(
+            ahead_of_base(&cfg, "sdk", &dir.join("sdk")),
+            ("main".into(), 1)
+        );
+    }
 
     #[test]
     fn siblings_list_the_other_repos_only() {
