@@ -75,9 +75,12 @@ enum Cmd {
         /// Force a branch in one repo, as <repo>=<branch>; repeatable, wins over --branch.
         #[arg(long, value_name = "REPO=BRANCH", value_parser = card::parse_branch_for, add = ArgValueCandidates::new(complete::repos_eq))]
         branch_for: Vec<(String, String)>,
-        /// Base for the new branch (default: git.base_branch).
+        /// Base for the new branch (default: the repo's `base`, the template's, else git.base_branch).
         #[arg(short = 'B', long)]
         base: Option<String>,
+        /// Base in one repo, as <repo>=<branch>; repeatable, wins over --base.
+        #[arg(long, value_name = "REPO=BRANCH", value_parser = card::parse_branch_for, add = ArgValueCandidates::new(complete::repos_eq))]
+        base_for: Vec<(String, String)>,
         /// New branch with the fix/ prefix.
         #[arg(short = 'F', long)]
         fix: bool,
@@ -118,6 +121,9 @@ enum Cmd {
         /// Base for the new branch.
         #[arg(short = 'B', long)]
         base: Option<String>,
+        /// Base in one repo, as <repo>=<branch>; repeatable, wins over --base.
+        #[arg(long, value_name = "REPO=BRANCH", value_parser = card::parse_branch_for, add = ArgValueCandidates::new(complete::repos_eq))]
+        base_for: Vec<(String, String)>,
         /// New branch with the fix/ prefix.
         #[arg(short = 'F', long)]
         fix: bool,
@@ -555,6 +561,7 @@ fn run(cli: Cli) -> Result<()> {
             branch,
             branch_for,
             base,
+            base_for,
             fix,
             install,
             no_setup,
@@ -572,6 +579,7 @@ fn run(cli: Cli) -> Result<()> {
                 branch,
                 branch_for,
                 base,
+                base_for,
                 fix,
                 install,
                 no_setup,
@@ -587,6 +595,7 @@ fn run(cli: Cli) -> Result<()> {
             branch,
             branch_for,
             base,
+            base_for,
             fix,
             install,
             no_setup,
@@ -600,6 +609,7 @@ fn run(cli: Cli) -> Result<()> {
                 branch,
                 branch_for,
                 base,
+                base_for,
                 fix,
                 install,
                 no_setup,

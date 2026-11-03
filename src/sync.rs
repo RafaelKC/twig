@@ -11,8 +11,6 @@ pub fn run(cfg: &Config, id: &str, mode: Option<SyncMode>, dry_run: bool) -> Res
     let (id, _) = card::split_id(id);
     let dir = card::require_card(cfg, &id)?;
     let mode = mode.unwrap_or(cfg.git.sync);
-    let base = &cfg.git.base_branch;
-    let remote_ref = format!("origin/{base}");
     let verb = match mode {
         SyncMode::Rebase => "rebase",
         SyncMode::Merge => "merge",
@@ -27,6 +25,8 @@ pub fn run(cfg: &Config, id: &str, mode: Option<SyncMode>, dry_run: bool) -> Res
     let (mut synced, mut current, mut skipped, mut failed) = (0, 0, vec![], vec![]);
     for repo in &repos {
         let wt = dir.join(repo);
+        let base = cfg.repo_base(repo);
+        let remote_ref = format!("origin/{base}");
         let Some(branch) = sys::git_current_branch(&wt).filter(|b| b != "HEAD") else {
             ui::warn(format!("{repo}: detached HEAD, skipped"));
             skipped.push(repo.clone());
@@ -37,7 +37,7 @@ pub fn run(cfg: &Config, id: &str, mode: Option<SyncMode>, dry_run: bool) -> Res
             skipped.push(repo.clone());
             continue;
         }
-        if let Err(e) = sys::output(sys::git(&wt).args(["fetch", "origin", base])) {
+        if let Err(e) = sys::output(sys::git(&wt).args(["fetch", "origin", &base])) {
             ui::warn(format!("{repo}: could not fetch {remote_ref}: {e:#}"));
             failed.push(repo.clone());
             continue;

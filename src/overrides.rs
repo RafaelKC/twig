@@ -21,8 +21,9 @@ pub const ENV_PREFIX: &str = "TWIG__";
 
 /// Repo settings a `.twig.toml` may change. Not `path`/`default` (they are about your machine
 /// and your cards, not the repo) nor `hooks` (personal workflow, kept in your own config).
-pub const REPO_KEYS: [&str; 11] = [
+pub const REPO_KEYS: [&str; 12] = [
     "label",
+    "base",
     "short",
     "run",
     "autorun",

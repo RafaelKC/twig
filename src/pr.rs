@@ -10,14 +10,6 @@ use crate::config::Config;
 use crate::provider::{self, CardInfo, NewPr, Pr, PrState, Provider};
 use crate::{card, sys, ui};
 
-/// The base branch of the card: its template's `base`, else `git.base_branch`.
-pub fn card_base(cfg: &Config) -> String {
-    cfg.template
-        .as_ref()
-        .and_then(|t| t.base.clone())
-        .unwrap_or_else(|| cfg.git.base_branch.clone())
-}
-
 /// The PR description: the card link and whatever the provider adds (e.g. `Closes`).
 fn body(p: &dyn Provider, cref: &CardRef, info: Option<&CardInfo>) -> String {
     let url = info
@@ -64,7 +56,6 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
         &cref,
         repos.first().and_then(|r| cfg.repo_path(r)).as_deref(),
     );
-    let base = card_base(cfg);
     let body = body(p.as_ref(), &cref, info.as_ref());
 
     let mut prs: Vec<(String, Pr)> = vec![];
@@ -81,6 +72,7 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
             prs.push((repo.clone(), pr));
             continue;
         }
+        let base = cfg.repo_base(repo);
         let _ = sys::output(sys::git(&wt).args(["fetch", "origin", &base, "--quiet"]));
         let ahead = count(&wt, &format!("origin/{base}..HEAD")).unwrap_or(0);
         if ahead == 0 {

@@ -7,7 +7,6 @@ use anyhow::{bail, Result};
 
 use crate::card::{self, CardRef};
 use crate::config::Config;
-use crate::pr;
 use crate::provider::{self, PrState};
 use crate::{commands, sys, templates, ui};
 
@@ -84,9 +83,11 @@ fn reason(cfg: &Config, id: &str) -> Option<Reason> {
             return Some(Reason::Closed(info.state));
         }
     }
-    let base = pr::card_base(cfg);
-    (!repos.is_empty() && repos.iter().all(|r| repo_merged(cfg, &dir.join(r), &base)))
-        .then_some(Reason::Merged)
+    (!repos.is_empty()
+        && repos
+            .iter()
+            .all(|r| repo_merged(cfg, &dir.join(r), &cfg.repo_base(r))))
+    .then_some(Reason::Merged)
 }
 
 /// The config as `twig rm <id>` would see it (with the card's template active).

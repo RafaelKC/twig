@@ -109,7 +109,7 @@ local_files = [".env.local"]
 env         = { NG_API_URL = "http://localhost:${TWIG_PORT_API:-5000}" }
 ```
 
-Allowed: `label`, `short`, `run`, `autorun`, `port`, `ports`, `env`, `install`, `post_create`,
+Allowed: `label`, `short`, `run`, `autorun`, `base`, `port`, `ports`, `env`, `install`, `post_create`,
 `local_files`, `debug`. A key replaces the same key of the user config as a whole (an `env` table
 in the file replaces the config's `env` table, it isn't merged entry by entry). Not allowed: `path` and `default` (they are about your machine and your cards) and
 `hooks` (personal workflow, kept in your own config). In a card, the file is read from the
@@ -467,6 +467,7 @@ post_create = ["echo created $TWIG_CARD_ID"]
 | `short` | `<name>` | short tab/pane name in herdr |
 | `default` | `false` | included in the card when the user doesn't pass `--repos` |
 | `run` | — | command to start the project: becomes a VS Code task and a pane in herdr's `run` tab |
+| `base` | — | branch this repo's card branches start from, and that `status`, `sync`, `pr` and `clean` compare against; wins over the template's `base` and `git.base_branch` (`--base` / `--base-for` still win over it when creating the branch) |
 | `autorun` | `true` | `false` = don't start it in herdr's `run` tab (still a VS Code task); only applies with `run` |
 | `port` | — | base dev server port; each card gets `port + offset` as `TWIG_PORT_<REPO>` / `PORT` (see [`[ports]`](#ports)) |
 | `ports` | `{}` | more base ports by name (`{ https = 5100 }`), `TWIG_PORT_<REPO>_<NAME>` in a card; at least `ports.span` apart from every other base port |

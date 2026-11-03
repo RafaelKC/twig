@@ -365,6 +365,9 @@ pub struct Repo {
     pub default: bool,
     pub run: String,
     pub autorun: bool,
+    /// Branch new card branches start from, `twig status`/`sync`/`pr`/`clean` compare against.
+    /// Empty: the template's `base`, else `git.base_branch`.
+    pub base: String,
     /// Base dev server port; each card gets `port + offset` (see `ports.rs`).
     pub port: Option<u16>,
     /// More base ports by name (`https = 5100`), each one `TWIG_PORT_<REPO>_<NAME>` in a card.
@@ -387,6 +390,7 @@ impl Default for Repo {
             default: false,
             run: String::new(),
             autorun: true,
+            base: String::new(),
             port: None,
             ports: IndexMap::new(),
             env: IndexMap::new(),
@@ -590,6 +594,17 @@ impl Config {
         }
     }
 
+    /// The base branch of a repo in a card: its own `base`, else the card's template `base`,
+    /// else `git.base_branch`.
+    pub fn repo_base(&self, name: &str) -> String {
+        self.repo(name)
+            .map(|r| r.base.trim())
+            .filter(|b| !b.is_empty())
+            .map(str::to_string)
+            .or_else(|| self.template.as_ref().and_then(|t| t.base.clone()))
+            .unwrap_or_else(|| self.git.base_branch.clone())
+    }
+
     pub fn default_repos(&self) -> Vec<String> {
         self.repos
             .iter()
@@ -693,6 +708,19 @@ mod tests {
         let f = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/config.toml");
         let cfg = Config::load_from(&f).unwrap();
         assert!(!cfg.repos["api"].env.is_empty());
+    }
+
+    #[test]
+    fn repo_base_prefers_the_repo_then_the_template_then_git() {
+        let mut cfg =
+            parse("[git]\nbase_branch = \"dev\"\n[repos.sdk]\nbase = \"main\"\n[repos.api]\n")
+                .unwrap();
+        assert_eq!(cfg.repo_base("sdk"), "main");
+        assert_eq!(cfg.repo_base("api"), "dev");
+        cfg.template = Some(toml::from_str("base = \"release\"").unwrap());
+        assert_eq!(cfg.repo_base("sdk"), "main");
+        assert_eq!(cfg.repo_base("api"), "release");
+        assert_eq!(cfg.repo_base("unknown"), "release");
     }
 
     #[test]
