@@ -4,6 +4,33 @@ All notable changes to twig are listed here, newest first. Each version links to
 [GitHub release](https://github.com/RafaelKC/twig/releases), and entries name the pull request
 (and issue) they came from.
 
+## [0.11.0] - 2026-11-03
+
+twig v0.11.0 adds a per-repo base branch, so a single card can branch each repo from a different base, such as `api` from `dev` and `sdk` from `main`.
+
+### Highlights
+
+- **Per-repo base branch:** set `base` under `[repos.<name>]` in your config or in a repo's `.twig.toml`. Repos in the same card no longer have to share one base. (#108, #107)
+
+  ```toml
+  [repos.api]
+  base = "dev"
+
+  [repos.sdk]
+  base = "main"
+  ```
+
+- **`--base-for REPO=BRANCH`:** a repeatable flag on `twig new` and `twig add-repo`, like `--branch-for`. It sets the base for one repo when creating its branch. The repo must be one of the card's repos. (#108, #107)
+
+  When twig creates a branch, it picks the base in this order: `--base-for`, then `--base`, then `repos.<name>.base`, then the template's `base`, then `git.base_branch`.
+
+### Improvements
+
+- `status`, `sync`, `pr` and `clean` now use each repo's own base. `status` reports `base_ref` and `vs_base` per repo, and `twig pr` opens each PR against that repo's base. (#108, #107)
+- Configs without `repos.<name>.base` behave as before. (#108, #107)
+- `--base` and `--base-for` only affect branch creation and are not remembered. Later `status`, `sync`, `pr` and `clean` use the configured bases: `repos.<name>.base`, then the template's `base`, then `git.base_branch`. (#108, #107)
+- `docs/CONFIG.md` and `docs/COMMANDS.md` now describe the new field and flag. (#108, #107)
+
 ## [0.10.0] - 2026-10-30
 
 twig v0.10.0 adds configurable herdr tab layouts with a new `twig layout` command, and `twig park` now saves and restores your workspace layout and agent conversations. `twig rm` no longer keeps conversations by default, so check the migration note below.
@@ -217,6 +244,7 @@ First release: twig, a Rust CLI that replaces `card.sh`.
 - herdr plugin and AI skill.
 - `install.sh` and a release workflow with checksums and Sigstore signatures.
 
+[0.11.0]: https://github.com/RafaelKC/twig/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/RafaelKC/twig/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/RafaelKC/twig/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/RafaelKC/twig/compare/v0.8.0...v0.9.0
