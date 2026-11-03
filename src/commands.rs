@@ -20,6 +20,7 @@ pub struct NewArgs {
     pub branch: Option<String>,
     pub branch_for: Vec<(String, String)>,
     pub base: Option<String>,
+    pub base_for: Vec<(String, String)>,
     pub fix: bool,
     pub install: bool,
     pub no_setup: bool,
@@ -35,6 +36,7 @@ pub struct AddRepoArgs {
     pub branch: Option<String>,
     pub branch_for: Vec<(String, String)>,
     pub base: Option<String>,
+    pub base_for: Vec<(String, String)>,
     pub fix: bool,
     pub install: bool,
     pub no_setup: bool,
@@ -121,13 +123,12 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
     // the template is a preset: explicit flags override it
     let tpl = templates::resolve(cfg, a.template.as_deref())?;
     let tpl_name = tpl.as_ref().map(|(n, _)| n.clone());
-    let (mut t_repos, mut t_install, mut t_prefix, mut t_base) = (vec![], None, None, None);
+    let (mut t_repos, mut t_install, mut t_prefix) = (vec![], None, None);
     if let Some((name, t)) = tpl {
         ui::info(format!("template: {name}"));
         t_repos = t.repos.clone();
         t_install = t.install;
         t_prefix = t.branch_prefix.clone();
-        t_base = t.base.clone();
         templates::apply(cfg, t);
     }
     let install = a.install || (t_install == Some(true) && !a.no_setup);
@@ -141,6 +142,7 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
         bail!("no repos: pass --repos or set `default = true` on some repo in the config");
     }
     card::check_branch_for(&a.branch_for, &repos)?;
+    card::check_base_for(&a.base_for, &repos)?;
     // validate (and register) the repos before creating anything
     let mut paths = vec![];
     for r in &repos {
@@ -187,23 +189,28 @@ pub fn new(cfg: &mut Config, a: NewArgs) -> Result<()> {
             cfg.branch_prefix(info.as_ref().map(|i| i.kind.as_str()).unwrap_or(""))
         })
     };
-    let base = a
-        .base
-        .or(t_base)
-        .unwrap_or_else(|| cfg.git.base_branch.clone());
     let opts = card::BranchOpts {
         id: &cref.number,
         slug: &slug,
         forced: a.branch.as_deref(),
         forced_for: &a.branch_for,
-        base: &base,
+        base: "",
         prefix: &prefix,
     };
 
     let mut done: Vec<String> = vec![];
     let mut title = String::new();
     for (repo, path) in repos.iter().zip(&paths) {
-        match card::make_worktree(repo, path, &dir.join(repo), &opts) {
+        let base = card::pick_base(cfg, repo, &a.base_for, a.base.as_deref());
+        match card::make_worktree(
+            repo,
+            path,
+            &dir.join(repo),
+            &card::BranchOpts {
+                base: &base,
+                ..opts
+            },
+        ) {
             Ok(branch) => {
                 if title.is_empty() {
                     title = branch;
@@ -294,6 +301,7 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
     let dir = card::require_card(cfg, &a.id)?;
 
     card::check_branch_for(&a.branch_for, &a.repos)?;
+    card::check_base_for(&a.base_for, &a.repos)?;
     let mut paths = vec![];
     for r in &a.repos {
         paths.push(card::ensure_repo(cfg, r)?);
@@ -318,16 +326,12 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
             cfg.branch_prefix(info.as_ref().map(|i| i.kind.as_str()).unwrap_or(""))
         })
     };
-    let base = a
-        .base
-        .or_else(|| t.and_then(|t| t.base.clone()))
-        .unwrap_or_else(|| cfg.git.base_branch.clone());
     let opts = card::BranchOpts {
         id: &cref.number,
         slug: &slug,
         forced: a.branch.as_deref(),
         forced_for: &a.branch_for,
-        base: &base,
+        base: "",
         prefix: &prefix,
     };
 
@@ -338,7 +342,16 @@ pub fn add_repo(cfg: &mut Config, a: AddRepoArgs) -> Result<()> {
             ui::info(format!("[{repo}] is already in the card"));
             continue;
         }
-        card::make_worktree(repo, path, &dir.join(repo), &opts)?;
+        let base = card::pick_base(cfg, repo, &a.base_for, a.base.as_deref());
+        card::make_worktree(
+            repo,
+            path,
+            &dir.join(repo),
+            &card::BranchOpts {
+                base: &base,
+                ..opts
+            },
+        )?;
         added = true;
         created.push(repo.clone());
     }

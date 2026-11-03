@@ -11,8 +11,6 @@ pub fn run(cfg: &Config, id: &str, mode: Option<SyncMode>, dry_run: bool) -> Res
     let (id, _) = card::split_id(id);
     let dir = card::require_card(cfg, &id)?;
     let mode = mode.unwrap_or(cfg.git.sync);
-    let base = &cfg.git.base_branch;
-    let remote_ref = format!("origin/{base}");
     let verb = match mode {
         SyncMode::Rebase => "rebase",
         SyncMode::Merge => "merge",
@@ -27,6 +25,8 @@ pub fn run(cfg: &Config, id: &str, mode: Option<SyncMode>, dry_run: bool) -> Res
     let (mut synced, mut current, mut skipped, mut failed) = (0, 0, vec![], vec![]);
     for repo in &repos {
         let wt = dir.join(repo);
+        let base = cfg.repo_base(repo);
+        let remote_ref = format!("origin/{base}");
         let Some(branch) = sys::git_current_branch(&wt).filter(|b| b != "HEAD") else {
             ui::warn(format!("{repo}: detached HEAD, skipped"));
             skipped.push(repo.clone());
@@ -37,7 +37,7 @@ pub fn run(cfg: &Config, id: &str, mode: Option<SyncMode>, dry_run: bool) -> Res
             skipped.push(repo.clone());
             continue;
         }
-        if let Err(e) = sys::output(sys::git(&wt).args(["fetch", "origin", base])) {
+        if let Err(e) = sys::output(sys::git(&wt).args(["fetch", "origin", &base])) {
             ui::warn(format!("{repo}: could not fetch {remote_ref}: {e:#}"));
             failed.push(repo.clone());
             continue;
@@ -101,5 +101,27 @@ pub fn run(cfg: &Config, id: &str, mode: Option<SyncMode>, dry_run: bool) -> Res
         Ok(())
     } else {
         bail!("{tail} ({})", failed.join(", "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testutil::{commit, git};
+
+    #[test]
+    fn each_repo_syncs_from_its_own_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cfg, id) = crate::testutil::mixed_bases_card(tmp.path());
+        // sdk has no `dev`: syncing from the card-wide base would fail to fetch
+        let origin = tmp.path().join("origin/sdk");
+        commit(&origin, "news");
+        run(&cfg, &id, Some(SyncMode::Merge), false).unwrap();
+        let sdk = cfg.card_dir(&id).join("sdk");
+        assert!(sdk.join("news").exists());
+        git(
+            &sdk,
+            &["merge-base", "--is-ancestor", "origin/main", "HEAD"],
+        );
     }
 }

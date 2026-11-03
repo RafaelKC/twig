@@ -87,8 +87,8 @@ fn repo_status(
         .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count())
         .unwrap_or(0);
 
-    let base = &cfg.git.base_branch;
-    let base_ref = [format!("origin/{base}"), base.clone()]
+    let base = cfg.repo_base(repo);
+    let base_ref = [format!("origin/{base}"), base]
         .into_iter()
         .find(|r| ref_exists(&wt, r));
     let vs_base = base_ref.as_deref().and_then(|r| ahead_behind(&wt, r));
@@ -212,6 +212,7 @@ fn print_card(s: &CardStatus, detailed: bool) {
 /// The config with this card's overrides (ports may differ per card); `None` if they are broken.
 fn card_config(id: &str) -> Option<Config> {
     let mut c = Config::load().ok()?;
+    crate::templates::activate(&mut c, id);
     c.apply_card(id).ok()?;
     Some(c)
 }
@@ -251,4 +252,22 @@ pub fn run(cfg: &Config, id: Option<&str>, json: bool) -> Result<()> {
         print_card(c, detailed);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_repo_reports_its_own_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cfg, id) = crate::testutil::mixed_bases_card(tmp.path());
+        let st = collect(&cfg, &id);
+        let by = |n: &str| st.repos.iter().find(|r| r.repo == n).unwrap();
+        let (api, sdk) = (by("api"), by("sdk"));
+        assert_eq!(api.base_ref.as_deref(), Some("origin/dev"));
+        assert_eq!(sdk.base_ref.as_deref(), Some("origin/main"));
+        assert_eq!(sdk.vs_base.map(|v| (v.ahead, v.behind)), Some((1, 0)));
+        assert_eq!(api.vs_base.map(|v| (v.ahead, v.behind)), Some((1, 0)));
+    }
 }

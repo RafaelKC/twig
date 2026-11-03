@@ -21,8 +21,9 @@ pub const ENV_PREFIX: &str = "TWIG__";
 
 /// Repo settings a `.twig.toml` may change. Not `path`/`default` (they are about your machine
 /// and your cards, not the repo) nor `hooks` (personal workflow, kept in your own config).
-pub const REPO_KEYS: [&str; 11] = [
+pub const REPO_KEYS: [&str; 12] = [
     "label",
+    "base",
     "short",
     "run",
     "autorun",
@@ -269,6 +270,16 @@ mod tests {
 
         fs::write(&f, "[hooks]\npre_rm = [\"x\"]\n").unwrap();
         assert!(merge_repo_file(&mut DocumentMut::new(), "r", &f).is_err());
+    }
+
+    #[test]
+    fn repo_file_accepts_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let f = tmp.path().join(FILE);
+        fs::write(&f, "base = \"main\"\n").unwrap();
+        let mut doc = DocumentMut::new();
+        merge_repo_file(&mut doc, "sdk", &f).unwrap();
+        assert_eq!(doc["repos"]["sdk"]["base"].as_str(), Some("main"));
     }
 
     #[test]

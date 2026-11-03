@@ -303,6 +303,36 @@ pub fn parse_branch_for(s: &str) -> Result<(String, String), String> {
     }
 }
 
+/// The base of a new branch in `repo`: `--base-for`, else `--base`, else the repo's `base`, else
+/// the template's, else `git.base_branch`.
+pub fn pick_base(
+    cfg: &Config,
+    repo: &str,
+    base_for: &[(String, String)],
+    base: Option<&str>,
+) -> String {
+    base_for
+        .iter()
+        .find(|(r, _)| r == repo)
+        .map(|(_, b)| b.as_str())
+        .or(base)
+        .map(str::to_string)
+        .unwrap_or_else(|| cfg.repo_base(repo))
+}
+
+/// Every `--base-for` repo must be one of the card's repos.
+pub fn check_base_for(base_for: &[(String, String)], repos: &[String]) -> Result<()> {
+    for (r, _) in base_for {
+        if !repos.contains(r) {
+            bail!(
+                "--base-for {r}=...: {r} is not among the card's repos ({})",
+                repos.join(", ")
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Every `--branch-for` repo must be one of the card's repos.
 pub fn check_branch_for(forced_for: &[(String, String)], repos: &[String]) -> Result<()> {
     for (r, _) in forced_for {
@@ -322,6 +352,7 @@ pub struct BranchOpts<'a> {
     pub forced: Option<&'a str>,
     /// `--branch-for repo=branch`: wins over `forced` in that repo.
     pub forced_for: &'a [(String, String)],
+    /// The repo's base, see [`pick_base`].
     pub base: &'a str,
     pub prefix: &'a str,
 }
@@ -531,6 +562,21 @@ mod tests {
         .unwrap();
         let cfg = Config::load_from(&file).unwrap();
         (tmp, cfg)
+    }
+
+    #[test]
+    fn pick_base_follows_the_precedence() {
+        let (_t, mut c) = cfg("[git]\nbase_branch = \"dev\"\n[repos.sdk]\nbase = \"main\"\n");
+        let bf = vec![("api".to_string(), "hotfix".to_string())];
+        assert_eq!(pick_base(&c, "sdk", &[], None), "main");
+        assert_eq!(pick_base(&c, "api", &[], None), "dev");
+        assert_eq!(pick_base(&c, "sdk", &[], Some("x")), "x");
+        assert_eq!(pick_base(&c, "api", &bf, Some("x")), "hotfix");
+        assert_eq!(pick_base(&c, "sdk", &bf, Some("x")), "x");
+        c.repos.get_mut("sdk").unwrap().base.clear();
+        assert_eq!(pick_base(&c, "sdk", &[], None), "dev");
+        assert!(check_base_for(&bf, &["sdk".to_string()]).is_err());
+        assert!(check_base_for(&bf, &["api".to_string()]).is_ok());
     }
 
     fn gh_ref(key: &str, number: &str, repo: &str) -> CardRef {

@@ -10,14 +10,6 @@ use crate::config::Config;
 use crate::provider::{self, CardInfo, NewPr, Pr, PrState, Provider};
 use crate::{card, sys, ui};
 
-/// The base branch of the card: its template's `base`, else `git.base_branch`.
-pub fn card_base(cfg: &Config) -> String {
-    cfg.template
-        .as_ref()
-        .and_then(|t| t.base.clone())
-        .unwrap_or_else(|| cfg.git.base_branch.clone())
-}
-
 /// The PR description: the card link and whatever the provider adds (e.g. `Closes`).
 fn body(p: &dyn Provider, cref: &CardRef, info: Option<&CardInfo>) -> String {
     let url = info
@@ -50,6 +42,14 @@ fn count(wt: &Path, range: &str) -> Option<u32> {
         .and_then(|s| s.trim().parse().ok())
 }
 
+/// The repo's base branch and how many commits the worktree is ahead of `origin/<base>`.
+fn ahead_of_base(cfg: &Config, repo: &str, wt: &Path) -> (String, u32) {
+    let base = cfg.repo_base(repo);
+    let _ = sys::output(sys::git(wt).args(["fetch", "origin", &base, "--quiet"]));
+    let ahead = count(wt, &format!("origin/{base}..HEAD")).unwrap_or(0);
+    (base, ahead)
+}
+
 pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
     let dir = card::require_card(cfg, id)?;
     let p = provider::current(cfg);
@@ -64,7 +64,6 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
         &cref,
         repos.first().and_then(|r| cfg.repo_path(r)).as_deref(),
     );
-    let base = card_base(cfg);
     let body = body(p.as_ref(), &cref, info.as_ref());
 
     let mut prs: Vec<(String, Pr)> = vec![];
@@ -81,8 +80,7 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
             prs.push((repo.clone(), pr));
             continue;
         }
-        let _ = sys::output(sys::git(&wt).args(["fetch", "origin", &base, "--quiet"]));
-        let ahead = count(&wt, &format!("origin/{base}..HEAD")).unwrap_or(0);
+        let (base, ahead) = ahead_of_base(cfg, repo, &wt);
         if ahead == 0 {
             ui::info(format!(
                 "[{repo}] {branch} has no commits ahead of origin/{base}, skipped"
@@ -162,6 +160,21 @@ pub fn run(cfg: &Config, id: &str, draft: bool, dry_run: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_repo_is_compared_against_its_own_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (cfg, id) = crate::testutil::mixed_bases_card(tmp.path());
+        let dir = cfg.card_dir(&id);
+        assert_eq!(
+            ahead_of_base(&cfg, "api", &dir.join("api")),
+            ("dev".into(), 1)
+        );
+        assert_eq!(
+            ahead_of_base(&cfg, "sdk", &dir.join("sdk")),
+            ("main".into(), 1)
+        );
+    }
 
     #[test]
     fn siblings_list_the_other_repos_only() {
