@@ -73,8 +73,12 @@ fn tagged_wiql(project: &str, tags: &[String], mine: bool) -> String {
     )
 }
 
-/// Items of an `az boards query` result. `System.Tags` is `a; b; c`.
+/// Items of an `az boards query` result. `System.Tags` is `a; b; c`. With no match az
+/// prints nothing at all (not `[]`).
 fn parse_tagged(raw: &str, scope: &str) -> Result<Vec<Candidate>> {
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
     let v: Value = serde_json::from_str(raw).context("unexpected response from az")?;
     let items = v.as_array().context("unexpected response from az")?;
     Ok(items
@@ -352,6 +356,13 @@ impl Provider for AzureDevOps<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_query_output_is_no_items() {
+        assert!(parse_tagged("", "P").unwrap().is_empty());
+        assert!(parse_tagged("\n", "P").unwrap().is_empty());
+        assert!(parse_tagged("{", "P").is_err());
+    }
 
     #[test]
     fn wiql_groups_tags_and_doubles_quotes() {
