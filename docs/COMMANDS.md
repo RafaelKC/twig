@@ -9,6 +9,8 @@
 | `twig new <id> [slug]` | creates the card: worktrees, herdr workspace and, if enabled, `.code-workspace` |
 | `twig add-repo <id> <repo,...>` | adds more repos to an existing card |
 | `twig template ls` / `show NAME` / `edit` | lists, shows and edits the card templates (`templates.toml`) |
+| `twig watch [--once] [-n]` | starts cards from tagged work items (polling, rules in `watch.toml`); see [WATCH.md](WATCH.md) |
+| `twig watch status` / `forget <id>` / `show` / `edit` / `validate` / `install` / `uninstall` | the ledger and service, the rules file, the user service |
 | `twig open [id] [default\|herdr\|code]` | opens the card in the chosen target (default: `[open] default`, herdr) |
 | `twig open-card [id]` (`opcd`) | opens the card's page (work item or issue) in the browser |
 | `twig herdr <id>` | opens the card's workspace in herdr (creates it if missing) |
@@ -625,6 +627,7 @@ Works even with a missing or invalid config (checks that depend on it are skippe
 | agent | first token of `agent.command` (`claude` / `codex`) on the PATH | error |
 | folders | `paths.worktrees` exists or can be created | error |
 | repos | each `[repos.x]` points to a git repo; at least one has `default = true` | error / warning |
+| watch | `watch.toml` valid, templates exist, bypassed agent permissions / `assigned_to_me = false` (warnings), service installed and running | error / warning |
 | orphaned worktrees | same search as `twig prune -n` | warning |
 
 With `--json`, stdout is only this JSON document (no colors, no emoji); the exit code is
@@ -662,6 +665,24 @@ format in [CONFIG.md](CONFIG.md#templates-and-templatestoml).
 - `show NAME` prints repos, agent, install, branch prefix/base and hooks; an unknown name lists the available ones.
 - `edit` works like `config edit`: opens `$VISUAL`/`$EDITOR`, creates a commented file if missing and
   validates on save (repo names must exist in the config).
+
+## `twig watch [--once] [-n | --dry-run]`
+
+Polls the provider for items that carry a rule's tag and runs `twig new <id> --template <template>`
+for each new one. Rules, the ledger, limits, the service and the **security notes** are in
+[WATCH.md](WATCH.md). Runs in the foreground until stopped (SIGTERM/Ctrl+C).
+
+| Option | Description |
+|---|---|
+| `--once` | one cycle and exit; non-zero if a query or a start failed |
+| `-n`, `--dry-run` | list what would start; no ledger, no cards, no lock |
+
+| Subcommand | What it does |
+|---|---|
+| `status` | the service (installed? running?) and the ledger: `pending`/`ok`/`fail`/`exists`, when, the log of failures |
+| `forget <id>` | takes an item out of the ledger, so it can start again |
+| `show` / `edit` / `validate` | prints, edits (`$VISUAL`/`$EDITOR`, validated on save) and checks `watch.toml` (`TWIG_WATCH`) |
+| `install` / `uninstall` | user service: systemd on Linux, a LaunchAgent on macOS (on Windows, prints the `schtasks` command); `twig uninstall` removes it too |
 
 ## `twig config edit`
 
@@ -745,6 +766,7 @@ Removes what the installer put in place:
 - the AI skill `~/.claude/skills/twig` or `~/.agents/skills/twig` (only if it's twig's);
 - shell completions: the `# twig completions` line and the `PATH` line the installer added to
   `~/.bashrc` / `~/.zshrc`, the fish file, and the static scripts older versions wrote;
+- the [watch](WATCH.md) user service, if installed;
 - the `twig` binary on the `PATH`.
 
 On Windows: the plugin folder is `%LOCALAPPDATA%\twig`, herdr's config `%APPDATA%\herdr\config.toml`,

@@ -6,7 +6,7 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use serde_json::Value;
 
-use super::{strip_html, CardInfo, NewPr, Pr, PrState, Provider};
+use super::{strip_html, Candidate, CardInfo, NewPr, Pr, PrState, Provider};
 use crate::card::CardRef;
 use crate::config::Az;
 use crate::doctor::{succeeds, Report};
@@ -45,6 +45,58 @@ fn pr_of(v: &Value) -> Option<Pr> {
         format!("{web}/pullrequest/{id}")
     };
     Some(Pr { number: id, url })
+}
+
+/// `'` doubled, for a WIQL string literal.
+fn wiql_quote(v: &str) -> String {
+    v.replace('\'', "''")
+}
+
+/// The WIQL of [`Provider::query_tagged`]. `CONTAINS` on tags is a substring match
+/// (`agent` also finds `agent:done`), so the caller compares the tags again.
+fn tagged_wiql(project: &str, tags: &[String], mine: bool) -> String {
+    let tags = tags
+        .iter()
+        .map(|t| format!("[System.Tags] CONTAINS '{}'", wiql_quote(t)))
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let me = if mine {
+        " AND [System.AssignedTo] = @Me"
+    } else {
+        ""
+    };
+    format!(
+        "SELECT [System.Id],[System.Tags],[System.State],[System.AssignedTo] FROM WorkItems \
+         WHERE [System.TeamProject] = '{}' AND ({tags}){me} \
+         AND [System.State] NOT IN ('Closed','Done','Removed')",
+        wiql_quote(project)
+    )
+}
+
+/// Items of an `az boards query` result. `System.Tags` is `a; b; c`.
+fn parse_tagged(raw: &str, scope: &str) -> Result<Vec<Candidate>> {
+    let v: Value = serde_json::from_str(raw).context("unexpected response from az")?;
+    let items = v.as_array().context("unexpected response from az")?;
+    Ok(items
+        .iter()
+        .filter_map(|it| {
+            let f = &it["fields"];
+            let id = it["id"].as_u64().or_else(|| f["System.Id"].as_u64())?;
+            Some(Candidate {
+                id: id.to_string(),
+                scope: scope.to_string(),
+                tags: f["System.Tags"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .split(';')
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map(String::from)
+                    .collect(),
+                state: f["System.State"].as_str().unwrap_or_default().to_string(),
+            })
+        })
+        .collect())
 }
 
 /// Web page of a work item. `_links.html.href` when present; otherwise built from the REST `url`
@@ -227,6 +279,42 @@ impl Provider for AzureDevOps<'_> {
         sys::output(&mut cmd).map(|_| ())
     }
 
+    fn query_tagged(&self, scope: &str, tags: &[String], mine: bool) -> Result<Vec<Candidate>> {
+        sys::which("az").context("az not found on PATH")?;
+        let wiql = tagged_wiql(scope, tags, mine);
+        let mut cmd = self.az(
+            None,
+            &["boards", "query", "--wiql", &wiql, "--output", "json"],
+        );
+        parse_tagged(&sys::output(&mut cmd)?, scope)
+    }
+
+    fn is_watch_id(&self, id: &str) -> bool {
+        !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())
+    }
+
+    fn add_tag(&self, c: &Candidate, tag: &str) -> Result<()> {
+        // read-modify-write of the whole field: it races with a person editing the tags
+        let mut all = c.tags.clone();
+        all.push(tag.to_string());
+        let field = format!("System.Tags={}", all.join("; "));
+        let mut cmd = self.az(
+            None,
+            &[
+                "boards",
+                "work-item",
+                "update",
+                "--id",
+                &c.id,
+                "--fields",
+                &field,
+                "--output",
+                "none",
+            ],
+        );
+        sys::output(&mut cmd).map(|_| ())
+    }
+
     fn doctor(&self, r: &mut Report) {
         if !r.require_bin("az", "provider.default = \"az\"") {
             return;
@@ -264,6 +352,33 @@ impl Provider for AzureDevOps<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wiql_groups_tags_and_doubles_quotes() {
+        let q = tagged_wiql("O'Neil", &["agent".into(), "bot".into()], true);
+        assert!(q.contains("[System.TeamProject] = 'O''Neil'"));
+        assert!(q.contains("([System.Tags] CONTAINS 'agent' OR [System.Tags] CONTAINS 'bot')"));
+        assert!(q.contains("[System.AssignedTo] = @Me"));
+        assert!(!tagged_wiql("P", &["a".into()], false).contains("@Me"));
+    }
+
+    #[test]
+    fn tagged_items_split_the_tags_on_semicolons() {
+        let raw = r#"[
+          {"id": 7, "fields": {"System.Tags": "agent; Frota ", "System.State": "Active"}},
+          {"id": 8, "fields": {"System.Tags": "agent:done", "System.State": "New"}},
+          {"id": 9, "fields": {}}
+        ]"#;
+        let c = parse_tagged(raw, "Frota").unwrap();
+        assert_eq!(c.len(), 3);
+        assert_eq!(c[0].id, "7");
+        assert_eq!(c[0].tags, ["agent", "Frota"]);
+        assert_eq!(c[0].state, "Active");
+        assert_eq!(c[1].tags, ["agent:done"]);
+        assert!(c[2].tags.is_empty());
+        assert!(parse_tagged("{}", "P").is_err());
+        assert!(parse_tagged("not json", "P").is_err());
+    }
 
     #[test]
     fn children_are_the_hierarchy_forward_relations() {

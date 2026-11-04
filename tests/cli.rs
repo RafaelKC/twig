@@ -3828,3 +3828,109 @@ fn restore_skips_panes_whose_folder_is_gone() {
     assert!(calls.contains("claude --resume s-a"), "{calls}");
     assert!(!calls.contains("s-b"), "{calls}");
 }
+
+// ───────────────────────── watch ─────────────────────────
+
+/// A sandbox whose `az boards query` answers with items 7 (`agent`) and 8 (`agent:done`).
+fn watch_sandbox() -> Sandbox {
+    let s = new_sandbox();
+    write_templates(&s, "[t]\nrepos = [\"a\"]\nagent_prompt = \"/go {id}\"\n");
+    s.stub(
+        "az",
+        r#"case "$*" in
+*"boards query"*) echo '[{"id":7,"fields":{"System.Tags":"agent; x","System.State":"Active"}},{"id":8,"fields":{"System.Tags":"agent:done","System.State":"Active"}}]';;
+esac"#,
+    );
+    fs::write(
+        s.config.parent().unwrap().join("watch.toml"),
+        "[[rules]]\ntag = \"agent\"\ntemplate = \"t\"\nproject = \"Frota\"\n",
+    )
+    .unwrap();
+    s
+}
+
+fn ledger_text(s: &Sandbox) -> String {
+    fs::read_to_string(s.path(".local/state/twig/watch.json")).unwrap_or_default()
+}
+
+#[test]
+fn watch_without_a_file_explains_how_to_create_one() {
+    let s = new_sandbox();
+    let o = s.run(&["watch", "--once"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "twig watch edit");
+}
+
+#[test]
+fn watch_validate_reports_an_unknown_template() {
+    let s = watch_sandbox();
+    assert_exit(&s.run(&["watch", "validate"]), 0);
+    fs::write(
+        s.config.parent().unwrap().join("watch.toml"),
+        "[[rules]]\ntag = \"agent\"\ntemplate = \"ghost\"\nproject = \"Frota\"\n",
+    )
+    .unwrap();
+    let o = s.run(&["watch", "validate"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "`ghost` is not in templates.toml");
+    assert_has(&s.run(&["doctor"]), "`ghost` is not in templates.toml");
+}
+
+#[test]
+fn watch_show_prints_the_rules() {
+    let s = watch_sandbox();
+    let o = s.run(&["watch", "show"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "tag `agent` in Frota → template t");
+}
+
+#[test]
+fn watch_dry_run_changes_nothing() {
+    let s = watch_sandbox();
+    let o = s.run(&["watch", "--once", "--dry-run"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "7: would start `twig new 7 --template t`");
+    assert!(!String::from_utf8_lossy(&o.stdout).contains("8:"));
+    assert!(!s.path("wt/7").exists());
+    assert_eq!(ledger_text(&s), "");
+}
+
+#[test]
+fn watch_starts_a_tagged_card_once_and_forget_allows_a_restart() {
+    let s = watch_sandbox();
+    let o = s.run(&["watch", "--once"]);
+    assert_exit(&o, 0);
+    assert_has(&o, "7: ok");
+    assert!(s.path("wt/7/a/.git").exists(), "{}", text(&o));
+    assert!(!s.path("wt/8").exists());
+    assert!(ledger_text(&s).contains("\"7\""));
+    assert!(ledger_text(&s).contains("\"ok\""));
+    assert_has(&s.run(&["watch", "status"]), "7  ok");
+
+    // the same item again: no second start, no error about the existing card
+    let o = s.run(&["watch", "--once"]);
+    assert_exit(&o, 0);
+    assert!(!text(&o).contains("starting"), "{}", text(&o));
+
+    assert_exit(&s.run(&["watch", "forget", "7"]), 0);
+    assert_exit(&s.run(&["watch", "forget", "7"]), 1);
+    assert!(!ledger_text(&s).contains("\"7\""));
+    // the card exists now: it is recorded, not recreated
+    assert_has(&s.run(&["watch", "--once"]), "card already exists");
+}
+
+#[test]
+fn watch_survives_a_failing_query_and_exits_non_zero_with_once() {
+    let s = watch_sandbox();
+    s.stub("az", "echo boom >&2; exit 1");
+    let o = s.run(&["watch", "--once"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "query failed");
+}
+
+#[test]
+fn watch_forget_completes_the_ledger_ids() {
+    let s = watch_sandbox();
+    assert_exit(&s.run(&["watch", "--once"]), 0);
+    assert_eq!(complete(&s, &["watch", "forget", ""]), ["7"]);
+}

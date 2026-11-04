@@ -74,6 +74,10 @@ Seus clones principais ficam na `main`. Dois cards nunca pisam um no outro.
   são copiados do clone principal para cada worktree.
 - **Hooks de ciclo de vida.** Seus próprios comandos de shell em `post_create`, `pre_rm`, `post_rm`, `post_open` e `post_refresh`, no card todo ou por repo; `--no-hooks` ignora todos.
 - **Templates de card.** Presets nomeados em `~/.config/twig/templates.toml` (repos, agente, install, hooks): `twig new 123 --template fullstack`; as flags têm precedência.
+- **Tag para iniciar.** `twig watch` consulta o provider e, quando um item recebe a tag de uma regra
+  (`agent`), roda `twig new <id> --template X` para ele. Regras em `watch.toml` e um ledger local
+  para nada iniciar duas vezes. Ninguém revisa o card antes de o agente começar: leia
+  [docs/WATCH.md](docs/WATCH.md) (em inglês).
 - **Uma config, mais a do repo.** Suas configurações ficam em `~/.config/twig/config.toml`; um
   repo pode versionar as dele (`run`, `install`, `port`, `env`) num `.twig.toml`, um card pode
   sobrescrevê-las em `<card>/.twig.toml`, e variáveis `TWIG__SECAO__CHAVE` sobrescrevem tudo.
@@ -223,6 +227,7 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `prune` | limpa registros de worktrees órfãos |
 | `doctor` | verifica dependências, logins, config e repos (`--json` para scripts) |
 | `template ls` / `show NOME` / `edit` | lista, mostra e edita os templates de card (`new --template NOME` aplica um) |
+| `watch [--once] [-n]` | inicia cards a partir de itens com tag (`watch.toml`); `watch status` / `forget` / `show` / `edit` / `validate` / `install` / `uninstall` |
 | `config edit` | edita a config e valida ao salvar |
 | `config get <chave>` / `config set <chave> <valor>` | lê / grava um valor por chave com pontos (`git.base_branch`), validado, preservando comentários |
 | `update` | atualiza para a última release |

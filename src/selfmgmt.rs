@@ -347,6 +347,8 @@ pub fn uninstall(yes: bool) -> Result<()> {
         bail!("cancelled (use --yes to skip the prompt)");
     }
 
+    crate::watch::service::remove_for_uninstall();
+
     // herdr plugin and shortcut
     if sys::which("herdr").is_some()
         && sys::quiet(sys::tool("herdr").args(["plugin", "unlink", "twig"]))

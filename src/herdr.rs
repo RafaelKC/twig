@@ -31,7 +31,7 @@ fn str_at(v: &Value, ptr: &str) -> Result<String> {
         .with_context(|| format!("herdr response without {ptr}"))
 }
 
-fn server_up() -> bool {
+pub fn server_up() -> bool {
     sys::quiet(sys::tool("herdr").args(["workspace", "list"]))
 }
 

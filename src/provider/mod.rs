@@ -40,6 +40,18 @@ impl CardInfo {
     }
 }
 
+/// A work item / issue returned by [`Provider::query_tagged`], for `twig watch`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Candidate {
+    /// What `twig new` takes and the watch ledger is keyed by: `123` (az), `owner/repo#123` (gh).
+    pub id: String,
+    /// The scope that was queried (ADO project, GitHub `owner/repo`).
+    pub scope: String,
+    /// Every tag / label of the item.
+    pub tags: Vec<String>,
+    pub state: String,
+}
+
 /// A pull request of one repo of the card.
 #[derive(Debug, Clone)]
 pub struct Pr {
@@ -112,6 +124,24 @@ pub trait Provider {
     fn create_pr(&self, wt: &Path, pr: &NewPr) -> Result<Pr>;
 
     fn update_pr_body(&self, wt: &Path, pr: &Pr, body: &str) -> Result<()>;
+
+    /// Open items of `scope` (ADO project, GitHub `owner/repo`) that carry one of `tags`, assigned
+    /// to the authenticated user if `mine`. Unlike [`Provider::fetch_card`] a failure is an `Err`,
+    /// never an empty list: the watch ledger prunes what a successful query no longer returns.
+    /// The match on tags may be loose; the caller compares them exactly.
+    fn query_tagged(&self, scope: &str, tags: &[String], mine: bool) -> Result<Vec<Candidate>>;
+
+    /// Whether `id` is a well-formed [`Candidate::id`] (checked before it reaches a command line).
+    fn is_watch_id(&self, id: &str) -> bool;
+
+    /// Whether the last person to add `tag` to the item is one of `trusted` (empty = the
+    /// authenticated user). Providers whose ACL already guards tagging return true.
+    fn trusted_tagger(&self, _c: &Candidate, _tag: &str, _trusted: &[String]) -> Result<bool> {
+        Ok(true)
+    }
+
+    /// Add `tag` to the item (the watch's optional `mark_tag`).
+    fn add_tag(&self, c: &Candidate, tag: &str) -> Result<()>;
 
     /// `twig doctor`: CLI, extensions, login.
     fn doctor(&self, r: &mut Report);
