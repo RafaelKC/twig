@@ -4,6 +4,14 @@ All notable changes to twig are listed here, newest first. Each version links to
 [GitHub release](https://github.com/RafaelKC/twig/releases), and entries name the pull request
 (and issue) they came from.
 
+## [0.12.1] - 2026-11-04
+
+This release fixes `twig watch` failing every cycle on Azure DevOps when no work item matches the tag.
+
+### Fixes
+
+- `twig watch` no longer fails with `unexpected response from az: EOF while parsing a value` when `az boards query` finds no matching work items. Empty output is now treated as "no items", so the watch stays healthy and stops backing off the scope when no card is tagged. Malformed responses from `az` are still reported as errors. (#115)
+
 ## [0.11.0] - 2026-11-03
 
 twig v0.11.0 adds a per-repo base branch, so a single card can branch each repo from a different base, such as `api` from `dev` and `sdk` from `main`.
@@ -244,6 +252,7 @@ First release: twig, a Rust CLI that replaces `card.sh`.
 - herdr plugin and AI skill.
 - `install.sh` and a release workflow with checksums and Sigstore signatures.
 
+[0.12.1]: https://github.com/RafaelKC/twig/compare/v0.11.0...v0.12.1
 [0.11.0]: https://github.com/RafaelKC/twig/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/RafaelKC/twig/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/RafaelKC/twig/compare/v0.9.0...v0.9.1
