@@ -3850,7 +3850,14 @@ esac"#,
 }
 
 fn ledger_text(s: &Sandbox) -> String {
-    fs::read_to_string(s.path(".local/state/twig/watch.json")).unwrap_or_default()
+    // Linux keeps the ledger in the state dir; macOS has none and falls back to the data dir
+    [
+        ".local/state/twig/watch.json",
+        "Library/Application Support/twig/watch.json",
+    ]
+    .iter()
+    .find_map(|p| fs::read_to_string(s.path(p)).ok())
+    .unwrap_or_default()
 }
 
 #[test]
