@@ -3,11 +3,11 @@
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use regex::Regex;
 use serde_json::Value;
 
-use super::{truncate, CardInfo, NewPr, Pr, PrState, Provider};
+use super::{truncate, Candidate, CardInfo, NewPr, Pr, PrState, Provider};
 use crate::card::CardRef;
 use crate::config::Gh;
 use crate::doctor::{succeeds, Report};
@@ -51,6 +51,36 @@ pub fn parse_ref(raw: &str, default_owner: &str) -> Option<CardRef> {
         number,
         repo: Some(format!("{owner}/{repo}")),
     })
+}
+
+/// Issues of a `gh issue list --json number,labels,state` result, in `scope` (`owner/repo`).
+fn parse_listed(raw: &str, scope: &str) -> Result<Vec<Candidate>> {
+    let v: Value = serde_json::from_str(raw).context("unexpected response from gh")?;
+    let items = v.as_array().context("unexpected response from gh")?;
+    Ok(items
+        .iter()
+        .filter_map(|it| {
+            Some(Candidate {
+                id: format!("{scope}#{}", it["number"].as_u64()?),
+                scope: scope.to_string(),
+                tags: it["labels"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|l| l["name"].as_str().map(String::from))
+                    .collect(),
+                state: it["state"].as_str().unwrap_or_default().to_string(),
+            })
+        })
+        .collect())
+}
+
+/// Who added `tag` last, from `name<TAB>login` lines of the issue timeline's `labeled` events.
+fn last_tagger(tsv: &str, tag: &str) -> Option<String> {
+    tsv.lines()
+        .filter_map(|l| l.split_once('\t'))
+        .rfind(|(name, _)| name.trim().eq_ignore_ascii_case(tag))
+        .map(|(_, login)| login.trim().to_string())
 }
 
 /// `owner/repo#N` of the card's issue: from the card id, else from its cached URL.
@@ -226,6 +256,58 @@ impl Provider for GitHub<'_> {
         sys::output(gh(wt).args(["pr", "edit", &pr.url, "--body", body])).map(|_| ())
     }
 
+    fn query_tagged(&self, scope: &str, tags: &[String], mine: bool) -> Result<Vec<Candidate>> {
+        sys::which("gh").context("gh not found on PATH")?;
+        // `--label` repeated is an AND: one call per tag, merged by issue
+        let mut found: Vec<Candidate> = vec![];
+        for tag in tags {
+            let mut cmd = sys::tool("gh");
+            cmd.args([
+                "issue", "list", "-R", scope, "--label", tag, "--state", "open",
+            ]);
+            if mine {
+                cmd.args(["--assignee", "@me"]);
+            }
+            cmd.args(["--limit", "100", "--json", "number,labels,state"]);
+            for c in parse_listed(&sys::output(&mut cmd)?, scope)? {
+                if !found.iter().any(|f| f.id == c.id) {
+                    found.push(c);
+                }
+            }
+        }
+        Ok(found)
+    }
+
+    fn is_watch_id(&self, id: &str) -> bool {
+        id.contains('/') && parse_ref(id, "").is_some_and(|r| r.repo.is_some())
+    }
+
+    fn trusted_tagger(&self, c: &Candidate, tag: &str, trusted: &[String]) -> Result<bool> {
+        let (repo, number) = c.id.rsplit_once('#').context("malformed issue id")?;
+        let mut cmd = sys::tool("gh");
+        cmd.args([
+            "api",
+            &format!("repos/{repo}/issues/{number}/timeline"),
+            "--paginate",
+            "--jq",
+            r#".[] | select(.event == "labeled") | [.label.name, .actor.login] | @tsv"#,
+        ]);
+        let Some(who) = last_tagger(&sys::output(&mut cmd)?, tag) else {
+            return Ok(false);
+        };
+        if trusted.is_empty() {
+            let me = sys::output(sys::tool("gh").args(["api", "user", "--jq", ".login"]))?;
+            return Ok(who.eq_ignore_ascii_case(me.trim()));
+        }
+        Ok(trusted.iter().any(|t| t.eq_ignore_ascii_case(&who)))
+    }
+
+    fn add_tag(&self, c: &Candidate, tag: &str) -> Result<()> {
+        let (repo, number) = c.id.rsplit_once('#').context("malformed issue id")?;
+        sys::output(sys::tool("gh").args(["issue", "edit", number, "-R", repo, "--add-label", tag]))
+            .map(|_| ())
+    }
+
     fn doctor(&self, r: &mut Report) {
         if r.require_bin("gh", "provider.default = \"gh\"") {
             if succeeds("gh", &["auth", "status"]) {
@@ -240,6 +322,35 @@ impl Provider for GitHub<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listed_issues_become_candidates() {
+        let raw = r#"[{"number":4,"labels":[{"name":"agent"},{"name":"bug"}],"state":"OPEN"},
+                       {"number":5,"labels":[{"name":"agent:done"}],"state":"OPEN"}]"#;
+        let c = parse_listed(raw, "acme/web").unwrap();
+        assert_eq!(c[0].id, "acme/web#4");
+        assert_eq!(c[0].tags, ["agent", "bug"]);
+        assert_eq!(c[1].tags, ["agent:done"]);
+        assert!(parse_listed("{}", "a/b").is_err());
+    }
+
+    #[test]
+    fn the_last_labeled_event_of_the_tag_names_the_tagger() {
+        let tsv = "agent\tmallory\nbug\tbob\nagent\tRafaelKC\n";
+        assert_eq!(last_tagger(tsv, "Agent").as_deref(), Some("RafaelKC"));
+        assert_eq!(last_tagger(tsv, "bug").as_deref(), Some("bob"));
+        assert_eq!(last_tagger(tsv, "other"), None);
+    }
+
+    #[test]
+    fn watch_ids_are_owner_repo_number() {
+        let cfg = Gh::default();
+        let gh = GitHub::new(&cfg);
+        assert!(gh.is_watch_id("acme/web#4"));
+        assert!(!gh.is_watch_id("web#4"));
+        assert!(!gh.is_watch_id("4"));
+        assert!(!gh.is_watch_id("acme/web#4; rm -rf /"));
+    }
 
     #[test]
     fn children_are_the_sub_issue_numbers() {

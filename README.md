@@ -75,6 +75,9 @@ Your main clones stay on `main`. Two cards never step on each other.
   from the main clone into each worktree.
 - **Lifecycle hooks.** Your own shell commands on `post_create`, `pre_rm`, `post_rm`, `post_open` and `post_refresh`, card-wide or per repo; `--no-hooks` skips them.
 - **Card templates.** Named presets in `~/.config/twig/templates.toml` (repos, agent, install, hooks): `twig new 123 --template fullstack`; flags override them.
+- **Tag to start.** `twig watch` polls the provider and, when an item gets a rule's tag (`agent`),
+  runs `twig new <id> --template X` for it. Rules in `watch.toml`, a local ledger so nothing
+  starts twice. Nobody reviews the card before the agent starts: read [docs/WATCH.md](docs/WATCH.md).
 - **One config, plus the repo's.** Your settings live in `~/.config/twig/config.toml`; a repo
   can version its own (`run`, `install`, `port`, `env`) in a `.twig.toml`, a card can override
   them in `<card>/.twig.toml`, and `TWIG__SECTION__KEY` env vars override anything.
@@ -224,6 +227,7 @@ twig rm 52644 --branches            # done: remove worktrees (and local branches
 | `prune` | clean orphaned worktree records |
 | `doctor` | check dependencies, logins, config and repos (`--json` for scripts) |
 | `template ls` / `show NAME` / `edit` | list, show and edit the card templates (`new --template NAME` applies one) |
+| `watch [--once] [-n]` | start cards from tagged work items (`watch.toml`); `watch status` / `forget` / `show` / `edit` / `validate` / `install` / `uninstall` |
 | `config edit` | edit the config and validate it on save |
 | `config get <key>` / `config set <key> <value>` | read / write one value by dotted key (`git.base_branch`), validated, comments kept |
 | `update` | update to the latest release |
@@ -306,7 +310,7 @@ skills/           AI agent skill
 scripts/          release helper
 .github/          release workflow
 install.sh        installer
-docs/             commands, config, dependencies, releasing, release pipeline, roadmap, autonomous agent
+docs/             commands, config, watch, dependencies, releasing, release pipeline, roadmap, autonomous agent
 refs/             evaluated but unused references
 ```
 

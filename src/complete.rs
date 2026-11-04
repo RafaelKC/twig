@@ -81,6 +81,14 @@ pub fn templates() -> Vec<CompletionCandidate> {
         .unwrap_or_default()
 }
 
+/// `twig watch forget <TAB>`: the ids in the watch ledger.
+pub fn watch_ids() -> Vec<CompletionCandidate> {
+    crate::watch::ledger_ids()
+        .into_iter()
+        .map(CompletionCandidate::new)
+        .collect()
+}
+
 /// `twig completions <shell>`: the registration script, the same one `COMPLETE=<shell> twig`
 /// prints. It calls `twig` from the PATH.
 pub fn registration(shell: Shell) -> Result<()> {

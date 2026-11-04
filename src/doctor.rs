@@ -58,7 +58,7 @@ impl Report {
         }
     }
 
-    fn section(&mut self, title: &str) {
+    pub fn section(&mut self, title: &str) {
         self.sections.push(Section {
             name: title.to_string(),
             checks: Vec::new(),
@@ -291,6 +291,7 @@ pub fn run(json: bool) -> Result<()> {
     sessions_section(&mut r, &cfg);
     layout_section(&mut r, &cfg);
     templates_section(&mut r, &cfg);
+    crate::watch::doctor(&mut r, &cfg);
 
     r.section("orphaned worktrees");
     let mut any = false;

@@ -28,6 +28,7 @@ mod templates;
 mod testutil;
 mod ui;
 mod updatecheck;
+mod watch;
 mod workspace;
 
 use std::process::ExitCode;
@@ -398,6 +399,22 @@ enum Cmd {
         #[command(subcommand)]
         cmd: TemplateCmd,
     },
+    /// Start cards from tagged work items: polls the provider and runs `twig new` per rule.
+    ///
+    /// Rules (tag → template, per project or repo) live in watch.toml next to the config
+    /// (`TWIG_WATCH`). Runs in the foreground until stopped; `install` sets it up as a user
+    /// service. Nobody reviews the card before its agent starts: read docs/WATCH.md.
+    #[command(args_conflicts_with_subcommands = true)]
+    Watch {
+        #[command(subcommand)]
+        cmd: Option<WatchCmd>,
+        /// Run one cycle and exit (non-zero if a query or a start failed).
+        #[arg(long)]
+        once: bool,
+        /// List what would start; change nothing (no ledger, no cards).
+        #[arg(short = 'n', long)]
+        dry_run: bool,
+    },
     /// Update twig (and its herdr plugin and skill) to the latest release.
     Update {
         /// Only report whether a new version exists.
@@ -460,6 +477,27 @@ enum TemplateCmd {
     Edit,
 }
 
+#[derive(Subcommand)]
+enum WatchCmd {
+    /// The service (installed? running?) and the ledger: what was started, when, the log of failures.
+    Status,
+    /// Take an item out of the ledger, so it can start again on the next cycle.
+    Forget {
+        #[arg(add = ArgValueCandidates::new(complete::watch_ids))]
+        id: String,
+    },
+    /// Print the watch settings and rules.
+    Show,
+    /// Open watch.toml in $VISUAL/$EDITOR (creates it if missing) and validate on save.
+    Edit,
+    /// Check watch.toml: templates exist, scopes, duplicates, security warnings.
+    Validate,
+    /// Install the watch as a user service (systemd on Linux, a LaunchAgent on macOS).
+    Install,
+    /// Remove the user service.
+    Uninstall,
+}
+
 fn run(cli: Cli) -> Result<()> {
     if cli.no_hooks {
         hooks::disable();
@@ -492,6 +530,17 @@ fn run(cli: Cli) -> Result<()> {
                     templates::check_file,
                 ),
             }
+        }
+        Cmd::Watch { cmd: Some(cmd), .. } => {
+            return watch::subcommand(match cmd {
+                WatchCmd::Status => watch::Sub::Status,
+                WatchCmd::Forget { id } => watch::Sub::Forget { id },
+                WatchCmd::Show => watch::Sub::Show,
+                WatchCmd::Edit => watch::Sub::Edit,
+                WatchCmd::Validate => watch::Sub::Validate,
+                WatchCmd::Install => watch::Sub::Install,
+                WatchCmd::Uninstall => watch::Sub::Uninstall,
+            })
         }
         _ => {}
     }
@@ -740,6 +789,7 @@ fn run(cli: Cli) -> Result<()> {
                 )),
             },
         },
+        Cmd::Watch { once, dry_run, .. } => watch::run(once, dry_run),
         Cmd::Completions { .. }
         | Cmd::Doctor { .. }
         | Cmd::Config { .. }

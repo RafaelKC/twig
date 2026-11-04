@@ -107,7 +107,7 @@ pub fn write_new(cfg: &Config, id: &str) -> Result<(Marker, bool)> {
 
 /// Local time as ISO 8601 with offset (`2026-10-26T14:03:00-03:00`).
 #[cfg(unix)]
-fn now_local() -> Option<String> {
+pub fn now_local() -> Option<String> {
     // SAFETY: `time` and `localtime_r` only write into the zeroed `tm` we own.
     let tm = unsafe {
         let t = libc::time(std::ptr::null_mut());
@@ -131,7 +131,7 @@ fn now_local() -> Option<String> {
 }
 
 #[cfg(not(unix))]
-fn now_local() -> Option<String> {
+pub fn now_local() -> Option<String> {
     // PowerShell's round-trip format has fractional seconds: cut them, keep the offset
     let out = crate::sys::output(crate::sys::tool("powershell").args([
         "-NoProfile",
@@ -143,7 +143,7 @@ fn now_local() -> Option<String> {
 }
 
 /// UTC fallback (`+00:00`) when the local time can't be had, so `since` is never empty.
-fn now_utc() -> String {
+pub fn now_utc() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);

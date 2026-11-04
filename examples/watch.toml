@@ -1,0 +1,22 @@
+# twig watch: ~/.config/twig/watch.toml (or the path in TWIG_WATCH).
+# `twig watch` polls the provider (provider.default) and, for every item that gets a tagged
+# rule's tag, runs `twig new <id> --template <template>`. Format: docs/CONFIG.md; security
+# notes (nobody reviews the card before the agent starts): docs/WATCH.md.
+# Validate with `twig watch validate`, try it with `twig watch --once --dry-run`.
+
+interval       = "60s"   # at least 15s; each wait gets ±10% of jitter
+assigned_to_me = true    # only items assigned to you (false lets two machines start the same card)
+max_per_cycle  = 2       # cards started per cycle; the rest wait for the next one
+max_active     = 5       # cards created by the watch that may be alive (not parked) at once
+timeout        = "30m"   # per `twig new`
+# on_trigger   = "notify-send \"twig: $TWIG_CARD $TWIG_WATCH_RESULT\""
+# mark_tag     = "agent:running"   # tag added to the item after a successful start (off by default)
+
+# One rule per tag and scope: `project` with provider az, `repo` (owner/repo) with provider gh.
+# There is no wildcard and no default template. The same tag in another scope may use another template.
+[[rules]]
+tag      = "agent"
+template = "fullstack"   # must exist in templates.toml and should set agent_prompt
+project  = "Frota"       # az
+# repo   = "RafaelKC/twig"          # gh
+# trusted_taggers = ["RafaelKC"]    # gh: who may add the tag (default: the authenticated user)
