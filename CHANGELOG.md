@@ -4,6 +4,19 @@ All notable changes to twig are listed here, newest first. Each version links to
 [GitHub release](https://github.com/RafaelKC/twig/releases), and entries name the pull request
 (and issue) they came from.
 
+## [0.12.0] - 2026-11-04
+
+twig v0.12.0 adds `twig watch`, which starts cards automatically from tagged work items, so tagging an item can replace typing `twig new` by hand.
+
+### Highlights
+
+- **`twig watch`: start cards from tagged work items.** It polls Azure DevOps and GitHub and runs `twig new <id> --template <template>` for each item that enters a matching set. It can also run as a user service (`twig watch install`). (#112, #111)
+  - **Rules** live in `watch.toml` next to your config, or at the path in `TWIG_WATCH`. Each rule has a tag, a template and an explicit scope (an Azure DevOps project or a GitHub repo). Twig validates the file and warns about rules with no `agent_prompt`, an agent run with bypassed permissions, or `assigned_to_me = false`.
+  - **Repeat protection.** A ledger remembers which items were already handled, so a restart does not start them again. An existing or parked card is not recreated, and neither is a card you removed with `twig rm` while its tag is still on the item.
+  - **Safe polling.** A scope that fails is retried with exponential backoff, up to 10 minutes, and an outage never wipes the ledger. `max_per_cycle` and `max_active` cap how many cards one cycle can start.
+  - **Exact tag matching.** On Azure DevOps, the tag `agent` does not match `agent:done`. On GitHub, `trusted_taggers` restricts triggers to labels applied by people you trust.
+  - **Logs.** Each card started by `twig watch` writes its output to its own log file.
+
 ## [0.11.0] - 2026-11-03
 
 twig v0.11.0 adds a per-repo base branch, so a single card can branch each repo from a different base, such as `api` from `dev` and `sdk` from `main`.
@@ -244,6 +257,7 @@ First release: twig, a Rust CLI that replaces `card.sh`.
 - herdr plugin and AI skill.
 - `install.sh` and a release workflow with checksums and Sigstore signatures.
 
+[0.12.0]: https://github.com/RafaelKC/twig/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/RafaelKC/twig/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/RafaelKC/twig/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/RafaelKC/twig/compare/v0.9.0...v0.9.1
