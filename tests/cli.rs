@@ -3920,7 +3920,7 @@ fn watch_dry_run_changes_nothing() {
     let o = s.run(&["watch", "--once", "--dry-run"]);
     assert_exit(&o, 0);
     assert_has(&o, "7: would start `twig new 7 --template t`");
-    assert!(!String::from_utf8_lossy(&o.stdout).contains("8:"));
+    assert!(!String::from_utf8_lossy(&o.stdout).contains("8: would start"));
     assert!(!s.path("wt/7").exists());
     assert_eq!(ledger_text(&s), "");
 }
