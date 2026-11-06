@@ -461,7 +461,7 @@ post_create = ["echo created $TWIG_CARD_ID"]
 The rules of [`twig watch`](WATCH.md) (tag → template, per project or repo) live in their own
 file, `~/.config/twig/watch.toml` (next to `config.toml`; `TWIG_WATCH` overrides the path),
 optional like the templates. Settings at the root (`interval`, `assigned_to_me`, `max_per_cycle`,
-`max_active`, `timeout`, `on_trigger`, `mark_tag`, `start_herdr`) and one `[[rules]]` table per
+`max_active`, `timeout`, `on_trigger`, `mark_tag`, `start_herdr`, `env_file`) and one `[[rules]]` table per
 tag with `tag`, `template`, `project` (az) or `repo` (gh) and, on gh, `trusted_taggers`. The
 full reference, an example and the security notes are in [WATCH.md](WATCH.md) and
 [`examples/watch.toml`](../examples/watch.toml). `twig watch validate`, `twig watch edit` and
