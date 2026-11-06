@@ -4,6 +4,20 @@ All notable changes to twig are listed here, newest first. Each version links to
 [GitHub release](https://github.com/RafaelKC/twig/releases), and entries name the pull request
 (and issue) they came from.
 
+## [0.13.0] - 2026-11-06
+
+This release lets the `twig watch` service pick up provider credentials from a dedicated env file, so installs no longer fail when `az` or `gh` authenticate through environment variables.
+
+### Highlights
+
+- **`env_file` in `watch.toml`**: point `twig watch` at a file holding provider credentials such as `AZURE_DEVOPS_EXT_PAT`, `GH_TOKEN` or `GITHUB_TOKEN`. On systemd the unit gets `EnvironmentFile=<absolute path>`. twig also loads the file itself at startup (needed on macOS, where launchd has no equivalent) and during the `install` preflight, so installs no longer fail when `az` or `gh` authenticate through environment variables. Variables already set in the environment take precedence over the file, and secret values are never written to the unit or plist. (#120, #117)
+
+### Improvements
+
+- `twig watch install` now warns when `AZURE_DEVOPS_EXT_PAT`, `GH_TOKEN` or `GITHUB_TOKEN` is set in your shell but no `env_file` is configured, instead of only failing the preflight. (#120, #117)
+- `twig watch validate` and `twig doctor` warn when the configured `env_file` is missing or readable by group or others. (#120, #117)
+- The `env_file` option is documented in the watch and configuration docs and included in the `watch.toml` edit template. (#120, #117)
+
 ## [0.12.1] - 2026-11-04
 
 This release fixes `twig watch` failing every cycle on Azure DevOps when no work item matches the tag.
@@ -265,6 +279,7 @@ First release: twig, a Rust CLI that replaces `card.sh`.
 - herdr plugin and AI skill.
 - `install.sh` and a release workflow with checksums and Sigstore signatures.
 
+[0.13.0]: https://github.com/RafaelKC/twig/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/RafaelKC/twig/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/RafaelKC/twig/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/RafaelKC/twig/compare/v0.10.0...v0.11.0
