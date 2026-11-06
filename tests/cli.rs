@@ -3883,6 +3883,29 @@ fn watch_validate_reports_an_unknown_template() {
     assert_has(&s.run(&["doctor"]), "`ghost` is not in templates.toml");
 }
 
+#[cfg(unix)]
+#[test]
+fn watch_validate_warns_about_an_open_env_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = watch_sandbox();
+    let env = s.path("watch.env");
+    fs::write(&env, "AZURE_DEVOPS_EXT_PAT=x\n").unwrap();
+    fs::set_permissions(&env, fs::Permissions::from_mode(0o644)).unwrap();
+    fs::write(
+        s.config.parent().unwrap().join("watch.toml"),
+        format!(
+            "env_file = \"{}\"\n[[rules]]\ntag = \"agent\"\ntemplate = \"t\"\nproject = \"Frota\"\n",
+            env.display()
+        ),
+    )
+    .unwrap();
+    assert_has(&s.run(&["watch", "validate"]), "readable by group/others");
+    fs::set_permissions(&env, fs::Permissions::from_mode(0o600)).unwrap();
+    let o = s.run(&["watch", "validate"]);
+    assert_exit(&o, 0);
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("group/others"));
+}
+
 #[test]
 fn watch_show_prints_the_rules() {
     let s = watch_sandbox();

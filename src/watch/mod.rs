@@ -5,6 +5,7 @@
 
 pub mod config;
 mod engine;
+mod envfile;
 mod ledger;
 pub mod service;
 
@@ -298,6 +299,7 @@ pub fn run(once: bool, dry_run: bool) -> Result<()> {
     for m in &warnings {
         ui::warn(m);
     }
+    envfile::load_into_process(&w)?;
     // a dry run changes nothing, so it may run beside the real watch
     let _lock = if dry_run { None } else { Some(lock()?) };
     catch_signals();
@@ -423,6 +425,9 @@ fn show() -> Result<()> {
     println!("  max_active      {}", w.max_active);
     println!("  timeout         {}", w.timeout);
     println!("  start_herdr     {}", w.start_herdr);
+    if !w.env_file.is_empty() {
+        println!("  env_file        {}", w.env_file);
+    }
     if !w.mark_tag.is_empty() {
         println!("  mark_tag        {}", w.mark_tag);
     }

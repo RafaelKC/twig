@@ -36,10 +36,22 @@ fn systemd_quote(s: &str) -> String {
 /// The user unit. `KillMode=process` is what keeps a herdr server started by `twig new` (and
 /// every agent in it) alive when the service restarts or stops: with the default
 /// (`control-group`) systemd would kill the whole cgroup.
-pub fn systemd_unit(exe: &Path, path: &str, env: &[(String, String)]) -> String {
+pub fn systemd_unit(
+    exe: &Path,
+    path: &str,
+    env: &[(String, String)],
+    env_file: Option<&Path>,
+) -> String {
     let mut vars = format!("Environment={}\n", systemd_quote(&format!("PATH={path}")));
     for (k, v) in env {
         vars += &format!("Environment={}\n", systemd_quote(&format!("{k}={v}")));
+    }
+    if let Some(f) = env_file {
+        // the secrets stay in the file: only its path goes into the unit
+        vars += &format!(
+            "EnvironmentFile={}\n",
+            systemd_quote(&f.display().to_string())
+        );
     }
     format!(
         "[Unit]\n\
@@ -149,7 +161,12 @@ fn systemctl(args: &[&str]) -> Command {
 
 /// `twig watch --once --dry-run` with the environment the service will have, so a missing
 /// tool or a login that needs the shell's keyring fails here and not at the first cycle.
-fn preflight(exe: &Path, path: &str, env: &[(String, String)]) -> Result<()> {
+fn preflight(
+    exe: &Path,
+    path: &str,
+    env: &[(String, String)],
+    file_env: &[(String, String)],
+) -> Result<()> {
     ui::info("checking the setup with the service's environment (twig watch --once --dry-run)...");
     let mut cmd = Command::new(exe);
     cmd.args(["watch", "--once", "--dry-run"])
@@ -167,7 +184,7 @@ fn preflight(exe: &Path, path: &str, env: &[(String, String)]) -> Result<()> {
             cmd.env(k, v);
         }
     }
-    cmd.envs(env.iter().cloned());
+    cmd.envs(env.iter().cloned()).envs(file_env.iter().cloned());
     let out = cmd.stdin(std::process::Stdio::null()).output()?;
     if !out.status.success() {
         bail!(
@@ -177,6 +194,24 @@ fn preflight(exe: &Path, path: &str, env: &[(String, String)]) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn watch_file_exists() -> Result<bool> {
+    Ok(super::config::watch_path()?.exists())
+}
+
+/// A token exported in this shell is not seen by the service: say how to give it one.
+fn warn_missing_env_file() {
+    let set: Vec<&str> = super::envfile::CREDENTIAL_VARS
+        .into_iter()
+        .filter(|k| std::env::var_os(k).is_some())
+        .collect();
+    if !set.is_empty() {
+        ui::warn(format!(
+            "{} is set in this shell but the service will not inherit it: put it in a chmod 600 file (e.g. ~/.config/twig/watch.env) and set `env_file` in watch.toml (docs/WATCH.md)",
+            set.join(", ")
+        ));
+    }
 }
 
 pub fn install() -> Result<()> {
@@ -191,9 +226,34 @@ pub fn install() -> Result<()> {
     }
     let path = std::env::var("PATH").context("PATH is not set")?;
     let env = forwarded_env();
+    // the credentials file: validated and loaded here, never copied into the unit or the plist
+    let env_file = if watch_file_exists()? {
+        let w = super::config::parse_file(&super::config::watch_path()?)?;
+        super::envfile::path(&w)
+    } else {
+        None
+    };
+    let file_env = match &env_file {
+        Some(f) => {
+            if !f.is_file() {
+                bail!("env_file {} does not exist", f.display());
+            }
+            if super::envfile::too_open(f) {
+                ui::warn(format!(
+                    "{} is readable by group/others: run `chmod 600` on it",
+                    f.display()
+                ));
+            }
+            super::envfile::read(f)?
+        }
+        None => {
+            warn_missing_env_file();
+            vec![]
+        }
+    };
     if macos() {
         let file = plist_file()?;
-        preflight(&exe, &path, &env)?;
+        preflight(&exe, &path, &env, &file_env)?;
         let log = super::ledger::state_dir()?
             .join("watch")
             .join("launchd.log");
@@ -223,12 +283,12 @@ pub fn install() -> Result<()> {
         }
         bail!("no systemd user session here (systemctl --user does not work); run `twig watch` in a herdr pane instead");
     }
-    preflight(&exe, &path, &env)?;
+    preflight(&exe, &path, &env, &file_env)?;
     let file = unit_file()?;
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
     }
-    fs::write(&file, systemd_unit(&exe, &path, &env))?;
+    fs::write(&file, systemd_unit(&exe, &path, &env, env_file.as_deref()))?;
     sys::run(&mut systemctl(&["daemon-reload"]))?;
     sys::run(&mut systemctl(&["enable", "--now", UNIT]))?;
     ui::ok(format!("service installed and started: {}", file.display()));
@@ -344,7 +404,9 @@ mod tests {
             Path::new("/home/me/.local/bin/twig"),
             "/usr/bin:/home/me/bin",
             &[("TWIG_CONFIG".into(), "/x/config.toml".into())],
+            Some(Path::new("/home/me/.config/twig/watch.env")),
         );
+        assert!(u.contains("EnvironmentFile=\"/home/me/.config/twig/watch.env\"\n"));
         assert!(u.contains("ExecStart=\"/home/me/.local/bin/twig\" watch\n"));
         assert!(u.contains("Environment=\"PATH=/usr/bin:/home/me/bin\"\n"));
         assert!(u.contains("Environment=\"TWIG_CONFIG=/x/config.toml\"\n"));
@@ -355,7 +417,7 @@ mod tests {
 
     #[test]
     fn unit_values_are_quoted_and_percent_escaped() {
-        let u = systemd_unit(Path::new("/opt/my twig/twig"), "/a%b:$c", &[]);
+        let u = systemd_unit(Path::new("/opt/my twig/twig"), "/a%b:$c", &[], None);
         assert!(u.contains("ExecStart=\"/opt/my twig/twig\" watch"));
         assert!(u.contains("PATH=/a%%b:$$c"));
     }

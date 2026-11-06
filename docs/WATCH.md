@@ -31,6 +31,7 @@ timeout        = "30m"   # per `twig new`
 on_trigger     = ""      # optional shell command; gets TWIG_CARD, TWIG_TEMPLATE, TWIG_WATCH_RESULT (ok|fail)
 mark_tag       = ""      # optional tag added to the item after a successful start
 start_herdr    = false   # let `twig new` start the herdr server (see Running it)
+# env_file     = "~/.config/twig/watch.env"   # credentials for the service (see Running it)
 
 [[rules]]
 tag      = "agent"
@@ -126,6 +127,24 @@ the agents get.
   `TWIG_TEMPLATES`, `TWIG_WATCH`, `TWIG__*`) in the unit, and runs
   `twig watch --once --dry-run` **with that environment** before enabling it, so a missing tool or
   a `gh` token that lives in a keyring without DBus fails there with a clear message.
+- **Credentials kept in env vars.** If `az` / `gh` log in through `AZURE_DEVOPS_EXT_PAT`,
+  `GH_TOKEN` or `GITHUB_TOKEN` exported by your shell rc, the service does not see them. Put them
+  in a file only you can read and point `watch.toml` at it:
+
+  ```sh
+  install -m 600 /dev/null ~/.config/twig/watch.env
+  echo 'AZURE_DEVOPS_EXT_PAT=...' >> ~/.config/twig/watch.env   # KEY=VALUE lines
+  ```
+
+  ```toml
+  env_file = "~/.config/twig/watch.env"
+  ```
+
+  `install` writes it as `EnvironmentFile=` in the unit (on macOS twig reads it itself at startup,
+  since launchd has no equivalent) and the preflight loads it too. The token value never goes into
+  the unit or the plist (`Environment=` shows up in `systemctl show`). `install` warns when one of
+  those variables is set in your shell and no `env_file` is configured; `watch validate` and
+  `doctor` warn if the file is missing or readable by group/others.
 - **herdr.** A herdr server started by the service passes the service's minimal environment (no
   `SSH_AUTH_SOCK`, none of your `.bashrc` variables) to *all* its panes. So by default
   (`start_herdr = false`) the watch only uses a herdr server that is already up; if there is none,

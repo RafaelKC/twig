@@ -34,6 +34,9 @@ pub struct WatchCfg {
     pub mark_tag: String,
     /// Let `twig new` start the herdr server. Off: with no server up, the dispatch waits.
     pub start_herdr: bool,
+    /// File of `KEY=VALUE` lines with provider credentials (`AZURE_DEVOPS_EXT_PAT`, `GH_TOKEN`).
+    /// systemd reads it as `EnvironmentFile=`; twig reads it itself on macOS and in the preflight.
+    pub env_file: String,
     pub rules: Vec<Rule>,
 }
 
@@ -48,6 +51,7 @@ impl Default for WatchCfg {
             on_trigger: String::new(),
             mark_tag: String::new(),
             start_herdr: false,
+            env_file: String::new(),
             rules: vec![],
         }
     }
@@ -173,6 +177,17 @@ pub fn validate(cfg: Option<&Config>, tpls: Option<&Templates>, w: &WatchCfg) ->
         f.warnings.push(
             "assigned_to_me = false: without a remote lock, two machines running the watch can start the same card".into(),
         );
+    }
+    if let Some(file) = super::envfile::path(w) {
+        if !file.is_file() {
+            f.warnings
+                .push(format!("env_file {} does not exist", file.display()));
+        } else if super::envfile::too_open(&file) {
+            f.warnings.push(format!(
+                "env_file {} is readable by group/others: run `chmod 600` on it",
+                file.display()
+            ));
+        }
     }
     if w.mark_tag.contains(';') {
         f.errors.push("mark_tag cannot contain `;`".into());
@@ -305,6 +320,7 @@ max_active     = 5          # cards created by the watch alive at once
 timeout        = "30m"      # per `twig new`
 # on_trigger   = "notify-send \"twig: $TWIG_CARD $TWIG_WATCH_RESULT\""
 # mark_tag     = "agent:running"   # tag added to the item after a successful start
+# env_file     = "~/.config/twig/watch.env"   # KEY=VALUE credentials for the service (chmod 600)
 
 # One rule per tag and scope (az: `project`; gh: `repo`). No wildcards.
 # [[rules]]
