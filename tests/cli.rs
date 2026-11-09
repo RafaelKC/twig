@@ -1411,6 +1411,40 @@ fn status_unknown_card_is_an_error() {
     assert_exit(&o, 1);
 }
 
+#[test]
+fn exists_reports_card_parked_and_herdr_as_json() {
+    let s = status_sandbox("working");
+    fs::write(
+        s.path("wt/123/.parked.json"),
+        r#"{"v":1,"since":"2026-01-02T03:04:05-03:00","state":null,"children":null}"#,
+    )
+    .unwrap();
+    let o = s.run(&["exists", "123", "--json", "--local"]);
+    assert_exit(&o, 0);
+    let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert_eq!(v["id"], "123");
+    assert_eq!(v["exists"], true);
+    assert_eq!(v["parked"]["since"], "2026-01-02T03:04:05-03:00");
+    assert_eq!(v["herdr"]["workspace"], true);
+    assert_eq!(v["herdr"]["agents_running"], 1);
+    assert!(v["state"].is_null());
+    assert_eq!(v["repos"][0]["repo"], "r1");
+}
+
+#[test]
+fn exists_unknown_card_exits_1_with_exists_false() {
+    let s = Sandbox::new();
+    s.valid_config("");
+    let o = s.run(&["exists", "999", "--json", "--local"]);
+    assert_exit(&o, 1);
+    let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert_eq!(v["exists"], false);
+    assert!(v["parked"].is_null());
+    let o = s.run(&["exists", "999", "--local"]);
+    assert_exit(&o, 1);
+    assert_has(&o, "does not exist");
+}
+
 // ───────────────────── new / add-repo / prune (local git remotes) ─────────────────────
 
 fn git_in(dir: &Path, args: &[&str]) -> String {

@@ -17,6 +17,7 @@
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls [--json]` | lists active cards and each repo's branch |
 | `twig status [id] [--json]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
+| `twig exists <id> [--json] [--local]` | does the card exist? exit 0 yes / 1 no; plus parked, herdr and provider state |
 | `twig ports [id] [--env]` | shows the card's dev server ports; `--env` prints `export` lines |
 | `twig env [id] [--repo X]` | prints `export` lines with the full environment of a herdr pane (ports, `PORT`, repo `env`, markers) |
 | `twig run [id] start\|stop\|restart [--repos a,b]` | starts, stops (Ctrl+C) or restarts the apps of the card's `run` tab in herdr |
@@ -73,7 +74,8 @@ is `--branch` or `--branches`), so check the table or `--help` of the command yo
 | `--install` / `--no-setup` | `-i` / `-S` | `new`, `add-repo` |
 | `--herdr` / `--code` | `-H` / `-c` | `new`, `add-repo` |
 | `--no-ado` / `--prompt` | `-o` / `-p` | `new` |
-| `--json` | `-j` | `ls`, `status`, `doctor` |
+| `--json` | `-j` | `ls`, `status`, `exists`, `doctor` |
+| `--local` | `-l` | `exists` |
 | `--env` | `-e` | `ports` |
 | `--refetch` | `-r` | `refresh` |
 | `--merge` / `--rebase` | `-m` / `-r` | `sync` |
@@ -267,6 +269,33 @@ empty list is `{"cards": []}`). `branch` is `null` on a detached HEAD.
       ]
     }
   ]
+}
+```
+
+## `twig exists <id>`
+
+A single, scriptable answer about one card. Exit code `0` when the card folder exists, `1`
+when it doesn't (also for a card that exists only in the provider, with no local worktrees),
+so shell scripts and `twig watch` hooks can branch on it: `twig exists 123 && ...`.
+
+It reports whether the card exists, the provider state (`Active`, `Closed`, ...), whether it
+is parked (and since when, from `.parked.json`), the herdr workspace and running agents (same
+detection as `twig status`) and, for an existing card, each repo's branch and `*N` dirty files.
+The provider lookup is best effort: offline, not logged in or a missing CLI leaves the state
+out (falling back to the card cache) and never changes the answer or the exit code. `--local`
+skips the provider entirely.
+
+With `--json`, stdout is only this document, for both outcomes (stable keys; `state` and
+`parked` are `null` when unknown / not parked, `repos` is empty for a missing card):
+
+```json
+{
+  "id": "123",
+  "exists": true,
+  "parked": { "since": "2026-01-02T03:04:05-03:00" },
+  "herdr": { "workspace": true, "agents_running": 2 },
+  "state": "Active",
+  "repos": [ { "repo": "api", "branch": "card-123", "dirty": 1, "...": "as in status" } ]
 }
 ```
 
