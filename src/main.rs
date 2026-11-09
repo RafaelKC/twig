@@ -7,6 +7,7 @@ mod config;
 mod config_edit;
 mod config_kv;
 mod doctor;
+mod exists;
 mod herdr;
 mod hooks;
 mod layout;
@@ -200,6 +201,20 @@ enum Cmd {
         /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
         #[arg(short = 'j', long)]
         json: bool,
+    },
+    /// Does this card exist? Exit 0 if so, 1 if not; also parked, herdr and provider state.
+    ///
+    /// For scripts: `twig exists 123 && ...`. The provider lookup is best effort (a failure
+    /// leaves `state` empty); `--local` skips it.
+    Exists {
+        #[arg(add = ArgValueCandidates::new(complete::cards))]
+        id: String,
+        /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
+        #[arg(short = 'j', long)]
+        json: bool,
+        /// Don't query the provider (no network): `state` stays null.
+        #[arg(short = 'l', long)]
+        local: bool,
     },
     /// Show the card's dev server ports (`port` of each repo + the card's offset).
     ///
@@ -601,7 +616,10 @@ fn run(cli: Cli) -> Result<()> {
     }
     let json = matches!(
         cli.cmd,
-        Cmd::Ls { json: true } | Cmd::Status { json: true, .. } | Cmd::Env { .. }
+        Cmd::Ls { json: true }
+            | Cmd::Status { json: true, .. }
+            | Cmd::Exists { json: true, .. }
+            | Cmd::Env { .. }
     );
     let result = match cli.cmd {
         Cmd::New {
@@ -692,6 +710,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Code { id } => commands::code(&cfg, id.as_deref()),
         Cmd::Ls { json } => commands::ls(&cfg, json),
         Cmd::Status { id, json } => status::run(&cfg, id.as_deref(), json),
+        Cmd::Exists { id, json, local } => exists::run(&cfg, &id, json, local),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
         Cmd::Memo { text, card } => memo::run(&cfg, &text, card.as_deref()),
         Cmd::Rm {
@@ -861,6 +880,7 @@ fn normalize_ids(cfg: &Config, cmd: &mut Cmd) -> Result<()> {
         | Cmd::OpenCard { id: Some(id) }
         | Cmd::Code { id: Some(id) }
         | Cmd::Status { id: Some(id), .. }
+        | Cmd::Exists { id, .. }
         | Cmd::Pr { id: Some(id), .. }
         | Cmd::Park { id: Some(id), .. }
         | Cmd::Unpark { id: Some(id) }

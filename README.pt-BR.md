@@ -221,6 +221,7 @@ twig rm 52644 --branches            # terminou: remove worktrees (e branches loc
 | `sync <id> [--merge\|--rebase] [-n]` | busca a branch base e faz rebase/merge dela em cada repo do card |
 | `clean [-n] [-y]` | remove cards terminados (branches mergeadas ou work item fechado), perguntando card a card |
 | `env [id] [--repo X]` | imprime `export` com o ambiente completo de um pane do herdr (portas, `PORT`, `env` do repo); conserta panes que o herdr restaurou após um reboot |
+| `exists <id>` | o card existe? exit 0 sim / 1 não; mais estado, parked e herdr (`--json`, `--local`) |
 | `ports [id] [--env]` | mostra as portas de dev do card (determinísticas por card, passadas aos panes como `TWIG_PORT_<REPO>` / `PORT`) |
 | `pr [id] [--draft] [-n]` | faz push da branch de cada repo e abre um PR por repo, ligados ao card e entre si |
 | `rm <id> [-f]` | remove o card e o workspace do herdr (recusa se houver alterações não commitadas ou agente rodando; `-f` ignora) |
