@@ -4,6 +4,23 @@ All notable changes to twig are listed here, newest first. Each version links to
 [GitHub release](https://github.com/RafaelKC/twig/releases), and entries name the pull request
 (and issue) they came from.
 
+## [0.14.0] - 2026-11-09
+
+twig v0.14.0 adds `twig exists <id>`, a single scriptable check for whether a card exists and where it stands.
+
+### Highlights
+
+- **New `twig exists <id>` command.** It reports whether the card exists locally, whether it is parked (and since when), whether a herdr workspace exists and how many agents are running, the provider state (`Active`, `Closed`, ...), and each repo's branch and number of dirty files. The exit code is `0` if the card folder exists and `1` if it doesn't, so scripts and `twig watch` hooks can branch on it, e.g. `twig exists 123 && ...`. (#124, #123)
+  - `--json` (`-j`) prints one document for both outcomes, with the keys `id`, `exists`, `parked` (`{since}` or `null`), `herdr` (`{workspace, agents_running}`), `state` (or `null`) and `repos` (empty when the card is missing).
+  - `--local` (`-l`) skips the provider lookup entirely.
+  - The provider lookup is best effort and silent. It tries a fresh query, then falls back to the card cache. If it fails (offline, not logged in), `state` is `null` and the rest of the answer is unaffected.
+  - herdr is checked even when the card has no local folder.
+  - Card ids complete in your shell like the other commands.
+
+### Things to know
+
+- Exit code `1` also covers a card with no local worktrees, even if the provider knows about it, and real errors such as a broken config. Use `--json` and read `exists` if you need to tell "no such card" apart from a failure. (#124, #123)
+
 ## [0.13.0] - 2026-11-06
 
 This release lets the `twig watch` service pick up provider credentials from a dedicated env file, so installs no longer fail when `az` or `gh` authenticate through environment variables.
@@ -279,6 +296,7 @@ First release: twig, a Rust CLI that replaces `card.sh`.
 - herdr plugin and AI skill.
 - `install.sh` and a release workflow with checksums and Sigstore signatures.
 
+[0.14.0]: https://github.com/RafaelKC/twig/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/RafaelKC/twig/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/RafaelKC/twig/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/RafaelKC/twig/compare/v0.11.0...v0.12.0
