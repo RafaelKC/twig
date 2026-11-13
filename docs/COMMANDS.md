@@ -17,6 +17,7 @@
 | `twig code [id]` | opens the card in VS Code (generates the `.code-workspace` if missing); without an id, the current card |
 | `twig ls [--json]` | lists active cards and each repo's branch |
 | `twig status [id] [--json]` | per repo: branch, uncommitted files, ahead/behind vs base and origin; herdr workspace and agent |
+| `twig migrate-herdr [--to app\|cli] [--dry-run] [--close-source]` | recreates the cards' herdr workspaces in the other backend (herdr app <-> CLI); idempotent |
 | `twig exists <id> [--json] [--local]` | does the card exist? exit 0 yes / 1 no; plus parked, herdr and provider state |
 | `twig ports [id] [--env]` | shows the card's dev server ports; `--env` prints `export` lines |
 | `twig env [id] [--repo X]` | prints `export` lines with the full environment of a herdr pane (ports, `PORT`, repo `env`, markers) |
@@ -271,6 +272,16 @@ empty list is `{"cards": []}`). `branch` is `null` on a detached HEAD.
   ]
 }
 ```
+
+## `twig migrate-herdr`
+
+`twig migrate-herdr [--to app|cli] [--dry-run] [--close-source]` (default `--to app`). For every
+card that has a workspace in the source backend, creates the same tabs and panes (names and
+folders; the first extra pane splits right, the others down) in the destination. Neither side
+records what each pane ran, so commands come from the config: the agent in `agent` panes and the
+repo's `run` (with `autorun`) in `run` panes; other panes are plain shells. Cards already in the
+destination are skipped, so it can be run again. The source is left alone unless `--close-source`.
+`--dry-run` only reports. It does not change `[herdr] backend`: set it to `"app"` yourself.
 
 ## `twig exists <id>`
 

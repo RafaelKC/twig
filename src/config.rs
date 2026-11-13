@@ -284,7 +284,17 @@ impl Default for Vscode {
 #[serde(deny_unknown_fields, default)]
 pub struct Herdr {
     pub open_on_new: bool,
+    /// Where the card workspaces live: the herdr CLI (default) or the herdr app.
+    pub backend: Backend,
     pub layout: crate::layout::Layout,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum Backend {
+    #[default]
+    Cli,
+    App,
 }
 
 /// Where `twig open` goes when no target is given.
@@ -701,6 +711,14 @@ mod tests {
 
     fn parse(ai: &str) -> Result<Config, toml::de::Error> {
         toml::from_str(&format!("version = 1\n{ai}"))
+    }
+
+    #[test]
+    fn herdr_backend_defaults_to_cli_and_accepts_app() {
+        assert_eq!(parse("").unwrap().herdr.backend, Backend::Cli);
+        let cfg = parse("[herdr]\nbackend = \"app\"\n").unwrap();
+        assert_eq!(cfg.herdr.backend, Backend::App);
+        assert!(parse("[herdr]\nbackend = \"other\"\n").is_err());
     }
 
     #[test]

@@ -195,6 +195,14 @@ What `twig park` saves and `twig open` brings back (see [COMMANDS.md](COMMANDS.m
 | Field | Default | Description |
 |---|---|---|
 | `open_on_new` | `false` | focuses the card's herdr workspace at the end of `twig new` / `twig add-repo` |
+| `backend` | `"cli"` | where the card workspaces live: `"cli"` (the `herdr` CLI) or `"app"` (the herdr app, `herdr-app` + `hc`) |
+
+With `backend = "app"`, `new`, `open`, `herdr`, `run`, `park`, `rm`, `status`, `exists` and `env` use
+`herdr-app` and `hc` instead of the herdr CLI: each card is a space named after its id, with the
+`agent` and `run` tabs. Limits: layout presets and `twig layout` are not available (new panes
+split right, then down), `twig park` closes the space without saving a layout snapshot, and panes
+are found by their folder (the app keeps no pane labels). The installer's keybinds are for the herdr CLI.
+To move existing cards between backends, use [`twig migrate-herdr`](COMMANDS.md).
 
 `[herdr.layout]` sets how the panes of each tab are arranged:
 
