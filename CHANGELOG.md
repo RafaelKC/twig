@@ -4,6 +4,10 @@ All notable changes to twig are listed here, newest first. Each version links to
 [GitHub release](https://github.com/RafaelKC/twig/releases), and entries name the pull request
 (and issue) they came from.
 
+## [0.15.0] - 2026-11-13
+
+You've hit your session limit · resets 8:30pm (UTC)
+
 ## [0.14.0] - 2026-11-09
 
 twig v0.14.0 adds `twig exists <id>`, a single scriptable check for whether a card exists and where it stands.
@@ -296,6 +300,7 @@ First release: twig, a Rust CLI that replaces `card.sh`.
 - herdr plugin and AI skill.
 - `install.sh` and a release workflow with checksums and Sigstore signatures.
 
+[0.15.0]: https://github.com/RafaelKC/twig/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/RafaelKC/twig/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/RafaelKC/twig/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/RafaelKC/twig/compare/v0.12.0...v0.12.1
