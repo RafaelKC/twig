@@ -12,7 +12,21 @@ use serde_json::Value;
 use crate::config::{AgentKind, Config};
 use crate::layout::{self, Preset};
 use crate::snapshot::{self, Kind, Pane};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use crate::herdr_app as app;
 use crate::{card, ports, procenv, sessions, sys, ui};
+
+static APP_BACKEND: AtomicBool = AtomicBool::new(false);
+
+/// Choose the backend for this process (`[herdr] backend`).
+pub fn set_backend(b: crate::config::Backend) {
+    APP_BACKEND.store(b == crate::config::Backend::App, Ordering::Relaxed);
+}
+
+fn is_app() -> bool {
+    APP_BACKEND.load(Ordering::Relaxed)
+}
 
 fn herdr(args: &[&str]) -> Result<Value> {
     let out = sys::output(sys::tool("herdr").args(args))?;
@@ -32,11 +46,17 @@ fn str_at(v: &Value, ptr: &str) -> Result<String> {
 }
 
 pub fn server_up() -> bool {
+    if is_app() {
+        return app::server_up();
+    }
     sys::quiet(sys::tool("herdr").args(["workspace", "list"]))
 }
 
 /// Make sure the herdr server is up (the workspace/pane CLI talks to it).
 pub fn ensure_server() -> Result<()> {
+    if is_app() {
+        return app::ensure_server();
+    }
     if sys::which("herdr").is_none() {
         bail!("herdr not found on PATH");
     }
@@ -73,6 +93,9 @@ pub fn ensure_server() -> Result<()> {
 }
 
 pub fn find_workspace(id: &str) -> Result<Option<String>> {
+    if is_app() {
+        return app::find_workspace(id);
+    }
     let v = herdr(&["workspace", "list"])?;
     Ok(v.pointer("/result/workspaces")
         .and_then(Value::as_array)
@@ -84,6 +107,9 @@ pub fn find_workspace(id: &str) -> Result<Option<String>> {
 
 /// Whether this process runs inside the card's own herdr workspace (`HERDR_WORKSPACE_ID`).
 pub fn inside_workspace(id: &str) -> bool {
+    if is_app() {
+        return app::inside_workspace(id);
+    }
     let Some(here) = std::env::var("HERDR_WORKSPACE_ID")
         .ok()
         .filter(|w| !w.is_empty())
@@ -116,6 +142,9 @@ fn busy_panes(panes: &Value) -> Vec<String> {
 /// Panes with a running agent in the card's workspace. Empty when herdr isn't installed,
 /// isn't running or has no workspace for the card (it never starts the server).
 pub fn running_agents(id: &str) -> Vec<String> {
+    if is_app() {
+        return app::running_agents(id);
+    }
     if sys::which("herdr").is_none() || !server_up() {
         return Vec::new();
     }
@@ -130,6 +159,9 @@ pub fn running_agents(id: &str) -> Vec<String> {
 /// Whether the card has a herdr workspace and how many of its panes have a busy agent.
 /// Never starts the server; `(false, 0)` when herdr is missing or not running.
 pub fn card_presence(id: &str) -> (bool, usize) {
+    if is_app() {
+        return app::card_presence(id);
+    }
     if sys::which("herdr").is_none() || !server_up() {
         return (false, 0);
     }
@@ -144,6 +176,9 @@ pub fn card_presence(id: &str) -> (bool, usize) {
 
 /// Close the card's herdr workspace, if there is one. Failures are only warnings.
 pub fn close_workspace(id: &str) {
+    if is_app() {
+        return app::close_workspace(id);
+    }
     if sys::which("herdr").is_none() || !server_up() {
         return;
     }
@@ -222,7 +257,12 @@ impl Slots<'_> {
 
 /// Slots of the `agent` tab (every repo) or of the `run` tab (repos with a `run` command, and
 /// with `autorun` when `autorun_only`), sorted by `[herdr.layout] order`.
-fn tab_repos(cfg: &Config, repos: &[String], run_tab: bool, autorun_only: bool) -> Vec<String> {
+pub(crate) fn tab_repos(
+    cfg: &Config,
+    repos: &[String],
+    run_tab: bool,
+    autorun_only: bool,
+) -> Vec<String> {
     let mine: Vec<String> = repos
         .iter()
         .filter(|r| {
@@ -355,7 +395,13 @@ fn agent_command(cfg: &Config, id: &str, repo: &str, prompt: Option<&str>) -> St
 
 /// Command for an agent pane being created: a first prompt wins; otherwise, with
 /// `[agent] resume_sessions`, resume the last conversation of `wt` if there is one.
-fn pane_command(cfg: &Config, id: &str, repo: &str, wt: &Path, prompt: Option<&str>) -> String {
+pub(crate) fn pane_command(
+    cfg: &Config,
+    id: &str,
+    repo: &str,
+    wt: &Path,
+    prompt: Option<&str>,
+) -> String {
     let has_prompt = prompt.is_some_and(|p| !p.trim().is_empty());
     if !has_prompt && cfg.ai.resume_sessions && sessions::has_session(cfg, wt) {
         return format!("{} {}", cfg.ai.command(), cfg.ai.provider.resume_args());
@@ -378,6 +424,9 @@ pub fn sync_with(
     prompt: Option<&str>,
     use_snapshot: bool,
 ) -> Result<String> {
+    if is_app() {
+        return app::sync(cfg, id, prompt);
+    }
     ensure_server()?;
     let dir = card::require_card(cfg, id)?;
     if use_snapshot && find_workspace(id)?.is_none() {
@@ -513,6 +562,10 @@ fn pane_snapshot(cfg: &Config, dir: &Path, repos: &[String], tab_label: &str, p:
 /// `twig park`: record the card's workspace (tabs, splits, panes, agent sessions) in the card's
 /// snapshot file. Returns whether there was a workspace to record.
 pub fn save_snapshot(cfg: &Config, id: &str) -> Result<bool> {
+    if is_app() {
+        // the app keeps no pane labels or agent sessions to record
+        return Ok(false);
+    }
     if sys::which("herdr").is_none() || !server_up() {
         return Ok(false);
     }
@@ -771,12 +824,15 @@ pub fn run_targets(
 }
 
 /// Time for the app to exit and the shell to show its prompt again after Ctrl+C.
-const STOP_GRACE: Duration = Duration::from_millis(1500);
+pub(crate) const STOP_GRACE: Duration = Duration::from_millis(1500);
 
 /// `twig run`: stop, start or restart the apps of the card's `run` tab.
 pub fn run_apps(cfg: &Config, id: &str, action: RunAction, requested: &[String]) -> Result<()> {
     let dir = card::require_card(cfg, id)?;
     let targets = run_targets(cfg, &card::repos_ordered(cfg, &dir), requested)?;
+    if is_app() {
+        return app::run_apps(cfg, id, action, &targets);
+    }
     if sys::which("herdr").is_none() {
         bail!("herdr not found on PATH");
     }
@@ -1017,6 +1073,9 @@ fn restore(anchor: &str, tab: &str, in_tmp: &mut Vec<String>, run: &mut Runner) 
 /// processes in them, and remember the choice in the card's `.twig.toml` so `twig add-repo` and
 /// `twig herdr` follow it.
 pub fn set_layout(cfg: &Config, id: &str, tab_label: &str, preset: Preset) -> Result<()> {
+    if is_app() {
+        bail!("`twig layout` is not available with `[herdr] backend = \"app\"`");
+    }
     let dir = card::require_card(cfg, id)?;
     if sys::which("herdr").is_none() {
         bail!("herdr not found on PATH");
@@ -1052,7 +1111,7 @@ pub fn set_layout(cfg: &Config, id: &str, tab_label: &str, preset: Preset) -> Re
 
 /// `cmd` prefixed with the assignments of `vars`, for a shell that already exists and so
 /// can't get them through `--env`.
-fn env_command(vars: &[(String, String)], cmd: &str) -> String {
+pub(crate) fn env_command(vars: &[(String, String)], cmd: &str) -> String {
     let mut line = String::new();
     for (k, v) in vars {
         if cfg!(windows) {
@@ -1085,8 +1144,139 @@ fn autorun(cfg: &Config, repo: &str, repo_value: bool) -> bool {
         .unwrap_or(repo_value)
 }
 
+/// The card's workspace as `(tab label, pane cwds)`, read from the herdr CLI regardless of the
+/// configured backend (for `twig migrate-herdr`). `None` when there is no workspace.
+pub(crate) fn describe_cli(id: &str) -> Result<Option<crate::migrate::Tabs>> {
+    if sys::which("herdr").is_none() || !sys::quiet(sys::tool("herdr").args(["workspace", "list"]))
+    {
+        return Ok(None);
+    }
+    let list = herdr(&["workspace", "list"])?;
+    let Some(ws) = list
+        .pointer("/result/workspaces")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|w| w["label"] == id)
+        .and_then(|w| w["workspace_id"].as_str().map(String::from))
+    else {
+        return Ok(None);
+    };
+    let tabs = herdr(&["tab", "list", "--workspace", &ws])?;
+    let panes = herdr(&["pane", "list", "--workspace", &ws])?;
+    let panes = panes.pointer("/result/panes").and_then(Value::as_array);
+    Ok(Some(
+        tabs.pointer("/result/tabs")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|t| {
+                let cwds = panes
+                    .into_iter()
+                    .flatten()
+                    .filter(|p| p["tab_id"] == t["tab_id"])
+                    .map(|p| {
+                        let c = |k: &str| p[k].as_str().filter(|s| !s.is_empty());
+                        c("cwd")
+                            .or(c("foreground_cwd"))
+                            .unwrap_or_default()
+                            .to_string()
+                    })
+                    .collect();
+                (t["label"].as_str().unwrap_or_default().to_string(), cwds)
+            })
+            .collect(),
+    ))
+}
+
+/// Build the card's workspace in the herdr CLI from `tabs` (regardless of the configured
+/// backend). The first pane of a tab is created with it, the others split right, then down.
+pub(crate) fn create_cli(cfg: &Config, id: &str, tabs: &[crate::migrate::NewTab]) -> Result<()> {
+    let first_tab = tabs.first().context("nothing to create")?;
+    let first = first_tab.panes.first().context("nothing to create")?;
+    let env_of = |p: &crate::migrate::NewPane| {
+        p.repo
+            .as_deref()
+            .map(|r| env_args(cfg, id, r))
+            .unwrap_or_default()
+    };
+    let env = env_of(first);
+    let v = herdr(&with_env(
+        &[
+            "workspace",
+            "create",
+            "--cwd",
+            &first.cwd,
+            "--label",
+            id,
+            "--no-focus",
+        ],
+        &env,
+    ))?;
+    let ws = str_at(&v, "/result/workspace/workspace_id")?;
+    let mut tab_id = str_at(&v, "/result/tab/tab_id")?;
+    let mut pane =
+        str_at(&v, "/result/root_pane/pane_id").or_else(|_| str_at(&v, "/result/pane/pane_id"))?;
+    herdr_quiet(&["tab", "rename", &tab_id, &first_tab.label]);
+    for (ti, tab) in tabs.iter().enumerate() {
+        if ti > 0 {
+            let p0 = &tab.panes[0];
+            let env = env_of(p0);
+            let v = herdr(&with_env(
+                &[
+                    "tab",
+                    "create",
+                    "--workspace",
+                    &ws,
+                    "--cwd",
+                    &p0.cwd,
+                    "--label",
+                    &tab.label,
+                    "--no-focus",
+                ],
+                &env,
+            ))?;
+            tab_id = str_at(&v, "/result/tab/tab_id")?;
+            pane = str_at(&v, "/result/root_pane/pane_id")?;
+        }
+        let mut last = pane.clone();
+        let _ = &tab_id;
+        for (pi, p) in tab.panes.iter().enumerate() {
+            if pi > 0 {
+                let env = env_of(p);
+                let dir = if pi == 1 { "right" } else { "down" };
+                let v = herdr(&with_env(
+                    &[
+                        "pane",
+                        "split",
+                        &last,
+                        "--direction",
+                        dir,
+                        "--cwd",
+                        &p.cwd,
+                        "--no-focus",
+                    ],
+                    &env,
+                ))?;
+                pane = str_at(&v, "/result/pane/pane_id")?;
+                last = pane.clone();
+            }
+            if let Some(r) = &p.repo {
+                herdr_quiet(&["pane", "rename", &pane, &cfg.short(r)]);
+            }
+            if !p.cmd.is_empty() {
+                herdr_quiet(&["pane", "run", &pane, &p.cmd]);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Focus the workspace and, when outside herdr, open herdr in the terminal.
 pub fn open(ws: &str) -> Result<()> {
+    if is_app() {
+        return app::open(ws);
+    }
     herdr_quiet(&["workspace", "focus", ws]);
     if std::env::var("HERDR_ENV").as_deref() != Ok("1") {
         sys::run(&mut sys::tool("herdr"))?;

@@ -9,9 +9,11 @@ mod config_kv;
 mod doctor;
 mod exists;
 mod herdr;
+mod herdr_app;
 mod hooks;
 mod layout;
 mod memo;
+mod migrate;
 mod overrides;
 mod parked;
 mod ports;
@@ -201,6 +203,23 @@ enum Cmd {
         /// Machine-readable output (JSON on stdout, see docs/COMMANDS.md).
         #[arg(short = 'j', long)]
         json: bool,
+    },
+    /// Recreate the cards' herdr workspaces in the other backend (herdr app <-> herdr CLI).
+    ///
+    /// For each card with a workspace in the source, creates the same tabs and panes (names and
+    /// folders) in the destination; commands come from the twig config, since neither side
+    /// records what each pane ran. Cards already in the destination are skipped, so it can be
+    /// run again. The source stays untouched unless `--close-source`.
+    MigrateHerdr {
+        /// Destination backend.
+        #[arg(long, value_enum, default_value = "app")]
+        to: config::Backend,
+        /// Only show what would be created.
+        #[arg(long)]
+        dry_run: bool,
+        /// Close each card's source workspace after migrating it.
+        #[arg(long)]
+        close_source: bool,
     },
     /// Does this card exist? Exit 0 if so, 1 if not; also parked, herdr and provider state.
     ///
@@ -561,6 +580,7 @@ fn run(cli: Cli) -> Result<()> {
     }
 
     let mut cfg = Config::load()?;
+    herdr::set_backend(cfg.herdr.backend);
     let update = cfg.update.clone();
     let mut cli = cli;
     normalize_ids(&cfg, &mut cli.cmd)?;
@@ -711,6 +731,11 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Ls { json } => commands::ls(&cfg, json),
         Cmd::Status { id, json } => status::run(&cfg, id.as_deref(), json),
         Cmd::Exists { id, json, local } => exists::run(&cfg, &id, json, local),
+        Cmd::MigrateHerdr {
+            to,
+            dry_run,
+            close_source,
+        } => migrate::run(&cfg, to, dry_run, close_source),
         Cmd::Refresh { id, refetch } => commands::refresh(&cfg, &id, refetch),
         Cmd::Memo { text, card } => memo::run(&cfg, &text, card.as_deref()),
         Cmd::Rm {
